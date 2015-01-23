@@ -96,18 +96,14 @@ class EventIterator implements \Iterator {
             if (!$uid) {
                 throw new InvalidArgumentException('The UID argument is required when a VCALENDAR is passed to this constructor');
             }
+            $events = $vcal->getByUID($uid);
             if (!isset($vcal->VEVENT)) {
-                throw new InvalidArgumentException('No events found in this calendar');
-            }
-            $events = array();
-            foreach($vcal->VEVENT as $event) {
-                if ($event->uid->getValue() === $uid) {
-                    $events[] = $event;
-                }
+                throw new InvalidArgumentException('No events found with UID ' . $uid);
             }
 
         }
 
+        print_r($events);
         foreach($events as $vevent) {
 
             if (!isset($vevent->{'RECURRENCE-ID'})) {
@@ -396,13 +392,31 @@ class EventIterator implements \Iterator {
     /**
      * Quickly jump to a date in the future.
      *
+     * Note that after this operation, the counter and the result of key()
+     * may no longer be accurate.
+     *
      * @param DateTime $dateTime
      */
     public function fastForward(DateTime $dateTime) {
 
-        while($this->valid() && $this->getDtEnd() < $dateTime ) {
-            $this->next();
-        }
+        // Going through the overridden events index and removing all entries 
+        // that are past the fastforward date.
+        $futureTimeStamp = $dateTime->getTimeStamp();
+        do {
+            end($this->overriddenEventsIndex);
+            $stamp = key($this->overriddenEventsIndex);
+            if ($stamp < $futureTimeStamp) {
+                array_pop($this->overriddenEventsIndex);
+            }
+        } while ($this->overriddenEventsIndex && $stamp < $futureTimeStamp);
+
+        $this->currentOverriddenEvent = null;
+
+        // Fast-forward the inner iterator.
+        $this->recurIterator->fastForward($dateTime);
+        $this->currentDate = $this->recurIterator->current();
+        $this->next();
+
 
     }
 

@@ -147,12 +147,12 @@ class RRuleIterator implements Iterator {
     public function fastForward(\DateTime $dt) {
 
         // See if we can do it fast
-        if (!$this->limit) {
-            switch($this->freq) {
+        if (!$this->count) {
+            switch($this->frequency) {
                 case 'weekly' :
-                    $daysDifference = $dt->diff( $this->currentDate, true);
+                    $daysDifference = $dt->diff( $this->currentDate, true)->days;
                     $weeks = floor($daysDifference-7);
-                    $this->currentDate->modify('+' . $weeks . ' weeks'); 
+                    $this->currentDate->modify('+' . $weeks . ' weeks');
                     break;
             }
         }
