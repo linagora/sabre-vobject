@@ -4,6 +4,7 @@ namespace Sabre\VObject;
 
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VCard;
+use Sabre\VObject\Property\Text;
 
 class ComponentTest extends \PHPUnit_Framework_TestCase {
 
