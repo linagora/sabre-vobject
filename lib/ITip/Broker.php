@@ -166,7 +166,7 @@ class Broker {
      *
      * @return array
      */
-    function parseEvent($calendar = null, $userHref, $oldCalendar = null) {
+    function parseEvent($calendar = null, $userHref, $shareesAdresses = null, $oldCalendar = null) {
 
         if ($oldCalendar) {
             if (is_string($oldCalendar)) {
@@ -186,8 +186,13 @@ class Broker {
             ];
         }
 
+        $hasShareeWithRights = [];
         $userHref = (array)$userHref;
 
+        if($shareesAdresses && count($shareesAdresses) > 0) {
+            $hasShareeWithRights = array_intersect($userHref, $shareesAdresses);
+        }
+        
         if (!is_null($calendar)) {
 
             if (is_string($calendar)) {
@@ -228,7 +233,7 @@ class Broker {
 
             $eventInfo = $oldEventInfo;
 
-            if (in_array($eventInfo['organizer'], $userHref)) {
+            if (in_array($eventInfo['organizer'], $userHref) || count($hasShareeWithRights) > 0) {
                 // This is an organizer deleting the event.
                 $eventInfo['attendees'] = [];
                 // Increasing the sequence, but only if the organizer deleted
@@ -248,7 +253,7 @@ class Broker {
 
         }
 
-        if (in_array($eventInfo['organizer'], $userHref)) {
+        if (in_array($eventInfo['organizer'], $userHref) || count($hasShareeWithRights) > 0) {
             return $this->parseEventForOrganizer($baseCalendar, $eventInfo, $oldEventInfo);
         } elseif ($oldCalendar) {
             // We need to figure out if the user is an attendee, but we're only
