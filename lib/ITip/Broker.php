@@ -572,6 +572,11 @@ class Broker {
                 $event->add('ATTENDEE', $attendee['href'], [
                     'CN' => $attendee['name'],
                 ]);
+
+                if(isset($calendar->VEVENT->VALARM) && $calendar->VALARM->ACTION->getValue() == 'EMAIL') {
+                    $event->add(clone $calendar->VEVENT->VALARM);
+                    $event->VALARM->ATTENDEE->setValue($attendee['href']);
+                }
                 $message->significantChange = true;
 
             } else {
@@ -603,6 +608,11 @@ class Broker {
                 foreach ($attendee['newInstances'] as $instanceId => $instanceInfo) {
 
                     $currentEvent = clone $eventInfo['instances'][$instanceId];
+
+                    if(isset($currentEvent->VALARM) && $currentEvent->VALARM->ACTION->getValue() == 'EMAIL') {
+                        $currentEvent->VALARM->ATTENDEE->setValue($attendee['href']);
+                    }
+
                     if ($instanceId === 'master') {
 
                         // We need to find a list of events that the attendee
