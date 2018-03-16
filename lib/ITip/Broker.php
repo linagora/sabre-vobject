@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject\ITip;
 
+use DateTimeZone;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\DateTimeParser;
 use Sabre\VObject\Reader;
@@ -333,9 +334,60 @@ class Broker
             // The event didn't exist in the first place, so we're just
             // ignoring this message.
         } else {
+            $instancesToCancel = [];
+            $cancelWholeEvent = false;
+
+            // Finding all the instances that are cancelled.
+            foreach ($itipMessage->message->VEVENT as $vevent) {
+                if (isset($vevent->{'RECURRENCE-ID'})) {
+                    $recurdate = $vevent->{'RECURRENCE-ID'}->getDateTime();
+                    $recurdate = $recurdate->setTimeZone(new DateTimeZone('UTC'));
+
+                    $recurIdTimestamp = $recurdate->getTimeStamp();
+
+                    $instancesToCancel[$recurIdTimestamp] = $recurdate;
+                } else {
+                    // Master is present if it's a non recurring event or if the whole recurring event is cancelled
+                    $cancelWholeEvent = true;
+                }
+            }
+
+            $masterObject = null;
+
             foreach ($existingObject->VEVENT as $vevent) {
-                $vevent->STATUS = 'CANCELLED';
-                $vevent->SEQUENCE = $itipMessage->sequence;
+                $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimeStamp() : 'master';
+                if ($recurIdTimestamp === 'master') {
+                    $masterObject = $vevent;
+                }
+
+                if ($cancelWholeEvent) {
+                    $vevent->STATUS = 'CANCELLED';
+                    $vevent->SEQUENCE = $itipMessage->sequence;
+                } else if (isset($instancesToCancel[$recurIdTimestamp])) {
+                    $existingObject->remove($vevent);
+                }
+            }
+
+            if (!$cancelWholeEvent) {
+                if (isset($masterObject->EXDATE)) {
+                    $exDates = $masterObject->EXDATE->getDateTimes();
+                    // We only need to update the first timezone, because
+                    // setDateTimes will match all other timezones to the
+                    // first.
+                    $exDates[0] = $exDates[0]->setTimeZone(new DateTimeZone('UTC'));
+
+                    foreach ($exDates as $exDate) {
+                        $exDateTimeStamp = $exDate->getTimeStamp();
+
+                        if (isset($instancesToCancel[$exDateTimeStamp])) {
+                            unset($instancesToCancel[$exDateTimeStamp]);
+                        }
+                    }
+
+                    $masterObject->EXDATE->setDateTimes(array_merge($exDates, $instancesToCancel));
+                } else {
+                    $masterObject->add('EXDATE', array_values($instancesToCancel));
+                }
             }
         }
 
