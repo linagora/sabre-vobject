@@ -341,8 +341,6 @@ class Broker
             foreach ($itipMessage->message->VEVENT as $vevent) {
                 if (isset($vevent->{'RECURRENCE-ID'})) {
                     $recurdate = $vevent->{'RECURRENCE-ID'}->getDateTime();
-                    $recurdate = $recurdate->setTimeZone(new DateTimeZone('UTC'));
-
                     $recurIdTimestamp = $recurdate->getTimeStamp();
 
                     $instancesToCancel[$recurIdTimestamp] = $recurdate;
@@ -369,12 +367,15 @@ class Broker
             }
 
             if (!$cancelWholeEvent) {
+                $exDates = [];
+                $masterTimeZone = isset($masterObject->EXDATE) ? $masterObject->DTSTART->getDateTime()->getTimeZone() : new DateTimeZone('UTC');
+
                 if (isset($masterObject->EXDATE)) {
                     $exDates = $masterObject->EXDATE->getDateTimes();
                     // We only need to update the first timezone, because
                     // setDateTimes will match all other timezones to the
                     // first.
-                    $exDates[0] = $exDates[0]->setTimeZone(new DateTimeZone('UTC'));
+                    $exDates[0] = $exDates[0]->setTimeZone($masterTimeZone);
 
                     foreach ($exDates as $exDate) {
                         $exDateTimeStamp = $exDate->getTimeStamp();
@@ -383,10 +384,19 @@ class Broker
                             unset($instancesToCancel[$exDateTimeStamp]);
                         }
                     }
+                }
 
-                    $masterObject->EXDATE->setDateTimes(array_merge($exDates, $instancesToCancel));
-                } else {
-                    $masterObject->add('EXDATE', array_values($instancesToCancel));
+                foreach ($instancesToCancel as $instance) {
+                    $instance->setTimezone($masterTimeZone);
+                    $exDates[] = $instance;
+                }
+
+                $masterObject->remove('EXDATE');
+                $masterObject->add('EXDATE', array_values($exDates));
+
+                // If TZ has been translated to a standard TZ during conversion, we're putting back the original name
+                if (isset($masterObject->EXDATE['TZID'])) {
+                    $masterObject->EXDATE['TZID'] = $masterObject->DTSTART['TZID'];
                 }
             }
         }
