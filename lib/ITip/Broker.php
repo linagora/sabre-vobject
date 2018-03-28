@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject\ITip;
 
+use DateTimeZone;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\DateTimeParser;
 use Sabre\VObject\Reader;
@@ -345,11 +346,80 @@ class Broker {
             // The event didn't exist in the first place, so we're just
             // ignoring this message.
         } else {
+            $instancesToCancel = [];
+
+            $cancelWholeEvent = false;
+
+            // Finding all the instances that are cancelled.
+            foreach ($itipMessage->message->VEVENT as $vevent) {
+                if (isset($vevent->{'RECURRENCE-ID'})) {
+                    $recurdate = $vevent->{'RECURRENCE-ID'}->getDateTime();
+                    $recurIdTimestamp = $recurdate->getTimeStamp();
+
+                    $instancesToCancel[$recurIdTimestamp] = $recurdate;
+                } else {
+                    // Master is present if it's a non recurring event or if the whole recurring event is cancelled
+                    $cancelWholeEvent = true;
+                }
+            }
+
+            $masterObject = null;
+
             foreach ($existingObject->VEVENT as $vevent) {
-                $vevent->STATUS = 'CANCELLED';
-                $vevent->SEQUENCE = $itipMessage->sequence;
+                $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimeStamp() : 'master';
+
+                if ($recurIdTimestamp === 'master') {
+                    $masterObject = $vevent;
+                }
+
+                if ($cancelWholeEvent) {
+                    $vevent->STATUS = 'CANCELLED';
+                    $vevent->SEQUENCE = $itipMessage->sequence;
+                } else if (isset($instancesToCancel[$recurIdTimestamp])) {
+                    $existingObject->remove($vevent);
+                }
+            }
+
+            if (!$cancelWholeEvent) {
+                $exDates = [];
+                $masterTimeZone = isset($masterObject->EXDATE) ? $masterObject->DTSTART->getDateTime()->getTimeZone() : new DateTimeZone('UTC');
+
+                if (isset($masterObject->EXDATE)) {
+
+                    $exDates = $masterObject->EXDATE->getDateTimes();
+                    // We only need to update the first timezone, because
+                    // setDateTimes will match all other timezones to the
+                    // first.
+
+                    $exDates[0] = $exDates[0]->setTimeZone($masterTimeZone);
+
+                    foreach ($exDates as $exDate) {
+                        $exDateTimeStamp = $exDate->getTimeStamp();
+
+                        if (isset($instancesToCancel[$exDateTimeStamp])) {
+                            unset($instancesToCancel[$exDateTimeStamp]);
+                        }
+
+                    }
+                }
+
+                foreach ($instancesToCancel as $instance) {
+                    $instance->setTimezone($masterTimeZone);
+                    $exDates[] = $instance;
+                }
+
+                $masterObject->remove('EXDATE');
+
+                $masterObject->add('EXDATE', array_values($exDates));
+
+                // If TZ has been translated to a standard TZ during conversion, we're putting back the original name
+                if (isset($masterObject->EXDATE['TZID'])) {
+                    $masterObject->EXDATE['TZID'] = $masterObject->DTSTART['TZID'];
+                }
+
             }
         }
+
         return $existingObject;
 
     }
@@ -917,12 +987,12 @@ class Broker {
                 }
                 $organizerForceSend =
                     isset($vevent->ORGANIZER['SCHEDULE-FORCE-SEND']) ?
-                    strtoupper($vevent->ORGANIZER['SCHEDULE-FORCE-SEND']) :
-                    null;
+                        strtoupper($vevent->ORGANIZER['SCHEDULE-FORCE-SEND']) :
+                        null;
                 $organizerScheduleAgent =
                     isset($vevent->ORGANIZER['SCHEDULE-AGENT']) ?
-                    strtoupper((string)$vevent->ORGANIZER['SCHEDULE-AGENT']) :
-                    'SERVER';
+                        strtoupper((string)$vevent->ORGANIZER['SCHEDULE-AGENT']) :
+                        'SERVER';
             }
             if (is_null($sequence) && isset($vevent->SEQUENCE)) {
                 $sequence = $vevent->SEQUENCE->getValue();
@@ -956,13 +1026,13 @@ class Broker {
                     }
                     $partStat =
                         isset($attendee['PARTSTAT']) ?
-                        strtoupper($attendee['PARTSTAT']) :
-                        'NEEDS-ACTION';
+                            strtoupper($attendee['PARTSTAT']) :
+                            'NEEDS-ACTION';
 
                     $forceSend =
                         isset($attendee['SCHEDULE-FORCE-SEND']) ?
-                        strtoupper($attendee['SCHEDULE-FORCE-SEND']) :
-                        null;
+                            strtoupper($attendee['SCHEDULE-FORCE-SEND']) :
+                            null;
 
 
                     if (isset($attendees[$attendee->getNormalizedValue()])) {
