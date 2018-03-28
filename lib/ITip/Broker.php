@@ -426,9 +426,9 @@ class Broker
 
         // Finding all the instances the attendee replied to.
         foreach ($itipMessage->message->VEVENT as $vevent) {
-            $recurId = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getValue() : 'master';
+            $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimeStamp() : 'master';
             $attendee = $vevent->ATTENDEE;
-            $instances[$recurId] = [
+            $instances[$recurIdTimestamp] = [
                 'partstat'        => $attendee['PARTSTAT']->getValue(),
                 'recurIdDateTime' => isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime() : null
             ];
@@ -442,17 +442,17 @@ class Broker
         // all the instances where we have a reply for.
         $masterObject = null;
         foreach ($existingObject->VEVENT as $vevent) {
-            $recurId = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getValue() : 'master';
-            if ('master' === $recurId) {
+            $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimeStamp() : 'master';
+            if ('master' === $recurIdTimestamp) {
                 $masterObject = $vevent;
             }
-            if (isset($instances[$recurId])) {
+            if (isset($instances[$recurIdTimestamp])) {
                 $attendeeFound = false;
                 if (isset($vevent->ATTENDEE)) {
                     foreach ($vevent->ATTENDEE as $attendee) {
                         if ($attendee->getValue() === $itipMessage->sender) {
                             $attendeeFound = true;
-                            $attendee['PARTSTAT'] = $instances[$recurId]['partstat'];
+                            $attendee['PARTSTAT'] = $instances[$recurIdTimestamp]['partstat'];
                             $attendee['SCHEDULE-STATUS'] = $requestStatus;
                             // Un-setting the RSVP status, because we now know
                             // that the attendee already replied.
@@ -465,13 +465,13 @@ class Broker
                     // Adding a new attendee. The iTip documentation calls this
                     // a party crasher.
                     $attendee = $vevent->add('ATTENDEE', $itipMessage->sender, [
-                        'PARTSTAT' => $instances[$recurId]['partstat'],
+                        'PARTSTAT' => $instances[$recurIdTimestamp]['partstat'],
                     ]);
                     if ($itipMessage->senderName) {
                         $attendee['CN'] = $itipMessage->senderName;
                     }
                 }
-                unset($instances[$recurId]);
+                unset($instances[$recurIdTimestamp]);
             }
         }
 
@@ -481,16 +481,15 @@ class Broker
         }
         // If we got replies to instances that did not exist in the
         // original list, it means that new exceptions must be created.
-        foreach ($instances as $recurId => $instance) {
+        foreach ($instances as $recurIdTimestamp => $instance) {
             $recurrenceIterator = new EventIterator($existingObject, $itipMessage->uid);
             $found = false;
             $iterations = 1000;
-            $recurIdDate = $instance['recurIdDateTime'];
             do {
                 $newObject = $recurrenceIterator->getEventObject();
                 $recurrenceIterator->next();
 
-                if (isset($newObject->{'RECURRENCE-ID'}) && $newObject->{'RECURRENCE-ID'}->getDateTime() == $recurIdDate) {
+                if (isset($newObject->{'RECURRENCE-ID'}) && $newObject->{'RECURRENCE-ID'}->getDateTime()->getTimeStamp() == $recurIdTimestamp) {
                     $found = true;
                 }
                 --$iterations;
