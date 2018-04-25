@@ -79,6 +79,10 @@ class Period extends Property
         parent::setJsonValue($value);
     }
 
+    function appendUtc($strDate) {
+        return strpos($strDate, 'Z') === false ? '' : 'Z';
+    }
+
     /**
      * Returns the value, in the format it should be encoded for json.
      *
@@ -92,19 +96,19 @@ class Period extends Property
         foreach ($this->getParts() as $item) {
             list($start, $end) = explode('/', $item, 2);
 
-            $start = DateTimeParser::parseDateTime($start);
-
             // This is a duration value.
+            $startDt = DateTimeParser::parseDateTime($start)->format('Y-m-d\\TH:i:s') . $this->appendUtc($start);
+
             if ('P' === $end[0]) {
                 $return[] = [
-                    $start->format('Y-m-d\\TH:i:s'),
+                    $startDt,
                     $end,
                 ];
             } else {
-                $end = DateTimeParser::parseDateTime($end);
+                $endDt = DateTimeParser::parseDateTime($end)->format('Y-m-d\\TH:i:s') . $this->appendUtc($end);
                 $return[] = [
-                    $start->format('Y-m-d\\TH:i:s'),
-                    $end->format('Y-m-d\\TH:i:s'),
+                    $startDt,
+                    $endDt
                 ];
             }
         }
