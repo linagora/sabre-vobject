@@ -610,138 +610,15 @@ class Broker {
                 continue;
             }
 
-            $message = new Message();
-            $message->uid = $eventInfo['uid'];
-            $message->component = 'VEVENT';
-            $message->sequence = $eventInfo['sequence'];
-            $message->sender = $eventInfo['organizer'];
-            $message->senderName = $eventInfo['organizerName'];
-            $message->recipient = $attendee['href'];
-            $message->recipientName = $attendee['name'];
-
-            // Creating the new iCalendar body.
-            $icalMsg = new VCalendar();
-
-            foreach ($calendar->select('VTIMEZONE') as $timezone) {
-                $icalMsg->add(clone $timezone);
-            }
-
             if (!$attendee['newInstances']) {
-
                 // If there are no instances the attendee is a part of, it
                 // means the attendee was removed and we need to send him a
                 // CANCEL.
-                $message->method = 'CANCEL';
-
-                $icalMsg->METHOD = $message->method;
-                $event = $icalMsg->add('VEVENT', [
-                    'UID'      => $message->uid,
-                    'SEQUENCE' => $message->sequence,
-                ]);
-                if (isset($calendar->VEVENT->SUMMARY)) {
-                    $event->add('SUMMARY', $calendar->VEVENT->SUMMARY->getValue());
-                }
-                $event->add(clone $calendar->VEVENT->DTSTART);
-                if (isset($calendar->VEVENT->DTEND)) {
-                    $event->add(clone $calendar->VEVENT->DTEND);
-                } elseif (isset($calendar->VEVENT->DURATION)) {
-                    $event->add(clone $calendar->VEVENT->DURATION);
-                }
-                $org = $event->add('ORGANIZER', $eventInfo['organizer']);
-                if ($eventInfo['organizerName']) $org['CN'] = $eventInfo['organizerName'];
-                $event->add('ATTENDEE', $attendee['href'], [
-                    'CN' => $attendee['name'],
-                ]);
-
-                if(isset($calendar->VEVENT->VALARM) && $calendar->VEVENT->VALARM->ACTION->getValue() == 'EMAIL') {
-                    $event->add(clone $calendar->VEVENT->VALARM);
-                    $event->VALARM->ATTENDEE->setValue($attendee['href']);
-                }
-                $message->significantChange = true;
-
+                $messages[] = $this->createCancelMessage($calendar, $attendee, $eventInfo);
             } else {
-
                 // The attendee gets the updated event body
-                $message->method = 'REQUEST';
-
-                $icalMsg->METHOD = $message->method;
-
-                // We need to find out that this change is significant. If it's
-                // not, we set another variable to find if the change need to send a message.
-                //
-                // We do this based on the 'significantChangeHash' which is
-                // some value that changes if there's a certain set of
-                // properties changed in the event, or simply if there's a
-                // difference in instances that the attendee is invited to.
-
-                $message->significantChange =
-                    $attendee['forceSend'] === 'REQUEST' ||
-                    array_keys($attendee['oldInstances']) != array_keys($attendee['newInstances']) ||
-                    $oldEventInfo['significantChangeHash'] !== $eventInfo['significantChangeHash'];
-
-                $message->hasChange =
-                    $message->significantChange ||
-                    $oldEventInfo['changeHash'] !== $eventInfo['changeHash'];
-
-                foreach ($attendee['newInstances'] as $instanceId => $instanceInfo) {
-
-                    $currentEvent = clone $eventInfo['instances'][$instanceId];
-
-                    if(isset($currentEvent->VALARM) && $currentEvent->VALARM->ACTION->getValue() == 'EMAIL') {
-                        $currentEvent->VALARM->ATTENDEE->setValue($attendee['href']);
-                    }
-
-                    if ($instanceId === 'master') {
-
-                        // We need to find a list of events that the attendee
-                        // is not a part of to add to the list of exceptions.
-                        $exceptions = [];
-                        foreach ($eventInfo['instances'] as $instanceId => $vevent) {
-                            if (!isset($attendee['newInstances'][$instanceId])) {
-                                $exceptions[] = $instanceId;
-                            }
-                        }
-
-                        // If there were exceptions, we need to add it to an
-                        // existing EXDATE property, if it exists.
-                        if ($exceptions) {
-                            if (isset($currentEvent->EXDATE)) {
-                                $currentEvent->EXDATE->setParts(array_merge(
-                                    $currentEvent->EXDATE->getParts(),
-                                    $exceptions
-                                ));
-                            } else {
-                                $currentEvent->EXDATE = $exceptions;
-                            }
-                        }
-
-                        // Cleaning up any scheduling information that
-                        // shouldn't be sent along.
-                        unset($currentEvent->ORGANIZER['SCHEDULE-FORCE-SEND']);
-                        unset($currentEvent->ORGANIZER['SCHEDULE-STATUS']);
-
-                        foreach ($currentEvent->ATTENDEE as $attendee) {
-                            unset($attendee['SCHEDULE-FORCE-SEND']);
-                            unset($attendee['SCHEDULE-STATUS']);
-
-                            // We're adding PARTSTAT=NEEDS-ACTION to ensure that
-                            // iOS shows an "Inbox Item"
-                            if (!isset($attendee['PARTSTAT'])) {
-                                $attendee['PARTSTAT'] = 'NEEDS-ACTION';
-                            }
-
-                        }
-
-                    }
-
-                    $icalMsg->add($currentEvent);
-
-                }
-
+                $messages[] = $this->createRequestMessage($calendar, $attendee, $eventInfo, $oldEventInfo);
             }
-
-            $message->message = $icalMsg;
-            $messages[] = $message;
 
         }
 
@@ -1123,6 +1000,144 @@ class Broker {
             'status'
         );
 
+    }
+
+    private function initItipMessage($calendar, $attendee, $eventInfo) {
+        $message = new Message();
+        $message->uid = $eventInfo['uid'];
+        $message->component = 'VEVENT';
+        $message->sequence = $eventInfo['sequence'];
+        $message->sender = $eventInfo['organizer'];
+        $message->senderName = $eventInfo['organizerName'];
+        $message->recipient = $attendee['href'];
+        $message->recipientName = $attendee['name'];
+
+        // Creating the new iCalendar body.
+        $icalMsg = new VCalendar();
+
+        foreach ($calendar->select('VTIMEZONE') as $timezone) {
+            $icalMsg->add(clone $timezone);
+        }
+
+        $message->message = $icalMsg;
+
+        return $message;
+    }
+
+    private function createRequestMessage($calendar, $attendee, $eventInfo, $oldEventInfo) {
+        $message = $this->initItipMessage($calendar, $attendee, $eventInfo);
+
+        $message->method = 'REQUEST';
+
+        $message->message->METHOD = $message->method;
+
+        // We need to find out that this change is significant. If it's
+        // not, we set another variable to find if the change need to send a message.
+        //
+        // We do this based on the 'significantChangeHash' which is
+        // some value that changes if there's a certain set of
+        // properties changed in the event, or simply if there's a
+        // difference in instances that the attendee is invited to.
+
+        $message->significantChange =
+            $attendee['forceSend'] === 'REQUEST' ||
+            array_keys($attendee['oldInstances']) != array_keys($attendee['newInstances']) ||
+            $oldEventInfo['significantChangeHash'] !== $eventInfo['significantChangeHash'];
+
+        $message->hasChange =
+            $message->significantChange ||
+            $oldEventInfo['changeHash'] !== $eventInfo['changeHash'];
+
+        foreach ($attendee['newInstances'] as $instanceId => $instanceInfo) {
+
+            $currentEvent = clone $eventInfo['instances'][$instanceId];
+
+            if(isset($currentEvent->VALARM) && $currentEvent->VALARM->ACTION->getValue() == 'EMAIL') {
+                $currentEvent->VALARM->ATTENDEE->setValue($attendee['href']);
+            }
+
+            if ($instanceId === 'master') {
+
+                // We need to find a list of events that the attendee
+                // is not a part of to add to the list of exceptions.
+                $exceptions = [];
+                foreach ($eventInfo['instances'] as $instanceId => $vevent) {
+                    if (!isset($attendee['newInstances'][$instanceId])) {
+                        $exceptions[] = $instanceId;
+                    }
+                }
+
+                // If there were exceptions, we need to add it to an
+                // existing EXDATE property, if it exists.
+                if ($exceptions) {
+                    if (isset($currentEvent->EXDATE)) {
+                        $currentEvent->EXDATE->setParts(array_merge(
+                            $currentEvent->EXDATE->getParts(),
+                            $exceptions
+                        ));
+                    } else {
+                        $currentEvent->EXDATE = $exceptions;
+                    }
+                }
+
+                // Cleaning up any scheduling information that
+                // shouldn't be sent along.
+                unset($currentEvent->ORGANIZER['SCHEDULE-FORCE-SEND']);
+                unset($currentEvent->ORGANIZER['SCHEDULE-STATUS']);
+
+                foreach ($currentEvent->ATTENDEE as $attendee) {
+                    unset($attendee['SCHEDULE-FORCE-SEND']);
+                    unset($attendee['SCHEDULE-STATUS']);
+
+                    // We're adding PARTSTAT=NEEDS-ACTION to ensure that
+                    // iOS shows an "Inbox Item"
+                    if (!isset($attendee['PARTSTAT'])) {
+                        $attendee['PARTSTAT'] = 'NEEDS-ACTION';
+                    }
+
+                }
+
+            }
+
+            $message->message->add($currentEvent);
+
+        }
+
+        return $message;
+    }
+
+    private function createCancelMessage($calendar, $attendee, $eventInfo) {
+        $message = $this->initItipMessage($calendar, $attendee, $eventInfo);
+
+        $message->method = 'CANCEL';
+
+        $message->message->METHOD = $message->method;
+        $event = $message->message->add('VEVENT', [
+            'UID'      => $message->uid,
+            'SEQUENCE' => $message->sequence,
+        ]);
+        if (isset($calendar->VEVENT->SUMMARY)) {
+            $event->add('SUMMARY', $calendar->VEVENT->SUMMARY->getValue());
+        }
+        $event->add(clone $calendar->VEVENT->DTSTART);
+        if (isset($calendar->VEVENT->DTEND)) {
+            $event->add(clone $calendar->VEVENT->DTEND);
+        } elseif (isset($calendar->VEVENT->DURATION)) {
+            $event->add(clone $calendar->VEVENT->DURATION);
+        }
+        $org = $event->add('ORGANIZER', $eventInfo['organizer']);
+        if ($eventInfo['organizerName']) $org['CN'] = $eventInfo['organizerName'];
+        $event->add('ATTENDEE', $attendee['href'], [
+            'CN' => $attendee['name'],
+        ]);
+
+        if(isset($calendar->VEVENT->VALARM) && $calendar->VEVENT->VALARM->ACTION->getValue() == 'EMAIL') {
+            $event->add(clone $calendar->VEVENT->VALARM);
+            $event->VALARM->ATTENDEE->setValue($attendee['href']);
+        }
+        $message->significantChange = true;
+
+        return $message;
     }
 
 }
