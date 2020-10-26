@@ -378,22 +378,15 @@ class Broker {
                     $masterObject = $vevent;
                 }
 
-                // If the master event is present, we don't set the cancelled exceptions' status to CANCELLED.
-                // Instead, we remove them and add the equivalent EXDATE to the master event later.
-                if (isset($masterObject) && isset($instancesToCancel[$recurIdTimestamp])) {
-                    $existingObject->remove($vevent);
-                    continue;
-                }
-
-                // If the master event is not present, we don't want to remove the cancelled exceptions.
-                // Instead, we set their status to CANCELLED so that the attendee(s) can be informed of the cancellation.
-                if ($cancelWholeEvent || isset($instancesToCancel[$recurIdTimestamp])) {
+                if ($cancelWholeEvent) {
                     $vevent->STATUS = 'CANCELLED';
                     $vevent->SEQUENCE = $itipMessage->sequence;
+                } else if (isset($instancesToCancel[$recurIdTimestamp])) {
+                    $existingObject->remove($vevent);
                 }
             }
 
-            if (!$cancelWholeEvent && isset($masterObject)) {
+            if (!$cancelWholeEvent) {
                 $exDates = [];
                 $masterTimeZone = isset($masterObject->EXDATE) ? $masterObject->DTSTART->getDateTime()->getTimeZone() : new DateTimeZone('UTC');
 
@@ -434,6 +427,7 @@ class Broker {
         }
 
         return $existingObject;
+
     }
 
     /**
@@ -618,32 +612,18 @@ class Broker {
 
             if (!$attendee['newInstances']) {
                 // If there are no instances the attendee is a part of, it
-                // means the attendee was removed from the whole event
-                // and we need to send him a CANCEL.
+                // means the attendee was removed and we need to send him a
+                // CANCEL.
                 $messages[] = $this->createCancelMessage($calendar, $attendee, $eventInfo);
             } else {
-                // Check if we need to send CANCEL message
-                $instanceCancelForAttendee = false;
-                if (isset($eventInfo['sequence'])) {
-                    foreach ($attendee['oldInstances'] as $oldInstanceId => $oldInstance) {
-                        if (isset($attendee['newInstances'][$oldInstanceId])) continue;
-
-                        // An old instance (recurrence exception) of a recurrent event has been removed,
-                        // so we need to publish a CANCEL message to the attendee.
-                        $messages[] = $this->createCancelMessage($calendar, $attendee, $eventInfo, $oldInstanceId);
-                        $instanceCancelForAttendee = true;
-                    }
-                }
-
-                if (!$instanceCancelForAttendee) {
-                    // The attendee gets the updated event body
-                    $messages[] = $this->createRequestMessage($calendar, $attendee, $eventInfo, $oldEventInfo);
-                }
+                // The attendee gets the updated event body
+                $messages[] = $this->createRequestMessage($calendar, $attendee, $eventInfo, $oldEventInfo);
             }
 
         }
 
         return $messages;
+
     }
 
     /**
@@ -1126,21 +1106,16 @@ class Broker {
         return $message;
     }
 
-    private function createCancelMessage($calendar, $attendee, $eventInfo, $instanceId = null) {
+    private function createCancelMessage($calendar, $attendee, $eventInfo) {
         $message = $this->initItipMessage($calendar, $attendee, $eventInfo);
 
         $message->method = 'CANCEL';
 
         $message->message->METHOD = $message->method;
         $event = $message->message->add('VEVENT', [
-            'UID'      => $message->uid
+            'UID'      => $message->uid,
+            'SEQUENCE' => $message->sequence,
         ]);
-        if (isset($message->sequence)) {
-            $event->add('SEQUENCE', $message->sequence);
-        }
-        if (isset($instanceId)) {
-            $event->add('RECURRENCE-ID', $instanceId);
-        }
         if (isset($calendar->VEVENT->SUMMARY)) {
             $event->add('SUMMARY', $calendar->VEVENT->SUMMARY->getValue());
         }
