@@ -17,21 +17,24 @@ use Sabre\VObject\Property;
 class Uri extends Text
 {
     /**
-     * Disable lazy loading optimization for serialize() because Uri
-     * transforms values (escapes commas), so rawValue != serialized value.
-     */
-    protected function getInternalValue()
-    {
-        $this->ensureValueParsed();
-        return $this->value;
-    }
-    /**
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
      *
      * @var string
      */
     public $delimiter = '';
+
+    /**
+     * Override serialize() to disable lazy loading optimization.
+     *
+     * Uri transforms values (escapes commas), so we can't use rawValue directly.
+     */
+    public function serialize()
+    {
+        // Force parsing before serialization to ensure proper escaping
+        $this->ensureValueParsed();
+        return parent::serialize();
+    }
 
     /**
      * Returns the type of value.
