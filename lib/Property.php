@@ -296,6 +296,32 @@ abstract class Property extends Node
     }
 
     /**
+     * Protected getter for internal value access.
+     *
+     * Subclasses should use this instead of accessing $this->value directly
+     * to ensure lazy loading works correctly.
+     *
+     * @return mixed
+     */
+    protected function getInternalValue()
+    {
+        $this->ensureValueParsed();
+        return $this->value;
+    }
+
+    /**
+     * Protected setter for internal value access.
+     *
+     * @param mixed $value
+     */
+    protected function setInternalValue($value)
+    {
+        $this->value = $value;
+        $this->isValueParsed = true;
+        $this->rawMimeDirValueUnparsed = null;
+    }
+
+    /**
      * Returns a raw mime-dir representation of the value.
      *
      * @return string

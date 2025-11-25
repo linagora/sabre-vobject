@@ -36,7 +36,7 @@ class IntegerValue extends Property
      */
     public function getRawMimeDirValue()
     {
-        return $this->value;
+        return $this->getInternalValue();
     }
 
     /**

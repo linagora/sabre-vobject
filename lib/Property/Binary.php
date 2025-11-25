@@ -39,12 +39,12 @@ class Binary extends Property
     {
         if (is_array($value)) {
             if (1 === count($value)) {
-                $this->value = $value[0];
+                $this->setInternalValue($value[0]);
             } else {
                 throw new \InvalidArgumentException('The argument must either be a string or an array with only one child');
             }
         } else {
-            $this->value = $value;
+            $this->setInternalValue($value);
         }
     }
 
@@ -58,7 +58,7 @@ class Binary extends Property
      */
     public function setRawMimeDirValue($val)
     {
-        $this->value = base64_decode($val);
+        $this->setInternalValue(base64_decode($val));
     }
 
     /**
@@ -68,7 +68,7 @@ class Binary extends Property
      */
     public function getRawMimeDirValue()
     {
-        return base64_encode($this->value);
+        return base64_encode($this->getInternalValue());
     }
 
     /**
@@ -93,7 +93,7 @@ class Binary extends Property
      */
     public function getJsonValue()
     {
-        return [base64_encode($this->getValue())];
+        return [base64_encode($this->getInternalValue())];
     }
 
     /**

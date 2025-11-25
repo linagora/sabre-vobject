@@ -58,9 +58,9 @@ class Recur extends Property
 
                 $newVal[strtoupper($k)] = $v;
             }
-            $this->value = $newVal;
+            $this->setInternalValue($newVal);
         } elseif (is_string($value)) {
-            $this->value = self::stringToArray($value);
+            $this->setInternalValue(self::stringToArray($value));
         } else {
             throw new \InvalidArgumentException('You must either pass a string, or a key=>value array');
         }
@@ -80,7 +80,7 @@ class Recur extends Property
     public function getValue()
     {
         $out = [];
-        foreach ($this->value as $key => $value) {
+        foreach ($this->getInternalValue() as $key => $value) {
             $out[] = $key.'='.(is_array($value) ? implode(',', $value) : $value);
         }
 
@@ -105,7 +105,7 @@ class Recur extends Property
      */
     public function getParts()
     {
-        return $this->value;
+        return $this->getInternalValue();
     }
 
     /**

@@ -39,7 +39,7 @@ class Boolean extends Property
      */
     public function getRawMimeDirValue()
     {
-        return $this->value ? 'TRUE' : 'FALSE';
+        return $this->getInternalValue() ? 'TRUE' : 'FALSE';
     }
 
     /**
