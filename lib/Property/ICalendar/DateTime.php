@@ -228,7 +228,7 @@ class DateTime extends Property
             $this->offsetUnset('TZID');
         }
 
-        $this->value = $values;
+        $this->setInternalValue($values);
     }
 
     /**

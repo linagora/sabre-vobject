@@ -31,6 +31,6 @@ class Date extends DateAndOrTime
      */
     public function setDateTime(\DateTimeInterface $dt)
     {
-        $this->value = $dt->format('Ymd');
+        $this->setInternalValue($dt->format('Ymd'));
     }
 }

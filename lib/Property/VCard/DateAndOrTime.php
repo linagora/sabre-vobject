@@ -91,7 +91,7 @@ class DateAndOrTime extends Property
             $value = $dt->format('Ymd\\THisO');
         }
 
-        $this->value = $value;
+        $this->setInternalValue($value);
     }
 
     /**

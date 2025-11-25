@@ -92,9 +92,9 @@ class Uri extends Text
                         break;
                 }
             }
-            $this->value = $newVal;
+            $this->setInternalValue($newVal);
         } else {
-            $this->value = strtr($val, ['\,' => ',']);
+            $this->setInternalValue(strtr($val, ['\,' => ',']));
         }
     }
 
@@ -105,10 +105,11 @@ class Uri extends Text
      */
     public function getRawMimeDirValue()
     {
-        if (is_array($this->value)) {
-            $value = $this->value[0];
+        $internalValue = $this->getInternalValue();
+        if (is_array($internalValue)) {
+            $value = $internalValue[0];
         } else {
-            $value = $this->value;
+            $value = $internalValue;
         }
 
         return strtr($value, [',' => '\,']);
