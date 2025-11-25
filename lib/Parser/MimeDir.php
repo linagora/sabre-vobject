@@ -330,6 +330,36 @@ class MimeDir extends Parser
      */
     protected function readProperty($line)
     {
+        $property = [
+            'name' => null,
+            'parameters' => [],
+            'value' => null,
+        ];
+
+        // Fast path for simple properties without parameters (e.g., "SUMMARY:Meeting")
+        // This avoids the expensive regex for the most common case
+        $semicolonPos = strpos($line, ';');
+        $colonPos = strpos($line, ':');
+
+        if (false === $semicolonPos && false !== $colonPos) {
+            // Simple property: NAME:VALUE (no parameters)
+            $property['name'] = strtoupper(substr($line, 0, $colonPos));
+            $property['value'] = substr($line, $colonPos + 1);
+
+            // Validate property name if not in forgiving mode
+            if (!($this->options & self::OPTION_FORGIVING)) {
+                if (!preg_match('/^[A-Z0-9\-\.]+$/', $property['name'])) {
+                    // Fall through to regex path for invalid names
+                    goto regex_path;
+                }
+            }
+
+            return $property;
+        }
+
+        // Complex property with parameters - use regex
+        regex_path:
+
         if ($this->options & self::OPTION_FORGIVING) {
             $propNameToken = 'A-Z0-9\-\._\\/';
         } else {
