@@ -356,6 +356,20 @@ class MimeDir extends Parser
 
             // Create property object and set its value
             $propObj = $this->root->createProperty($propName, null, [], null, $this->startLine, $line);
+
+            // Handle charset conversion (same as the regex path)
+            $charset = $this->charset;
+            switch (strtolower($charset)) {
+                case 'utf-8':
+                    break;
+                case 'windows-1252':
+                case 'iso-8859-1':
+                    $propValue = mb_convert_encoding($propValue, 'UTF-8', $charset);
+                    break;
+                default:
+                    throw new ParseException('Unsupported CHARSET: '.$charset);
+            }
+
             $propObj->setRawMimeDirValue($propValue);
 
             return $propObj;
