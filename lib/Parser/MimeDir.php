@@ -343,18 +343,22 @@ class MimeDir extends Parser
 
         if (false === $semicolonPos && false !== $colonPos) {
             // Simple property: NAME:VALUE (no parameters)
-            $property['name'] = strtoupper(substr($line, 0, $colonPos));
-            $property['value'] = substr($line, $colonPos + 1);
+            $propName = strtoupper(substr($line, 0, $colonPos));
+            $propValue = substr($line, $colonPos + 1);
 
             // Validate property name if not in forgiving mode
             if (!($this->options & self::OPTION_FORGIVING)) {
-                if (!preg_match('/^[A-Z0-9\-\.]+$/', $property['name'])) {
+                if (!preg_match('/^[A-Z0-9\-\.]+$/', $propName)) {
                     // Fall through to regex path for invalid names
                     goto regex_path;
                 }
             }
 
-            return $property;
+            // Create property object and set its value
+            $propObj = $this->root->createProperty($propName, null, [], null, $this->startLine, $line);
+            $propObj->setRawMimeDirValue($propValue);
+
+            return $propObj;
         }
 
         // Complex property with parameters - use regex
