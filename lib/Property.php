@@ -49,6 +49,27 @@ abstract class Property extends Node
     protected $value;
 
     /**
+     * Raw unparsed MimeDir value for lazy loading.
+     *
+     * @var string|null
+     */
+    protected $rawMimeDirValueUnparsed;
+
+    /**
+     * Flag indicating if the value has been parsed from raw MimeDir.
+     *
+     * @var bool
+     */
+    protected $isValueParsed = true;
+
+    /**
+     * Flag indicating if the raw value is quoted-printable encoded.
+     *
+     * @var bool
+     */
+    protected $isQuotedPrintable = false;
+
+    /**
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
      *
@@ -115,6 +136,8 @@ abstract class Property extends Node
     public function setValue($value)
     {
         $this->value = $value;
+        $this->isValueParsed = true;
+        $this->rawMimeDirValueUnparsed = null;
     }
 
     /**
@@ -130,6 +153,8 @@ abstract class Property extends Node
      */
     public function getValue()
     {
+        $this->ensureValueParsed();
+
         if (is_array($this->value)) {
             if (0 == count($this->value)) {
                 return;
@@ -149,6 +174,8 @@ abstract class Property extends Node
     public function setParts(array $parts)
     {
         $this->value = $parts;
+        $this->isValueParsed = true;
+        $this->rawMimeDirValueUnparsed = null;
     }
 
     /**
@@ -161,6 +188,8 @@ abstract class Property extends Node
      */
     public function getParts()
     {
+        $this->ensureValueParsed();
+
         if (is_null($this->value)) {
             return [];
         } elseif (is_array($this->value)) {
@@ -226,6 +255,45 @@ abstract class Property extends Node
      * @param string $val
      */
     abstract public function setRawMimeDirValue($val);
+
+    /**
+     * Stores a raw value for lazy parsing (performance optimization).
+     *
+     * Instead of immediately parsing the value, this method stores it
+     * for parsing only when the value is actually accessed.
+     *
+     * @param string $val
+     * @param bool $isQuotedPrintable
+     */
+    public function setRawMimeDirValueLazy($val, $isQuotedPrintable = false)
+    {
+        $this->rawMimeDirValueUnparsed = $val;
+        $this->isQuotedPrintable = $isQuotedPrintable;
+        $this->isValueParsed = false;
+        $this->value = null;
+    }
+
+    /**
+     * Ensures the value has been parsed from raw MimeDir format.
+     *
+     * This is called by getValue(), getParts(), and other methods that
+     * need access to the parsed value.
+     */
+    protected function ensureValueParsed()
+    {
+        if ($this->isValueParsed) {
+            return;
+        }
+
+        if ($this->isQuotedPrintable && method_exists($this, 'setQuotedPrintableValue')) {
+            $this->setQuotedPrintableValue($this->rawMimeDirValueUnparsed);
+        } else {
+            $this->setRawMimeDirValue($this->rawMimeDirValueUnparsed);
+        }
+
+        $this->isValueParsed = true;
+        $this->rawMimeDirValueUnparsed = null;
+    }
 
     /**
      * Returns a raw mime-dir representation of the value.

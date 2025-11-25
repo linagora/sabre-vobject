@@ -370,7 +370,8 @@ class MimeDir extends Parser
                     throw new ParseException('Unsupported CHARSET: '.$charset);
             }
 
-            $propObj->setRawMimeDirValue($propValue);
+            // Use lazy loading - parse value only when accessed
+            $propObj->setRawMimeDirValueLazy($propValue, false);
 
             return $propObj;
         }
@@ -508,6 +509,7 @@ class MimeDir extends Parser
         }
 
         if (isset($propObj['ENCODING']) && 'QUOTED-PRINTABLE' === strtoupper($propObj['ENCODING'])) {
+            // Quoted-printable requires reading additional lines, so we can't lazy load it
             $propObj->setQuotedPrintableValue($this->extractQuotedPrintableValue());
         } else {
             $charset = $this->charset;
@@ -525,7 +527,8 @@ class MimeDir extends Parser
                 default:
                     throw new ParseException('Unsupported CHARSET: '.$propObj['CHARSET']);
             }
-            $propObj->setRawMimeDirValue($property['value']);
+            // Use lazy loading - parse value only when accessed
+            $propObj->setRawMimeDirValueLazy($property['value'], false);
         }
 
         return $propObj;
