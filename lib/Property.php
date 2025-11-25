@@ -318,7 +318,12 @@ abstract class Property extends Node
             $str .= ';'.$param->serialize();
         }
 
-        $str .= ':'.$this->getRawMimeDirValue();
+        // Optimization: if value was never parsed, use raw value directly
+        if (!$this->isValueParsed && null !== $this->rawMimeDirValueUnparsed) {
+            $str .= ':'.$this->rawMimeDirValueUnparsed;
+        } else {
+            $str .= ':'.$this->getRawMimeDirValue();
+        }
 
         $str = \preg_replace(
             '/(
