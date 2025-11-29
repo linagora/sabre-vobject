@@ -272,9 +272,16 @@ class EventIterator implements \Iterator
         if (isset($event->DTEND)) {
             $event->DTEND->setDateTime($this->getDtEnd(), $event->DTEND->isFloating());
         }
-        $recurid = clone $event->DTSTART;
-        $recurid->name = 'RECURRENCE-ID';
-        $event->add($recurid);
+
+        // Only add RECURRENCE-ID if this is not the first occurrence (master event)
+        // The first occurrence should match the original DTSTART and should not have RECURRENCE-ID
+        $isFirstOccurrence = $this->getDtStart()->getTimestamp() === $this->masterEvent->DTSTART->getDateTime()->getTimestamp();
+
+        if (!$isFirstOccurrence) {
+            $recurid = clone $event->DTSTART;
+            $recurid->name = 'RECURRENCE-ID';
+            $event->add($recurid);
+        }
 
         return $event;
     }

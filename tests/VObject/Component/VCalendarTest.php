@@ -830,4 +830,66 @@ ICS;
             $this->assertEquals($expectedLevel, $input[0]['level']);
         }
     }
+
+    /**
+     * Test that the first occurrence (master event) does not have RECURRENCE-ID.
+     * Regression test for issue #50 (linagora/esn-sabre).
+     */
+    public function testExpandFirstOccurrenceNoRecurrenceId(): void
+    {
+        $vcal = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:test-event-recurrence-id
+DTSTART:20300411T100000Z
+DTEND:20300411T110000Z
+RRULE:FREQ=YEARLY;COUNT=3;BYMONTH=5;BYMONTHDAY=15
+SUMMARY:Test Event
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $vcal = Reader::read($vcal);
+        $start = new \DateTime('2030-04-01');
+        $end = new \DateTime('2033-01-01');
+
+        $expanded = $vcal->expand($start, $end);
+
+        $this->assertCount(3, $expanded->VEVENT, 'Should have 3 occurrences');
+
+        // First occurrence (master event) should NOT have RECURRENCE-ID
+        $firstEvent = $expanded->VEVENT[0];
+        $this->assertFalse(
+            isset($firstEvent->{'RECURRENCE-ID'}),
+            'First occurrence (master event) should not have RECURRENCE-ID'
+        );
+        $this->assertEquals(
+            '2030-04-11 10:00:00',
+            $firstEvent->DTSTART->getDateTime()->format('Y-m-d H:i:s')
+        );
+
+        // Second occurrence (recurrence) SHOULD have RECURRENCE-ID
+        $secondEvent = $expanded->VEVENT[1];
+        $this->assertTrue(
+            isset($secondEvent->{'RECURRENCE-ID'}),
+            'Second occurrence should have RECURRENCE-ID'
+        );
+        $this->assertEquals(
+            '2030-05-15 10:00:00',
+            $secondEvent->DTSTART->getDateTime()->format('Y-m-d H:i:s')
+        );
+
+        // Third occurrence (recurrence) SHOULD have RECURRENCE-ID
+        $thirdEvent = $expanded->VEVENT[2];
+        $this->assertTrue(
+            isset($thirdEvent->{'RECURRENCE-ID'}),
+            'Third occurrence should have RECURRENCE-ID'
+        );
+        $this->assertEquals(
+            '2031-05-15 10:00:00',
+            $thirdEvent->DTSTART->getDateTime()->format('Y-m-d H:i:s')
+        );
+    }
 }
