@@ -5,6 +5,7 @@ namespace Sabre\VObject;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VCard;
+use Sabre\VObject\Property\Text;
 
 class ComponentTest extends TestCase
 {
@@ -21,10 +22,13 @@ class ComponentTest extends TestCase
         $count = 0;
         foreach ($comp->children() as $key => $subcomponent) {
             ++$count;
-            $this->assertInstanceOf('Sabre\\VObject\\Component', $subcomponent);
+            $this->assertInstanceOf(Component::class, $subcomponent);
+
+            if (2 === $count) {
+                $this->assertEquals(1, $key);
+            }
         }
         $this->assertEquals(2, $count);
-        $this->assertEquals(1, $key);
     }
 
     public function testMagicGet()
@@ -38,10 +42,10 @@ class ComponentTest extends TestCase
         $comp->add($sub);
 
         $event = $comp->vevent;
-        $this->assertInstanceOf('Sabre\\VObject\\Component', $event);
+        $this->assertInstanceOf(Component::class, $event);
         $this->assertEquals('VEVENT', $event->name);
 
-        $this->assertInternalType('null', $comp->vjournal);
+        $this->assertNull($comp->vjournal);
     }
 
     public function testMagicGetGroups()
@@ -57,16 +61,48 @@ class ComponentTest extends TestCase
         $sub = $comp->createProperty('EMAIL', '3@3.com');
         $comp->add($sub);
 
+        $sub = $comp->createProperty('0.EMAIL', '0@0.com');
+        $comp->add($sub);
+
         $emails = $comp->email;
-        $this->assertEquals(3, count($emails));
+        $this->assertEquals(4, count($emails));
 
         $email1 = $comp->{'group1.email'};
         $this->assertEquals('EMAIL', $email1[0]->name);
         $this->assertEquals('GROUP1', $email1[0]->group);
 
+        $email0 = $comp->{'0.email'};
+        $this->assertEquals('EMAIL', $email0[0]->name);
+        $this->assertEquals('0', $email0[0]->group);
+
+        // this is supposed to return all EMAIL properties that do not have a group
         $email3 = $comp->{'.email'};
         $this->assertEquals('EMAIL', $email3[0]->name);
         $this->assertEquals(null, $email3[0]->group);
+
+        // this is supposed to return all properties that do not have a group
+        $nogroupProps = $comp->{'.'};
+        $this->assertGreaterThan(0, count($email3));
+        foreach ($nogroupProps as $prop) {
+            $this->assertEquals(null, $prop->group);
+        }
+    }
+
+    public function testAddGroupProperties()
+    {
+        $comp = new VCard([
+            'VERSION' => '3.0',
+            'item2.X-ABLabel' => 'item2-Foo',
+        ]);
+
+        $comp->{'ITEM1.X-ABLabel'} = 'ITEM1-Foo';
+
+        foreach (['item2', 'ITEM1'] as $group) {
+            $prop = $comp->{"$group.X-ABLabel"};
+            $this->assertInstanceOf(Property::class, $prop);
+            $this->assertSame("$group-Foo", (string) $prop);
+            $this->assertSame($group, $prop->group);
+        }
     }
 
     public function testMagicIsset()
@@ -89,7 +125,7 @@ class ComponentTest extends TestCase
         $comp = new VCalendar();
         $comp->myProp = 'myValue';
 
-        $this->assertInstanceOf('Sabre\\VObject\\Property', $comp->MYPROP);
+        $this->assertInstanceOf(Property::class, $comp->MYPROP);
         $this->assertEquals('myValue', (string) $comp->MYPROP);
     }
 
@@ -100,7 +136,7 @@ class ComponentTest extends TestCase
         $comp->myProp = 'myValue';
 
         $this->assertEquals(1, count($comp->children()));
-        $this->assertInstanceOf('Sabre\\VObject\\Property', $comp->MYPROP);
+        $this->assertInstanceOf(Property::class, $comp->MYPROP);
         $this->assertEquals('myValue', (string) $comp->MYPROP);
     }
 
@@ -109,7 +145,7 @@ class ComponentTest extends TestCase
         $comp = new VCalendar();
         $comp->ORG = ['Acme Inc', 'Section 9'];
 
-        $this->assertInstanceOf('Sabre\\VObject\\Property', $comp->ORG);
+        $this->assertInstanceOf(Property::class, $comp->ORG);
         $this->assertEquals(['Acme Inc', 'Section 9'], $comp->ORG->getParts());
     }
 
@@ -174,20 +210,16 @@ class ComponentTest extends TestCase
         $this->assertTrue(isset($comp->vevent[1]));
     }
 
-    /**
-     * @expectedException \LogicException
-     */
     public function testArrayAccessSet()
     {
+        $this->expectException(\LogicException::class);
         $comp = new VCalendar();
         $comp['hey'] = 'hi there';
     }
 
-    /**
-     * @expectedException \LogicException
-     */
     public function testArrayAccessUnset()
     {
+        $this->expectException(\LogicException::class);
         $comp = new VCalendar();
         unset($comp[0]);
     }
@@ -217,7 +249,7 @@ class ComponentTest extends TestCase
 
         $bla = $comp->children()[0];
 
-        $this->assertInstanceOf('Sabre\\VObject\\Property', $bla);
+        $this->assertInstanceOf(Property::class, $bla);
         $this->assertEquals('MYPROP', $bla->name);
         $this->assertEquals('value', (string) $bla);
 
@@ -250,20 +282,16 @@ class ComponentTest extends TestCase
         $this->assertEquals('VEVENT', $comp->VEVENT->name);
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testAddArgFail()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $comp = new VCalendar();
         $comp->add($comp->createComponent('VEVENT'), 'hello');
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testAddArgFail2()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $comp = new VCalendar();
         $comp->add([]);
     }
@@ -293,7 +321,7 @@ class ComponentTest extends TestCase
         $comp->add($comp->createComponent('VTODO'));
 
         $r = $comp->children();
-        $this->assertInternalType('array', $r);
+        $this->assertIsArray($r);
         $this->assertEquals(2, count($r));
     }
 
@@ -305,7 +333,7 @@ class ComponentTest extends TestCase
         $comp->add($comp->createComponent('VTODO'));
 
         $r = $comp->getComponents();
-        $this->assertInternalType('array', $r);
+        $this->assertIsArray($r);
         $this->assertEquals(1, count($r));
         $this->assertEquals('VTODO', $r[0]->name);
     }
@@ -414,11 +442,9 @@ class ComponentTest extends TestCase
         $this->assertTrue(isset($comp->prop1));
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testRemoveNotFound()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $comp = new VCalendar([], false);
         $prop = $comp->createProperty('A', 'B');
         $comp->remove($prop);
