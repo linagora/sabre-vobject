@@ -1,3 +1,14 @@
 parameters:
-  level: 0
-  bootstrap: %currentWorkingDirectory%/vendor/autoload.php
+  level: 1
+  reportUnmatchedIgnoredErrors: false
+  universalObjectCratesClasses:
+    - \Sabre\VObject\Component
+  ignoreErrors:
+    -
+      message: "#^Call to an undefined static method#"
+      count: 2
+      path: tests/VObject/Component/VCalendarTest.php
+    -
+      message: "#^Cannot unset offset 0 on Sabre\\\\VObject\\\\Property|null.$#"
+      count: 1
+      path: tests/VObject/PropertyTest.php

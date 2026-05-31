@@ -5,6 +5,7 @@ namespace Sabre\VObject;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VCard;
+use Sabre\VObject\Property\ICalendar\DateTime;
 
 class PropertyTest extends TestCase
 {
@@ -62,7 +63,7 @@ class PropertyTest extends TestCase
         $property = $cal->createProperty('propname', 'propvalue');
         $property['paramname'] = 'paramvalue';
 
-        $this->assertInstanceOf('Sabre\\VObject\\Parameter', $property['paramname']);
+        $this->assertInstanceOf(Parameter::class, $property['paramname']);
     }
 
     public function testParameterNotExists()
@@ -71,7 +72,7 @@ class PropertyTest extends TestCase
         $property = $cal->createProperty('propname', 'propvalue');
         $property['paramname'] = 'paramvalue';
 
-        $this->assertInternalType('null', $property['foo']);
+        $this->assertNull($property['foo']);
     }
 
     public function testParameterMultiple()
@@ -81,7 +82,7 @@ class PropertyTest extends TestCase
         $property['paramname'] = 'paramvalue';
         $property->add('paramname', 'paramvalue');
 
-        $this->assertInstanceOf('Sabre\\VObject\\Parameter', $property['paramname']);
+        $this->assertInstanceOf(Parameter::class, $property['paramname']);
         $this->assertEquals(2, count($property['paramname']->getParts()));
     }
 
@@ -92,7 +93,7 @@ class PropertyTest extends TestCase
         $property['paramname'] = 'paramvalue';
 
         $this->assertEquals(1, count($property->parameters()));
-        $this->assertInstanceOf('Sabre\\VObject\\Parameter', $property->parameters['PARAMNAME']);
+        $this->assertInstanceOf(Parameter::class, $property->parameters['PARAMNAME']);
         $this->assertEquals('PARAMNAME', $property->parameters['PARAMNAME']->name);
         $this->assertEquals('paramvalue', $property->parameters['PARAMNAME']->getValue());
     }
@@ -308,11 +309,10 @@ class PropertyTest extends TestCase
 
     /**
      * ElementList should reject this.
-     *
-     * @expectedException \LogicException
      */
     public function testArrayAccessSetInt()
     {
+        $this->expectException(\LogicException::class);
         $calendar = new VCalendar();
         $property = $calendar->createProperty('X-PROP', null);
 
@@ -322,11 +322,10 @@ class PropertyTest extends TestCase
 
     /**
      * ElementList should reject this.
-     *
-     * @expectedException \LogicException
      */
     public function testArrayAccessUnsetInt()
     {
+        $this->expectException(\LogicException::class);
         $calendar = new VCalendar();
         $property = $calendar->createProperty('X-PROP', null);
 
@@ -368,6 +367,12 @@ class PropertyTest extends TestCase
 
         $this->assertEquals('ENCODING=BASE64 is not valid for this document type.', $result[0]['message']);
         $this->assertEquals(3, $result[0]['level']);
+
+        //Validate the reparation of BASE64 formatted vCard v3
+        $result = $property->validate(Property::REPAIR);
+
+        $this->assertEquals('ENCODING=BASE64 has been transformed to ENCODING=B.', $result[0]['message']);
+        $this->assertEquals(1, $result[0]['level']);
     }
 
     public function testValidateBadEncodingVCard21()
@@ -380,5 +385,19 @@ class PropertyTest extends TestCase
 
         $this->assertEquals('ENCODING=B is not valid for this document type.', $result[0]['message']);
         $this->assertEquals(3, $result[0]['level']);
+    }
+
+    public function testUnknownValuesWillBeIgnored(): void
+    {
+        $cal = new VCalendar();
+        $property = $cal->createProperty('DTSTAMP', '20240101T000000Z', ['VALUE' => 'DATETIME']);
+
+        self::assertEquals("DTSTAMP;VALUE=DATETIME:20240101T000000Z\r\n", $property->serialize());
+
+        self::assertInstanceOf(DateTime::class, $property);
+        self::assertCount(1, $property->parameters());
+        self::assertInstanceOf(Parameter::class, $property->parameters['VALUE']);
+        self::assertEquals('VALUE', $property->parameters['VALUE']->name);
+        self::assertEquals('DATETIME', $property->parameters['VALUE']->getValue());
     }
 }

@@ -23,7 +23,7 @@ class Period extends Property
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
      *
-     * @var string|null
+     * @var string
      */
     public $delimiter = ',';
 
@@ -67,8 +67,6 @@ class Period extends Property
      * Sets the json value, as it would appear in a jCard or jCal object.
      *
      * The value must always be an array.
-     *
-     * @param array $value
      */
     public function setJsonValue(array $value)
     {
@@ -79,6 +77,10 @@ class Period extends Property
             $value
         );
         parent::setJsonValue($value);
+    }
+
+    function appendUtc($strDate) {
+        return strpos($strDate, 'Z') === false ? '' : 'Z';
     }
 
     /**
@@ -94,19 +96,19 @@ class Period extends Property
         foreach ($this->getParts() as $item) {
             list($start, $end) = explode('/', $item, 2);
 
-            $start = DateTimeParser::parseDateTime($start);
-
             // This is a duration value.
-            if ('P' === $end[0]) {
+            $startDt = DateTimeParser::parseDateTime($start)->format('Y-m-d\\TH:i:s') . $this->appendUtc($start);
+
+            if ($end[0] === 'P') {
                 $return[] = [
-                    $start->format('Y-m-d\\TH:i:s'),
-                    $end,
+                    $startDt,
+                    $end
                 ];
             } else {
-                $end = DateTimeParser::parseDateTime($end);
+                $endDt = DateTimeParser::parseDateTime($end)->format('Y-m-d\\TH:i:s') . $this->appendUtc($end);
                 $return[] = [
-                    $start->format('Y-m-d\\TH:i:s'),
-                    $end->format('Y-m-d\\TH:i:s'),
+                    $startDt,
+                    $endDt
                 ];
             }
         }
