@@ -6,10 +6,9 @@ use PHPUnit\Framework\TestCase;
 
 class TimeZoneUtilTest extends TestCase
 {
-    public function setUp()
+    public function setUp(): void
     {
-        // clearning the tz cache
-        TimezoneUtil::$map = null;
+        TimeZoneUtil::clean();
     }
 
     /**
@@ -31,14 +30,19 @@ class TimeZoneUtilTest extends TestCase
 
     public function getMapping()
     {
-        TimeZoneUtil::loadTzMaps();
+        $map = array_merge(
+            include __DIR__.'/../../lib/timezonedata/windowszones.php',
+            include __DIR__.'/../../lib/timezonedata/lotuszones.php',
+            include __DIR__.'/../../lib/timezonedata/exchangezones.php',
+            include __DIR__.'/../../lib/timezonedata/php-workaround.php'
+        );
 
         // PHPUNit requires an array of arrays
         return array_map(
             function ($value) {
                 return [$value];
             },
-            TimeZoneUtil::$map
+            $map
         );
     }
 
@@ -82,7 +86,7 @@ HI;
         $this->assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testWetherMicrosoftIsStillInsane()
+    public function testWhetherMicrosoftIsStillInsane()
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -147,6 +151,13 @@ HI;
         $this->assertEquals($ex->getName(), $tz->getName());
     }
 
+    public function testEmptyTimeZone()
+    {
+        $tz = TimeZoneUtil::getTimeZone('');
+        $ex = new \DateTimeZone('UTC');
+        $this->assertEquals($ex->getName(), $tz->getName());
+    }
+
     public function testWindowsTimeZone()
     {
         $tz = TimeZoneUtil::getTimeZone('Eastern Standard Time');
@@ -170,6 +181,17 @@ HI;
      */
     public function testTimeZoneBCIdentifiers($tzid)
     {
+        /*
+         * A regression was introduced in PHP 8.1.14 and 8.2.1
+         * Timezone ids containing a "+" like "GMT+10" do not work.
+         * See https://github.com/php/php-src/issues/10218
+         * The regression should be fixed in the next patch releases of PHP
+         * that should be released in Feb 2023.
+         */
+        $versionOfPHP = \phpversion();
+        if ((('8.1.14' == $versionOfPHP) || ('8.2.1' == $versionOfPHP)) && \str_contains($tzid, '+')) {
+            $this->markTestSkipped("Timezone ids containing '+' do not work on PHP $versionOfPHP");
+        }
         $tz = TimeZoneUtil::getTimeZone($tzid);
         $ex = new \DateTimeZone($tzid);
 
@@ -194,7 +216,7 @@ HI;
             function ($value) {
                 return [$value];
             },
-            TimeZoneUtil::getIdentifiersBC()
+            include __DIR__.'/../../lib/timezonedata/php-bc.php'
         );
     }
 
@@ -210,11 +232,9 @@ HI;
         $this->assertEquals($ex->getName(), $tz->getName());
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testTimezoneFail()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $tz = TimeZoneUtil::getTimeZone('FooBar', null, true);
     }
 

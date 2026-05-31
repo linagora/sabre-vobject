@@ -92,6 +92,14 @@ class VCardTest extends TestCase
             ],
             "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nORG:Acme Co.\r\nFN:Acme Co.\r\nEND:VCARD\r\n",
         ];
+        // No FN, NICKNAME fallback
+        $tests[] = [
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nNICKNAME:JohnDoe\r\nEND:VCARD\r\n",
+            [
+                'The FN property must appear in the VCARD component exactly 1 time',
+            ],
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nNICKNAME:JohnDoe\r\nFN:JohnDoe\r\nEND:VCARD\r\n",
+        ];
         // No FN, EMAIL fallback
         $tests[] = [
             "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nEMAIL:1@example.org\r\nEND:VCARD\r\n",
@@ -135,8 +143,8 @@ VCF;
         $vcard = VObject\Reader::read($vcard);
         $this->assertEquals('1@example.org', $vcard->getByType('EMAIL', 'home')->getValue());
         $this->assertEquals('2@example.org', $vcard->getByType('EMAIL', 'work')->getValue());
-        $this->assertNull($vcard->getByType('EMAIL', 'non-existant'));
-        $this->assertNull($vcard->getByType('ADR', 'non-existant'));
+        $this->assertNull($vcard->getByType('EMAIL', 'non-existent'));
+        $this->assertNull($vcard->getByType('ADR', 'non-existent'));
     }
 
     public function testPreferredNoPref()
@@ -204,7 +212,7 @@ END:VCARD
 VCF;
         $this->assertValidate(
             $vcard,
-            VCARD::PROFILE_CARDDAV,
+            VCard::PROFILE_CARDDAV,
             3,
             'vCards on CardDAV servers MUST have a UID property.'
         );
@@ -236,7 +244,7 @@ END:VCARD
 VCF;
         $this->assertValidate(
             $vcard,
-            VCARD::REPAIR,
+            VCard::REPAIR,
             1,
             'Adding a UID to a vCard property is recommended.'
         );
@@ -253,7 +261,7 @@ END:VCARD
 VCF;
         $this->assertValidate(
             $vcard,
-            VCARD::PROFILE_CARDDAV,
+            VCard::PROFILE_CARDDAV,
             3,
             'CardDAV servers are not allowed to accept vCard 2.1.'
         );
