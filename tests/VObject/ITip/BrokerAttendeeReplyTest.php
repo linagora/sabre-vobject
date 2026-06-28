@@ -1452,10 +1452,26 @@ DTSTART:20140811T200000Z
 ORGANIZER:mailto:organizer@example.org
 ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => null,
+                'recipient' => 'mailto:organizer@example.org',
+                'recipientName' => null,
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
-SEQUENCE:1
 DTSTART:20140818T200000Z
 RECURRENCE-ID:20140818T200000Z
 ORGANIZER:mailto:organizer@example.org
