@@ -5,6 +5,7 @@ namespace Sabre\VObject\Component;
 use DateTimeZone;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject;
+use Sabre\VObject\InvalidDataException;
 
 class VCalendarTest extends TestCase
 {
@@ -330,11 +331,9 @@ END:VCALENDAR
         return $tests;
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
     public function testBrokenEventExpand()
     {
+        $this->expectException(InvalidDataException::class);
         $input = 'BEGIN:VCALENDAR
 CALSCALE:GREGORIAN
 VERSION:2.0
@@ -349,6 +348,33 @@ END:VCALENDAR
             new \DateTime('2011-12-01'),
             new \DateTime('2011-12-31')
         );
+    }
+
+    /**
+     * This test used to induce an infinite loop.
+     * The "medium" annotation means that phpunit will fail the
+     * test if it takes longer than a default of 10 seconds.
+     *
+     * @medium
+     */
+    public function testEventExpandYearly()
+    {
+        $input = 'BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:1a093f1012086078fdd3d9df5ff4d7d0
+DTSTART;TZID=UTC:20210203T130000
+DTEND;TZID=UTC:20210203T140000
+RRULE:FREQ=YEARLY;COUNT=7;WKST=MO;BYDAY=MO;BYWEEKNO=13,15,50
+END:VEVENT
+END:VCALENDAR
+';
+        $vcal = VObject\Reader::read($input);
+        $events = $vcal->expand(
+            new \DateTime('2021-01-01'),
+            new \DateTime('2023-01-01')
+        );
+
+        $this->assertCount(7, $events->VEVENT);
     }
 
     public function testGetDocumentType()
@@ -729,6 +755,55 @@ ICS;
             3,
            'A calendar object on a CalDAV server MUST NOT have a METHOD property.'
         );
+    }
+
+    public function testNodeInValidationErrorHasLineIndexAndLineStringProps(): void
+    {
+        $defectiveInput = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:PUBLISH
+PRODID:vobject
+BEGIN:VEVENT
+UID:foo
+CLASS:PUBLIC
+DTSTART;VALUE=DATE:19931231
+DTSTAMP:20240422T070855Z
+CREATED:
+LAST-MODIFIED:
+DESCRIPTION:bar
+END:VEVENT
+ICS;
+
+        $vcal = VObject\Reader::read($defectiveInput);
+        $result = $vcal->validate();
+        $warningMessages = [];
+        foreach ($result as $error) {
+            $warningMessages[] = $error['message'];
+        }
+        self::assertCount(2, $result, 'We expected exactly 2 validation messages, instead we got '.count($result).' results:'.implode(', ', $warningMessages));
+        foreach ($result as $idx => $warning) {
+            self::assertArrayHasKey('node', $warning);
+            self::assertInstanceOf(VObject\Property\ICalendar\DateTime::class, $warning['node']);
+            if (method_exists($this, 'assertObjectHasProperty')) {
+                self::assertObjectHasProperty('lineIndex', $warning['node']);
+                self::assertObjectHasProperty('lineString', $warning['node']);
+            } else {
+                // Fall back to the older method name known to older versions of phpunit.
+                self::assertObjectHasAttribute('lineIndex', $warning['node']);
+                self::assertObjectHasAttribute('lineString', $warning['node']);
+            }
+            switch ($idx) {
+                case 0:
+                    self::assertEquals('10', $warning['node']->lineIndex);
+                    self::assertEquals('CREATED:', $warning['node']->lineString);
+                    break;
+                case 1:
+                    self::assertEquals('11', $warning['node']->lineIndex);
+                    self::assertEquals('LAST-MODIFIED:', $warning['node']->lineString);
+                    break;
+            }
+        }
     }
 
     public function assertValidate($ics, $options, $expectedLevel, $expectedMessage = null)

@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Splitter;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\ParseException;
 
 class VCardTest extends TestCase
 {
@@ -33,11 +34,9 @@ EOT;
         $this->assertEquals(1, $count);
     }
 
-    /**
-     * @expectedException \Sabre\VObject\ParseException
-     */
     public function testVCardImportWrongType()
     {
+        $this->expectException(ParseException::class);
         $event[] = <<<EOT
 BEGIN:VEVENT
 UID:foo1
@@ -100,6 +99,50 @@ EOT;
         $this->assertEquals(4, $count);
     }
 
+    public function testVCardImportVCardNoComponent()
+    {
+        $this->expectException(ParseException::class);
+        $data = <<<EOT
+BEGIN:VCARD
+FN:first card
+
+BEGIN:VCARD
+FN:ok
+END:VCARD
+EOT;
+        $tempFile = $this->createStream($data);
+
+        $splitter = new VCard($tempFile);
+
+        $this->expectException(ParseException::class);
+        $this->expectExceptionMessage('Invalid MimeDir file. Unexpected component: "BEGIN:VCARD" in document type VCARD');
+        while ($object = $splitter->getNext()) {
+        }
+    }
+
+    public function testVCardImportQuotedPrintableOptionForgivingLeading()
+    {
+        $data = <<<EOT
+BEGIN:VCARD
+FN;card
+TITLE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=D0=
+
+END:VCARD
+BEGIN:VCARD
+FN;card
+END:VCARD
+EOT;
+        $tempFile = $this->createStream($data);
+
+        $splitter = new VCard($tempFile, \Sabre\VObject\Parser\Parser::OPTION_FORGIVING);
+
+        $count = 0;
+        while ($object = $splitter->getNext()) {
+            ++$count;
+        }
+        $this->assertEquals(2, $count);
+    }
+
     public function testVCardImportEndOfData()
     {
         $data = <<<EOT
@@ -115,11 +158,9 @@ EOT;
         $this->assertNull($objects->getNext());
     }
 
-    /**
-     * @expectedException \Sabre\VObject\ParseException
-     */
     public function testVCardImportCheckInvalidArgumentException()
     {
+        $this->expectException(ParseException::class);
         $data = <<<EOT
 BEGIN:FOO
 END:FOO

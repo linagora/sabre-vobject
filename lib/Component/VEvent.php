@@ -25,18 +25,15 @@ class VEvent extends VObject\Component
      * The rules used to determine if an event falls within the specified
      * time-range is based on the CalDAV specification.
      *
-     * @param DateTimeInterface $start
-     * @param DateTimeInterface $end
-     *
      * @return bool
      */
     public function isInTimeRange(DateTimeInterface $start, DateTimeInterface $end)
     {
-        if ($this->RRULE) {
+        if ($this->RRULE || $this->RDATE) {
             try {
                 $it = new EventIterator($this, null, $start->getTimezone());
             } catch (NoInstancesException $e) {
-                // If we've catched this exception, there are no instances
+                // If we've caught this exception, there are no instances
                 // for the event that fall into the specified time-range.
                 return false;
             }

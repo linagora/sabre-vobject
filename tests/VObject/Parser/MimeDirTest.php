@@ -3,6 +3,8 @@
 namespace Sabre\VObject\Parser;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\ParseException;
 
 /**
  * Note that most MimeDir related tests can actually be found in the ReaderTest
@@ -10,13 +12,11 @@ use PHPUnit\Framework\TestCase;
  */
 class MimeDirTest extends TestCase
 {
-    /**
-     * @expectedException \Sabre\VObject\ParseException
-     */
     public function testParseError()
     {
+        $this->expectException(ParseException::class);
         $mimeDir = new MimeDir();
-        $mimeDir->parse(fopen(__FILE__, 'a'));
+        $mimeDir->parse(fopen(__FILE__, 'a+'));
     }
 
     public function testDecodeLatin1()
@@ -80,20 +80,16 @@ VCF;
         $this->assertEquals("umlaut u - \xFC", $vcard->FN->getValue());
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testDecodeUnsupportedCharset()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $mimeDir = new MimeDir();
         $mimeDir->setCharset('foobar');
     }
 
-    /**
-     * @expectedException \Sabre\VObject\ParseException
-     */
     public function testDecodeUnsupportedInlineCharset()
     {
+        $this->expectException(ParseException::class);
         $vcard = <<<VCF
 BEGIN:VCARD
 VERSION:2.1
@@ -103,6 +99,25 @@ VCF;
 
         $mimeDir = new MimeDir();
         $mimeDir->parse($vcard);
+    }
+
+    public function provideEmptyParserInput(): array
+    {
+        return [
+            [null, 'No input provided to parse'],
+            ['', 'End of document reached prematurely'],
+        ];
+    }
+
+    /**
+     * @dataProvider provideEmptyParserInput
+     */
+    public function testParseEmpty($input, $expectedExceptionMessage): void
+    {
+        $this->expectException(ParseException::class);
+        $this->expectExceptionMessage($expectedExceptionMessage);
+        $mimeDir = new MimeDir();
+        $mimeDir->parse($input);
     }
 
     public function testDecodeWindows1252()
@@ -149,5 +164,137 @@ VCF;
         // we can do a simple assertion here. As long as we don't get an exception, everything is thing
         $this->assertEquals('Euro', $vcard->FN->getValue());
         $this->assertEquals('Test2', $vcard->N->getValue());
+    }
+
+    public function testParsingTwiceSameContent()
+    {
+        $card = <<<EOF
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:PRODID
+BEGIN:VEVENT
+DTSTAMP;TZID=Europe/Busingen:20220712T172312
+UID:UID
+DTSTART;VALUE=DATE;VALUE=DATE;VALUE=DATE:20220612
+END:VEVENT
+END:VCALENDAR
+EOF;
+
+        $mimeDir = new MimeDir();
+        $vcard = $mimeDir->parse($card);
+        // we can do a simple assertion here. As long as we don't get an exception, everything is fine
+        $this->assertEquals('20220612', $vcard->VEVENT->DTSTART->getValue());
+    }
+
+    /**
+     * @covers \Sabre\VObject\Parser\MimeDir::readProperty
+     * @dataProvider provideBrokenVCalendar
+     *
+     * @param string $vcalendar
+     *
+     * @return void
+     */
+    public function testBrokenMultilineContentDoesNotBreakImportWhenSetToIgnoreBrokenLines($vcalendar)
+    {
+        $mimeDir = new MimeDir(null, MimeDir::OPTION_IGNORE_INVALID_LINES);
+        $vcalendar = $mimeDir->parse($vcalendar);
+        $this->assertInstanceOf(VCalendar::class, $vcalendar);
+    }
+
+    /**
+     * @covers \Sabre\VObject\Parser\MimeDir::readProperty
+     * @dataProvider provideBrokenVCalendar
+     *
+     * @param string $vcalendar
+     *
+     * @return void
+     */
+    public function testBrokenMultilineContentDoesBreakImport($vcalendar)
+    {
+        $mimeDir = new MimeDir();
+        $this->expectException(ParseException::class);
+        $mimeDir->parse($vcalendar);
+    }
+
+    public function provideBrokenVCalendar()
+    {
+        return [[<<<EOF
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+CREATED:20160501T180854Z
+UID:15C11082-9FC5-4159-A888-4A4B92D0DB71
+DTEND;TZID=America/Los_Angeles:20160504T133000
+SUMMARY:Interment
+DTSTART;TZID=America/Los_Angeles:20160504T123000
+DTSTAMP:20160501T180924Z
+X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-APPLE-MAPKIT-HANDLE=CAES8gEaEglZw
+ 0Xu6epCQBFdwwyNJ49ewCKOAQoNVW5pdGVkIFN0YXRlcxICVVMaCkNhbGlmb3JuaWEiAkNBK
+ gdBbGFtZWRhMgdPYWtsYW5kOgU5NDYxMVIMUGllZG1vbnQgQXZlWgQ1MDAwYhE1MDAwIFBpZ
+ WRtb250IEF2ZWoENDIyMHIWTW91bnRhaW4gVmlldyBDZW1ldGVyeaIBCjk0NjExLTQyMjAqE
+ TUwMDAgUGllZG1vbnQgQXZlMhE1MDAwIFBpZWRtb250IEF2ZTIST2FrbGFuZCwgQ0EgIDk0N
+ jExMg1Vbml0ZWQgU3RhdGVzODlAAA==;X-APPLE-RADIUS=1001.127625592278;X-TITLE
+ =Mountain View Cemetery:5000 Piedmont Avenue
+OAKLAND, CA 94611
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+EOF
+        ], [
+            <<<EOF
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+CREATED:20160501T180854Z
+UID:15C11082-9FC5-4159-A888-4A4B92D0DB71
+DTEND;TZID=America/Los_Angeles:20160504T133000
+SUMMARY:Interment
+DTSTART;TZID=America/Los_Angeles:20160504T123000
+DTSTAMP:20160501T180924Z
+X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-APPLE-MAPKIT-HANDLE=CAES8gEaEglZw
+ 0Xu6epCQBFdwwyNJ49ewCKOAQoNVW5pdGVkIFN0YXRlcxICVVMaCkNhbGlmb3JuaWEiAkNBK
+ gdBbGFtZWRhMgdPYWtsYW5kOgU5NDYxMVIMUGllZG1vbnQgQXZlWgQ1MDAwYhE1MDAwIFBpZ
+ WRtb250IEF2ZWoENDIyMHIWTW91bnRhaW4gVmlldyBDZW1ldGVyeaIBCjk0NjExLTQyMjAqE
+ TUwMDAgUGllZG1vbnQgQXZlMhE1MDAwIFBpZWRtb250IEF2ZTIST2FrbGFuZCwgQ0EgIDk0N
+ jExMg1Vbml0ZWQgU3RhdGVzODlAAA==;X-APPLE-RADIUS=1001.127625592278;X-TITLE
+ =Mountain View Cemetery:5000 Piedmont Avenue
+OAKLAND, CA 94611:
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+EOF
+        ]];
+    }
+
+    public function testPropertyName0(): void
+    {
+        $iCal = <<<EOF
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:PRODID
+BEGIN:VEVENT
+0:test
+END:VEVENT
+END:VCALENDAR
+EOF;
+
+        $mimeDir = new MimeDir();
+        $vevent = $mimeDir->parse($iCal);
+        self::assertEquals('test', $vevent->VEVENT->{0}->getValue());
+    }
+
+    public function testInvalidParameter(): void
+    {
+        $this->expectException(ParseException::class);
+        $this->expectExceptionMessage('Invalid Mimedir file. Line starting at 3: Missing parameter name for parameter value "value2"');
+        $vcard = <<<EOF
+BEGIN:VCARD
+VERSION:4.0
+FN;P1=value1; P2=value2:value
+UID:1234
+END:VCARD
+EOF;
+        $mimeDir = new MimeDir();
+        $vcard = $mimeDir->parse($vcard);
+
+        echo $vcard->serialize();
     }
 }

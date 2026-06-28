@@ -92,6 +92,14 @@ class VCardTest extends TestCase
             ],
             "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nORG:Acme Co.\r\nFN:Acme Co.\r\nEND:VCARD\r\n",
         ];
+        // No FN, NICKNAME fallback
+        $tests[] = [
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nNICKNAME:JohnDoe\r\nEND:VCARD\r\n",
+            [
+                'The FN property must appear in the VCARD component exactly 1 time',
+            ],
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nNICKNAME:JohnDoe\r\nFN:JohnDoe\r\nEND:VCARD\r\n",
+        ];
         // No FN, EMAIL fallback
         $tests[] = [
             "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nEMAIL:1@example.org\r\nEND:VCARD\r\n",
@@ -135,8 +143,29 @@ VCF;
         $vcard = VObject\Reader::read($vcard);
         $this->assertEquals('1@example.org', $vcard->getByType('EMAIL', 'home')->getValue());
         $this->assertEquals('2@example.org', $vcard->getByType('EMAIL', 'work')->getValue());
-        $this->assertNull($vcard->getByType('EMAIL', 'non-existant'));
-        $this->assertNull($vcard->getByType('ADR', 'non-existant'));
+        $this->assertNull($vcard->getByType('EMAIL', 'non-existent'));
+        $this->assertNull($vcard->getByType('ADR', 'non-existent'));
+    }
+
+    public function testGetByTypes()
+    {
+        $vcard = <<<VCF
+BEGIN:VCARD
+VERSION:3.0
+TEL;TYPE=HOME,CELL:112233445566
+TEL;TYPE=WORK,cell:665544332211
+TEL;TYPE=WORK:7778889994455
+TEL;TYPE=EXTERNAL:555555555
+END:VCARD
+VCF;
+
+        $vcard = VObject\Reader::read($vcard);
+        self::assertEquals('112233445566', $vcard->getByTypes('TEL', ['home', 'cell'])->getValue());
+        self::assertEquals('665544332211', $vcard->getByTypes('TEL', ['work', 'cell'])->getValue());
+        self::assertEquals('7778889994455', $vcard->getByTypes('TEL', ['work'])->getValue());
+        self::assertEquals('555555555', $vcard->getByTypes('TEL', ['external'])->getValue());
+        self::assertNull($vcard->getByTypes('TEL', ['non-existent']));
+        self::assertNull($vcard->getByTypes('EMAIL', ['non-existent']));
     }
 
     public function testPreferredNoPref()
@@ -204,7 +233,7 @@ END:VCARD
 VCF;
         $this->assertValidate(
             $vcard,
-            VCARD::PROFILE_CARDDAV,
+            VCard::PROFILE_CARDDAV,
             3,
             'vCards on CardDAV servers MUST have a UID property.'
         );
@@ -236,7 +265,7 @@ END:VCARD
 VCF;
         $this->assertValidate(
             $vcard,
-            VCARD::REPAIR,
+            VCard::REPAIR,
             1,
             'Adding a UID to a vCard property is recommended.'
         );
@@ -253,7 +282,7 @@ END:VCARD
 VCF;
         $this->assertValidate(
             $vcard,
-            VCARD::PROFILE_CARDDAV,
+            VCard::PROFILE_CARDDAV,
             3,
             'CardDAV servers are not allowed to accept vCard 2.1.'
         );

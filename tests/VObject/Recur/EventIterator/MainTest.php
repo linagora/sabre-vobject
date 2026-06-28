@@ -6,6 +6,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Recur\EventIterator;
 
 class MainTest extends TestCase
@@ -29,11 +30,11 @@ class MainTest extends TestCase
     }
 
     /**
-     * @expectedException \Sabre\VObject\InvalidDataException
      * @depends testValues
      */
     public function testInvalidFreq()
     {
+        $this->expectException(InvalidDataException::class);
         $vcal = new VCalendar();
         $ev = $vcal->createComponent('VEVENT');
         $ev->RRULE = 'FREQ=SMONTHLY;INTERVAL=3;UNTIL=20111025T000000Z';
@@ -47,20 +48,16 @@ class MainTest extends TestCase
         $it = new EventIterator($vcal, (string) $ev->UID);
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testVCalendarNoUID()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $vcal = new VCalendar();
         $it = new EventIterator($vcal);
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testVCalendarInvalidUID()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $vcal = new VCalendar();
         $it = new EventIterator($vcal, 'foo');
     }
@@ -1175,7 +1172,7 @@ class MainTest extends TestCase
     /**
      * @depends testValues
      */
-    public function testOverridenEvent()
+    public function testOverriddenEvent()
     {
         $vcal = new VCalendar();
 
@@ -1246,7 +1243,7 @@ class MainTest extends TestCase
     /**
      * @depends testValues
      */
-    public function testOverridenEvent2()
+    public function testOverriddenEvent2()
     {
         $vcal = new VCalendar();
 
@@ -1294,7 +1291,7 @@ class MainTest extends TestCase
     /**
      * @depends testValues
      */
-    public function testOverridenEventNoValuesExpected()
+    public function testOverriddenEventNoValuesExpected()
     {
         $vcal = new VCalendar();
         $ev1 = $vcal->createComponent('VEVENT');
@@ -1321,12 +1318,12 @@ class MainTest extends TestCase
         $summaries = [];
 
         // The reported problem was specifically related to the VCALENDAR
-        // expansion. In this parcitular case, we had to forward to the 28th of
+        // expansion. In this particular case, we had to forward to the 28th of
         // january.
         $it->fastForward(new DateTimeImmutable('2012-01-28 23:00:00'));
 
-        // We stop the loop when it hits the 6th of februari. Normally this
-        // iterator would hit 24, 25 (overriden from 31) and 7 feb but because
+        // We stop the loop when it hits the 6th of February. Normally this
+        // iterator would hit 24, 25 (overridden from 31) and 7 feb but because
         // we 'filter' from the 28th till the 6th, we should get 0 results.
         while ($it->valid() && $it->getDTStart() < new DateTimeImmutable('2012-02-06 23:00:00')) {
             $dates[] = $it->getDTStart();
@@ -1386,10 +1383,10 @@ class MainTest extends TestCase
 
     /**
      * @depends testValues
-     * @expectedException \InvalidArgumentException
      */
     public function testNoMasterBadUID()
     {
+        $this->expectException(\InvalidArgumentException::class);
         $vcal = new VCalendar();
         // ev2 overrides an event, and puts it on 2pm instead.
         $ev2 = $vcal->createComponent('VEVENT');
