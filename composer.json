@@ -35,7 +35,7 @@
         "php"          : "^8.2",
         "ext-mbstring" : "*",
         "ext-json"     : "*",
-        "sabre/xml"    : "^3.0 || ^4.0"
+        "sabre/xml"    : "^2.2.11 || ^3.0 || ^4.0"
     },
     "require-dev" : {
         "friendsofphp/php-cs-fixer": "^3.95",
@@ -90,7 +90,8 @@
     ],
     "extra" : {
         "branch-alias" : {
-            "dev-master" : "4.0.x-dev"
+            "dev-master" : "4.0.x-dev",
+            "dev-linagora-waiting-merges-5.0.0" : "4.7.x-dev"
         }
     },
     "scripts": {
