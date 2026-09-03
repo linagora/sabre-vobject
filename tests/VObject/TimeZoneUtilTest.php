@@ -2,47 +2,48 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class TimeZoneUtilTest extends TestCase
 {
-    public function setUp()
+    public function setUp(): void
     {
-        // clearning the tz cache
-        TimezoneUtil::$map = null;
+        TimeZoneUtil::clean();
     }
 
-    /**
-     * @dataProvider getMapping
-     */
-    public function testCorrectTZ($timezoneName)
+    #[DataProvider('getMapping')]
+    public function testCorrectTZ(string $timezoneName): void
     {
         try {
             $tz = new \DateTimeZone($timezoneName);
-            $this->assertInstanceOf('DateTimeZone', $tz);
+            self::assertInstanceOf('DateTimeZone', $tz);
         } catch (\Exception $e) {
-            if (false !== strpos($e->getMessage(), 'Unknown or bad timezone')) {
-                $this->markTestSkipped($timezoneName.' is not (yet) supported in this PHP version. Update pecl/timezonedb');
+            if (str_contains($e->getMessage(), 'Unknown or bad timezone')) {
+                self::markTestSkipped($timezoneName.' is not (yet) supported in this PHP version. Update pecl/timezonedb');
             } else {
                 throw $e;
             }
         }
     }
 
-    public function getMapping()
+    public static function getMapping(): array
     {
-        TimeZoneUtil::loadTzMaps();
+        $map = array_merge(
+            include __DIR__.'/../../lib/timezonedata/windowszones.php',
+            include __DIR__.'/../../lib/timezonedata/lotuszones.php',
+            include __DIR__.'/../../lib/timezonedata/exchangezones.php',
+            include __DIR__.'/../../lib/timezonedata/php-workaround.php'
+        );
 
         // PHPUNit requires an array of arrays
         return array_map(
-            function ($value) {
-                return [$value];
-            },
-            TimeZoneUtil::$map
+            fn ($value) => [$value],
+            $map
         );
     }
 
-    public function testExchangeMap()
+    public function testExchangeMap(): void
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -79,10 +80,10 @@ HI;
         $tz = TimeZoneUtil::getTimeZone('foo', Reader::read($vobj));
         $ex = new \DateTimeZone('Europe/Lisbon');
 
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testWetherMicrosoftIsStillInsane()
+    public function testWhetherMicrosoftIsStillInsane(): void
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -104,10 +105,10 @@ HI;
         $tz = TimeZoneUtil::getTimeZone('(GMT+01.00) Sarajevo/Warsaw/Zagreb', Reader::read($vobj));
         $ex = new \DateTimeZone('Europe/Sarajevo');
 
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testUnknownExchangeId()
+    public function testUnknownExchangeId(): void
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -144,61 +145,71 @@ HI;
 
         $tz = TimeZoneUtil::getTimeZone('foo', Reader::read($vobj));
         $ex = new \DateTimeZone(date_default_timezone_get());
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testWindowsTimeZone()
+    public function testEmptyTimeZone(): void
+    {
+        $tz = TimeZoneUtil::getTimeZone('');
+        $ex = new \DateTimeZone('UTC');
+        self::assertEquals($ex->getName(), $tz->getName());
+    }
+
+    public function testWindowsTimeZone(): void
     {
         $tz = TimeZoneUtil::getTimeZone('Eastern Standard Time');
         $ex = new \DateTimeZone('America/New_York');
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    /**
-     * @dataProvider getPHPTimeZoneIdentifiers
-     */
-    public function testTimeZoneIdentifiers($tzid)
+    #[DataProvider('getPHPTimeZoneIdentifiers')]
+    public function testTimeZoneIdentifiers(string $tzid): void
     {
         $tz = TimeZoneUtil::getTimeZone($tzid);
         $ex = new \DateTimeZone($tzid);
 
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    /**
-     * @dataProvider getPHPTimeZoneBCIdentifiers
-     */
-    public function testTimeZoneBCIdentifiers($tzid)
+    #[DataProvider('getPHPTimeZoneBCIdentifiers')]
+    public function testTimeZoneBCIdentifiers(string $tzid): void
     {
+        /*
+         * A regression was introduced in PHP 8.1.14 and 8.2.1
+         * Timezone ids containing a "+" like "GMT+10" do not work.
+         * See https://github.com/php/php-src/issues/10218
+         * The regression should be fixed in the next patch releases of PHP
+         * that should be released in Feb 2023.
+         */
+        $versionOfPHP = \phpversion();
+        if ((('8.1.14' === $versionOfPHP) || ('8.2.1' === $versionOfPHP)) && \str_contains($tzid, '+')) {
+            self::markTestSkipped("Timezone ids containing '+' do not work on PHP $versionOfPHP");
+        }
         $tz = TimeZoneUtil::getTimeZone($tzid);
         $ex = new \DateTimeZone($tzid);
 
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function getPHPTimeZoneIdentifiers()
+    public static function getPHPTimeZoneIdentifiers(): array
     {
         // PHPUNit requires an array of arrays
         return array_map(
-            function ($value) {
-                return [$value];
-            },
+            fn ($value) => [$value],
             \DateTimeZone::listIdentifiers()
         );
     }
 
-    public function getPHPTimeZoneBCIdentifiers()
+    public static function getPHPTimeZoneBCIdentifiers(): array
     {
         // PHPUNit requires an array of arrays
         return array_map(
-            function ($value) {
-                return [$value];
-            },
-            TimeZoneUtil::getIdentifiersBC()
+            fn ($value) => [$value],
+            include __DIR__.'/../../lib/timezonedata/php-bc.php'
         );
     }
 
-    public function testTimezoneOffset()
+    public function testTimezoneOffset(): void
     {
         $tz = TimeZoneUtil::getTimeZone('GMT-0400', null, true);
 
@@ -207,18 +218,16 @@ HI;
         } else {
             $ex = new \DateTimeZone('Etc/GMT-4');
         }
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
-    public function testTimezoneFail()
+    public function testTimezoneFail(): void
     {
-        $tz = TimeZoneUtil::getTimeZone('FooBar', null, true);
+        $this->expectException(\InvalidArgumentException::class);
+        TimeZoneUtil::getTimeZone('FooBar', null, true);
     }
 
-    public function testFallBack()
+    public function testFallBack(): void
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -253,10 +262,10 @@ HI;
 
         $tz = TimeZoneUtil::getTimeZone('foo', Reader::read($vobj));
         $ex = new \DateTimeZone(date_default_timezone_get());
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testLjubljanaBug()
+    public function testLjubljanaBug(): void
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -299,10 +308,10 @@ HI;
 
         $tz = TimeZoneUtil::getTimeZone('/freeassociation.sourceforge.net/Tzfile/Europe/Ljubljana', Reader::read($vobj));
         $ex = new \DateTimeZone('Europe/Ljubljana');
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testWeirdSystemVLICs()
+    public function testWeirdSystemVLICs(): void
     {
         $vobj = <<<HI
 BEGIN:VCALENDAR
@@ -347,13 +356,13 @@ HI;
 
         $tz = TimeZoneUtil::getTimeZone('/freeassociation.sourceforge.net/Tzfile/SystemV/EST5EDT', Reader::read($vobj), true);
         $ex = new \DateTimeZone('America/New_York');
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 
-    public function testPrefixedOffsetExchangeIdentifier()
+    public function testPrefixedOffsetExchangeIdentifier(): void
     {
         $tz = TimeZoneUtil::getTimeZone('(UTC-05:00) Eastern Time (US & Canada)');
         $ex = new \DateTimeZone('America/New_York');
-        $this->assertEquals($ex->getName(), $tz->getName());
+        self::assertEquals($ex->getName(), $tz->getName());
     }
 }

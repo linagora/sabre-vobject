@@ -2,22 +2,21 @@
 
 namespace Sabre\VObject\Component;
 
-use DateTimeZone;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject;
+use Sabre\VObject\InvalidDataException;
 
 class VCalendarTest extends TestCase
 {
     use VObject\PHPUnitAssertions;
 
-    /**
-     * @dataProvider expandData
-     */
-    public function testExpand($input, $output, $timeZone = 'UTC', $start = '2011-12-01', $end = '2011-12-31')
+    #[DataProvider('expandData')]
+    public function testExpand(string $input, string $output, string $timeZone = 'UTC', string $start = '2011-12-01', string $end = '2011-12-31'): void
     {
         $vcal = VObject\Reader::read($input);
 
-        $timeZone = new DateTimeZone($timeZone);
+        $timeZone = new \DateTimeZone($timeZone);
 
         $vcal = $vcal->expand(
             new \DateTime($start),
@@ -28,10 +27,10 @@ class VCalendarTest extends TestCase
         // This will normalize the output
         $output = VObject\Reader::read($output)->serialize();
 
-        $this->assertVObjectEqualsVObject($output, $vcal->serialize());
+        self::assertVObjectEqualsVObject($output, $vcal->serialize());
     }
 
-    public function expandData()
+    public static function expandData(): array
     {
         $tests = [];
 
@@ -330,11 +329,9 @@ END:VCALENDAR
         return $tests;
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testBrokenEventExpand()
+    public function testBrokenEventExpand(): void
     {
+        $this->expectException(InvalidDataException::class);
         $input = 'BEGIN:VCALENDAR
 CALSCALE:GREGORIAN
 VERSION:2.0
@@ -351,14 +348,41 @@ END:VCALENDAR
         );
     }
 
-    public function testGetDocumentType()
+    /**
+     * This test used to induce an infinite loop.
+     * The "medium" annotation means that phpunit will fail the
+     * test if it takes longer than a default of 10 seconds.
+     *
+     * @medium
+     */
+    public function testEventExpandYearly(): void
+    {
+        $input = 'BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:1a093f1012086078fdd3d9df5ff4d7d0
+DTSTART;TZID=UTC:20210203T130000
+DTEND;TZID=UTC:20210203T140000
+RRULE:FREQ=YEARLY;COUNT=7;WKST=MO;BYDAY=MO;BYWEEKNO=13,15,50
+END:VEVENT
+END:VCALENDAR
+';
+        $vcal = VObject\Reader::read($input);
+        $events = $vcal->expand(
+            new \DateTime('2021-01-01'),
+            new \DateTime('2023-01-01')
+        );
+
+        self::assertCount(7, $events->VEVENT);
+    }
+
+    public function testGetDocumentType(): void
     {
         $vcard = new VCalendar();
         $vcard->VERSION = '2.0';
-        $this->assertEquals(VCalendar::ICALENDAR20, $vcard->getDocumentType());
+        self::assertEquals(VCalendar::ICALENDAR20, $vcard->getDocumentType());
     }
 
-    public function testValidateCorrect()
+    public function testValidateCorrect(): void
     {
         $input = 'BEGIN:VCALENDAR
 CALSCALE:GREGORIAN
@@ -373,10 +397,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals([], $vcal->validate(), 'Got an error');
+        self::assertEquals([], $vcal->validate(), 'Got an error');
     }
 
-    public function testValidateNoVersion()
+    public function testValidateNoVersion(): void
     {
         $input = 'BEGIN:VCALENDAR
 CALSCALE:GREGORIAN
@@ -390,10 +414,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(1, count($vcal->validate()));
+        self::assertCount(1, $vcal->validate());
     }
 
-    public function testValidateWrongVersion()
+    public function testValidateWrongVersion(): void
     {
         $input = 'BEGIN:VCALENDAR
 CALSCALE:GREGORIAN
@@ -408,10 +432,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(1, count($vcal->validate()));
+        self::assertCount(1, $vcal->validate());
     }
 
-    public function testValidateNoProdId()
+    public function testValidateNoProdId(): void
     {
         $input = 'BEGIN:VCALENDAR
 CALSCALE:GREGORIAN
@@ -425,10 +449,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(1, count($vcal->validate()));
+        self::assertCount(1, $vcal->validate());
     }
 
-    public function testValidateDoubleCalScale()
+    public function testValidateDoubleCalScale(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -444,10 +468,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(1, count($vcal->validate()));
+        self::assertCount(1, $vcal->validate());
     }
 
-    public function testValidateDoubleMethod()
+    public function testValidateDoubleMethod(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -463,10 +487,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(1, count($vcal->validate()));
+        self::assertCount(1, $vcal->validate());
     }
 
-    public function testValidateTwoMasterEvents()
+    public function testValidateTwoMasterEvents(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -486,10 +510,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(1, count($vcal->validate()));
+        self::assertCount(1, $vcal->validate());
     }
 
-    public function testValidateOneMasterEvent()
+    public function testValidateOneMasterEvent(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -510,10 +534,10 @@ END:VCALENDAR
 ';
 
         $vcal = VObject\Reader::read($input);
-        $this->assertEquals(0, count($vcal->validate()));
+        self::assertCount(0, $vcal->validate());
     }
 
-    public function testGetBaseComponent()
+    public function testGetBaseComponent(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -537,10 +561,10 @@ END:VCALENDAR
         $vcal = VObject\Reader::read($input);
 
         $result = $vcal->getBaseComponent();
-        $this->assertEquals('test', $result->SUMMARY->getValue());
+        self::assertEquals('test', $result->SUMMARY->getValue());
     }
 
-    public function testGetBaseComponentNoResult()
+    public function testGetBaseComponentNoResult(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -565,10 +589,10 @@ END:VCALENDAR
         $vcal = VObject\Reader::read($input);
 
         $result = $vcal->getBaseComponent();
-        $this->assertNull($result);
+        self::assertNull($result);
     }
 
-    public function testGetBaseComponentWithFilter()
+    public function testGetBaseComponentWithFilter(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -592,10 +616,10 @@ END:VCALENDAR
         $vcal = VObject\Reader::read($input);
 
         $result = $vcal->getBaseComponent('VEVENT');
-        $this->assertEquals('test', $result->SUMMARY->getValue());
+        self::assertEquals('test', $result->SUMMARY->getValue());
     }
 
-    public function testGetBaseComponentWithFilterNoResult()
+    public function testGetBaseComponentWithFilterNoResult(): void
     {
         $input = 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -612,10 +636,10 @@ END:VCALENDAR
         $vcal = VObject\Reader::read($input);
 
         $result = $vcal->getBaseComponent('VEVENT');
-        $this->assertNull($result);
+        self::assertNull($result);
     }
 
-    public function testNoComponents()
+    public function testNoComponents(): void
     {
         $input = <<<ICS
 BEGIN:VCALENDAR
@@ -624,15 +648,15 @@ PRODID:vobject
 END:VCALENDAR
 ICS;
 
-        $this->assertValidate(
+        self::assertValidate(
             $input,
             0,
             3,
-           'An iCalendar object must have at least 1 component.'
+            'An iCalendar object must have at least 1 component.'
         );
     }
 
-    public function testCalDAVNoComponents()
+    public function testCalDAVNoComponents(): void
     {
         $input = <<<ICS
 BEGIN:VCALENDAR
@@ -644,15 +668,15 @@ END:VTIMEZONE
 END:VCALENDAR
 ICS;
 
-        $this->assertValidate(
+        self::assertValidate(
             $input,
             VCalendar::PROFILE_CALDAV,
             3,
-           'A calendar object on a CalDAV server must have at least 1 component (VTODO, VEVENT, VJOURNAL).'
+            'A calendar object on a CalDAV server must have at least 1 component (VTODO, VEVENT, VJOURNAL).'
         );
     }
 
-    public function testCalDAVMultiUID()
+    public function testCalDAVMultiUID(): void
     {
         $input = <<<ICS
 BEGIN:VCALENDAR
@@ -671,15 +695,15 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertValidate(
+        self::assertValidate(
             $input,
             VCalendar::PROFILE_CALDAV,
             3,
-           'A calendar object on a CalDAV server may only have components with the same UID.'
+            'A calendar object on a CalDAV server may only have components with the same UID.'
         );
     }
 
-    public function testCalDAVMultiComponent()
+    public function testCalDAVMultiComponent(): void
     {
         $input = <<<ICS
 BEGIN:VCALENDAR
@@ -699,15 +723,15 @@ END:VTODO
 END:VCALENDAR
 ICS;
 
-        $this->assertValidate(
+        self::assertValidate(
             $input,
             VCalendar::PROFILE_CALDAV,
             3,
-           'A calendar object on a CalDAV server may only have 1 type of component (VEVENT, VTODO or VJOURNAL).'
+            'A calendar object on a CalDAV server may only have 1 type of component (VEVENT, VTODO or VJOURNAL).'
         );
     }
 
-    public function testCalDAVMETHOD()
+    public function testCalDAVMETHOD(): void
     {
         $input = <<<ICS
 BEGIN:VCALENDAR
@@ -723,23 +747,66 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertValidate(
+        self::assertValidate(
             $input,
             VCalendar::PROFILE_CALDAV,
             3,
-           'A calendar object on a CalDAV server MUST NOT have a METHOD property.'
+            'A calendar object on a CalDAV server MUST NOT have a METHOD property.'
         );
     }
 
-    public function assertValidate($ics, $options, $expectedLevel, $expectedMessage = null)
+    public function testNodeInValidationErrorHasLineIndexAndLineStringProps(): void
+    {
+        $defectiveInput = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:PUBLISH
+PRODID:vobject
+BEGIN:VEVENT
+UID:foo
+CLASS:PUBLIC
+DTSTART;VALUE=DATE:19931231
+DTSTAMP:20240422T070855Z
+CREATED:
+LAST-MODIFIED:
+DESCRIPTION:bar
+END:VEVENT
+ICS;
+
+        $vcal = VObject\Reader::read($defectiveInput);
+        $result = $vcal->validate();
+        $warningMessages = [];
+        foreach ($result as $error) {
+            $warningMessages[] = $error['message'];
+        }
+        self::assertCount(2, $result, 'We expected exactly 2 validation messages, instead we got '.count($result).' results:'.implode(', ', $warningMessages));
+        foreach ($result as $idx => $warning) {
+            self::assertArrayHasKey('node', $warning);
+            self::assertInstanceOf(VObject\Property\ICalendar\DateTime::class, $warning['node']);
+            self::assertObjectHasProperty('lineIndex', $warning['node']);
+            self::assertObjectHasProperty('lineString', $warning['node']);
+            switch ($idx) {
+                case 0:
+                    self::assertEquals('10', $warning['node']->lineIndex);
+                    self::assertEquals('CREATED:', $warning['node']->lineString);
+                    break;
+                case 1:
+                    self::assertEquals('11', $warning['node']->lineIndex);
+                    self::assertEquals('LAST-MODIFIED:', $warning['node']->lineString);
+                    break;
+            }
+        }
+    }
+
+    public function assertValidate($ics, $options, $expectedLevel, ?string $expectedMessage = null): void
     {
         $vcal = VObject\Reader::read($ics);
         $result = $vcal->validate($options);
 
-        $this->assertValidateResult($result, $expectedLevel, $expectedMessage);
+        self::assertValidateResult($result, $expectedLevel, $expectedMessage);
     }
 
-    public function assertValidateResult($input, $expectedLevel, $expectedMessage = null)
+    public function assertValidateResult($input, $expectedLevel, ?string $expectedMessage = null): void
     {
         $messages = [];
         foreach ($input as $warning) {
@@ -747,12 +814,12 @@ ICS;
         }
 
         if (0 === $expectedLevel) {
-            $this->assertEquals(0, count($input), 'No validation messages were expected. We got: '.implode(', ', $messages));
+            self::assertCount(0, $input, 'No validation messages were expected. We got: '.implode(', ', $messages));
         } else {
-            $this->assertEquals(1, count($input), 'We expected exactly 1 validation message, We got: '.implode(', ', $messages));
+            self::assertCount(1, $input, 'We expected exactly 1 validation message, We got: '.implode(', ', $messages));
 
-            $this->assertEquals($expectedMessage, $input[0]['message']);
-            $this->assertEquals($expectedLevel, $input[0]['level']);
+            self::assertEquals($expectedMessage, $input[0]['message']);
+            self::assertEquals($expectedLevel, $input[0]['level']);
         }
     }
 }

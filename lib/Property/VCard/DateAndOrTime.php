@@ -3,7 +3,6 @@
 namespace Sabre\VObject\Property\VCard;
 
 use DateTime;
-use DateTimeImmutable;
 use DateTimeInterface;
 use Sabre\VObject\DateTimeParser;
 use Sabre\VObject\InvalidDataException;
@@ -23,20 +22,16 @@ class DateAndOrTime extends Property
 {
     /**
      * Field separator.
-     *
-     * @var null|string
      */
-    public $delimiter = null;
+    public string $delimiter = '';
 
     /**
      * Returns the type of value.
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'DATE-AND-OR-TIME';
     }
@@ -45,15 +40,13 @@ class DateAndOrTime extends Property
      * Sets a multi-valued property.
      *
      * You may also specify DateTimeInterface objects here.
-     *
-     * @param array $parts
      */
-    public function setParts(array $parts)
+    public function setParts(array $parts): void
     {
         if (count($parts) > 1) {
             throw new \InvalidArgumentException('Only one value allowed');
         }
-        if (isset($parts[0]) && $parts[0] instanceof DateTimeInterface) {
+        if (isset($parts[0]) && $parts[0] instanceof \DateTimeInterface) {
             $this->setDateTime($parts[0]);
         } else {
             parent::setParts($parts);
@@ -67,11 +60,11 @@ class DateAndOrTime extends Property
      *
      * Instead of strings, you may also use DateTimeInterface here.
      *
-     * @param string|array|DateTimeInterface $value
+     * @param string|array|\DateTimeInterface $value
      */
-    public function setValue($value)
+    public function setValue($value): void
     {
-        if ($value instanceof DateTimeInterface) {
+        if ($value instanceof \DateTimeInterface) {
             $this->setDateTime($value);
         } else {
             parent::setValue($value);
@@ -80,13 +73,11 @@ class DateAndOrTime extends Property
 
     /**
      * Sets the property as a DateTime object.
-     *
-     * @param DateTimeInterface $dt
      */
-    public function setDateTime(DateTimeInterface $dt)
+    public function setDateTime(\DateTimeInterface $dt): void
     {
         $tz = $dt->getTimeZone();
-        $isUtc = in_array($tz->getName(), ['UTC', 'GMT', 'Z']);
+        $isUtc = in_array($tz->getName(), ['UTC', 'GMT', 'Z'], true);
 
         if ($isUtc) {
             $value = $dt->format('Ymd\\THis\\Z');
@@ -112,11 +103,11 @@ class DateAndOrTime extends Property
      * current values for those. So at the time of writing, if the year was
      * omitted, we would have filled in 2014.
      *
-     * @return DateTimeImmutable
+     * @throws InvalidDataException
      */
-    public function getDateTime()
+    public function getDateTime(): \DateTimeImmutable
     {
-        $now = new DateTime();
+        $now = new \DateTime();
 
         $tzFormat = 0 === $now->getTimezone()->getOffset($now) ? '\\Z' : 'O';
         $nowParts = DateTimeParser::parseVCardDateTime($now->format('Ymd\\This'.$tzFormat));
@@ -132,7 +123,7 @@ class DateAndOrTime extends Property
             }
         }
 
-        return new DateTimeImmutable("$dateParts[year]-$dateParts[month]-$dateParts[date] $dateParts[hour]:$dateParts[minute]:$dateParts[second] $dateParts[timezone]");
+        return new \DateTimeImmutable("$dateParts[year]-$dateParts[month]-$dateParts[date] $dateParts[hour]:$dateParts[minute]:$dateParts[second] $dateParts[timezone]");
     }
 
     /**
@@ -140,9 +131,9 @@ class DateAndOrTime extends Property
      *
      * This method must always return an array.
      *
-     * @return array
+     * @throws InvalidDataException
      */
-    public function getJsonValue()
+    public function getJsonValue(): array
     {
         $parts = DateTimeParser::parseVCardDateTime($this->getValue());
 
@@ -232,23 +223,19 @@ class DateAndOrTime extends Property
      * This method serializes only the value of a property. This is used to
      * create xCard or xCal documents.
      *
-     * @param Xml\Writer $writer XML writer
+     * @throws InvalidDataException
      */
-    protected function xmlSerializeValue(Xml\Writer $writer)
+    protected function xmlSerializeValue(Xml\Writer $writer): void
     {
         $valueType = strtolower($this->getValueType());
         $parts = DateTimeParser::parseVCardDateAndOrTime($this->getValue());
         $value = '';
 
         // $d = defined
-        $d = function ($part) use ($parts) {
-            return !is_null($parts[$part]);
-        };
+        $d = (fn ($part): bool => !is_null($parts[$part]));
 
         // $r = read
-        $r = function ($part) use ($parts) {
-            return $parts[$part];
-        };
+        $r = (fn ($part) => $parts[$part]);
 
         // From the Relax NG Schema.
         //
@@ -268,7 +255,7 @@ class DateAndOrTime extends Property
                 $value .= '---'.$r('date');
             }
 
-            // # 4.3.2
+        // # 4.3.2
         // value-time = element time {
         //     xsd:string { pattern = "(\d\d(\d\d(\d\d)?)?|-\d\d(\d\d?)|--\d\d)"
         //                          ~ "(Z|[+\-]\d\d(\d\d)?)?" }
@@ -311,20 +298,16 @@ class DateAndOrTime extends Property
      *
      * This has been 'unfolded', so only 1 line will be passed. Unescaping is
      * not yet done, but parameters are not included.
-     *
-     * @param string $val
      */
-    public function setRawMimeDirValue($val)
+    public function setRawMimeDirValue(string $val): void
     {
         $this->setValue($val);
     }
 
     /**
      * Returns a raw mime-dir representation of the value.
-     *
-     * @return string
      */
-    public function getRawMimeDirValue()
+    public function getRawMimeDirValue(): string
     {
         return implode($this->delimiter, $this->getParts());
     }
@@ -346,19 +329,15 @@ class DateAndOrTime extends Property
      *   1 - The issue was repaired (only happens if REPAIR was turned on)
      *   2 - An inconsequential issue
      *   3 - A severe issue.
-     *
-     * @param int $options
-     *
-     * @return array
      */
-    public function validate($options = 0)
+    public function validate(int $options = 0): array
     {
         $messages = parent::validate($options);
         $value = $this->getValue();
 
         try {
             DateTimeParser::parseVCardDateTime($value);
-        } catch (InvalidDataException $e) {
+        } catch (InvalidDataException) {
             $messages[] = [
                 'level' => 3,
                 'message' => 'The supplied value ('.$value.') is not a correct DATE-AND-OR-TIME property',

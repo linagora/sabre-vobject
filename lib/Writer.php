@@ -18,37 +18,24 @@ class Writer
 {
     /**
      * Serializes a vCard or iCalendar object.
-     *
-     * @param Component $component
-     *
-     * @return string
      */
-    public static function write(Component $component)
+    public static function write(Component $component): string
     {
         return $component->serialize();
     }
 
     /**
      * Serializes a jCal or jCard object.
-     *
-     * @param Component $component
-     * @param int       $options
-     *
-     * @return string
      */
-    public static function writeJson(Component $component, $options = 0)
+    public static function writeJson(Component $component, int $options = 0): string
     {
         return json_encode($component, $options);
     }
 
     /**
      * Serializes a xCal or xCard object.
-     *
-     * @param Component $component
-     *
-     * @return string
      */
-    public static function writeXml(Component $component)
+    public static function writeXml(Component $component): string
     {
         $writer = new Xml\Writer();
         $writer->openMemory();

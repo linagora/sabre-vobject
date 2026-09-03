@@ -2,8 +2,6 @@
 
 namespace Sabre\VObject\Component;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Reader;
 
@@ -13,57 +11,57 @@ use Sabre\VObject\Reader;
  */
 class AvailableTest extends TestCase
 {
-    public function testAvailableComponent()
+    public function testAvailableComponent(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:AVAILABLE
-END:AVAILABLE
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:AVAILABLE
+        END:AVAILABLE
+        END:VCALENDAR
+        VCAL_WRAP;
         $document = Reader::read($vcal);
-        $this->assertInstanceOf(__NAMESPACE__.'\Available', $document->AVAILABLE);
+        self::assertInstanceOf(Available::class, $document->AVAILABLE);
     }
 
-    public function testGetEffectiveStartEnd()
+    public function testGetEffectiveStartEnd(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:AVAILABLE
-DTSTART:20150717T162200Z
-DTEND:20150717T172200Z
-END:AVAILABLE
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:AVAILABLE
+        DTSTART:20150717T162200Z
+        DTEND:20150717T172200Z
+        END:AVAILABLE
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $tz = new DateTimeZone('UTC');
-        $this->assertEquals(
+        $tz = new \DateTimeZone('UTC');
+        self::assertEquals(
             [
-                new DateTimeImmutable('2015-07-17 16:22:00', $tz),
-                new DateTimeImmutable('2015-07-17 17:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 16:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 17:22:00', $tz),
             ],
             $document->AVAILABLE->getEffectiveStartEnd()
         );
     }
 
-    public function testGetEffectiveStartEndDuration()
+    public function testGetEffectiveStartEndDuration(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:AVAILABLE
-DTSTART:20150717T162200Z
-DURATION:PT1H
-END:AVAILABLE
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:AVAILABLE
+        DTSTART:20150717T162200Z
+        DURATION:PT1H
+        END:AVAILABLE
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $tz = new DateTimeZone('UTC');
-        $this->assertEquals(
+        $tz = new \DateTimeZone('UTC');
+        self::assertEquals(
             [
-                new DateTimeImmutable('2015-07-17 16:22:00', $tz),
-                new DateTimeImmutable('2015-07-17 17:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 16:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 17:22:00', $tz),
             ],
             $document->AVAILABLE->getEffectiveStartEnd()
         );

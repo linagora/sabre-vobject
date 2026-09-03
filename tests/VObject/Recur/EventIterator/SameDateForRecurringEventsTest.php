@@ -1,9 +1,10 @@
 <?php
 
-namespace Sabre\VObject\Recur;
+namespace Sabre\VObject\Recur\EventIterator;
 
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Reader;
+use Sabre\VObject\Recur\EventIterator;
 
 /**
  * Testing case when overridden recurring events have same start date.
@@ -15,7 +16,7 @@ class SameDateForRecurringEventsTest extends TestCase
     /**
      * Checking is all events iterated by EventIterator.
      */
-    public function testAllEventsArePresentInIterator()
+    public function testAllEventsArePresentInIterator(): void
     {
         $ics = <<<ICS
 BEGIN:VCALENDAR
@@ -50,6 +51,6 @@ ICS;
         $vCalendar = Reader::read($ics);
         $eventIterator = new EventIterator($vCalendar->getComponents());
 
-        $this->assertEquals(4, iterator_count($eventIterator), 'in ICS 4 events');
+        self::assertEquals(4, iterator_count($eventIterator), 'in ICS 4 events');
     }
 }
