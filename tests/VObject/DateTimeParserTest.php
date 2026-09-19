@@ -57,6 +57,32 @@ class DateTimeParserTest extends TestCase
     }
 
     /**
+     * RFC 5545 section 3.3.5: a local time occurring twice refers to the
+     * first occurrence.
+     */
+    #[DataProvider('repeatedLocalTimes')]
+    public function testParseICalendarDateTimeRepeatedLocalTime(string $dt, string $tz, string $expectedUtc, string $expectedOffset): void
+    {
+        $dateTime = DateTimeParser::parseDateTime($dt, new \DateTimeZone($tz));
+
+        self::assertEquals($tz, $dateTime->getTimezone()->getName());
+        self::assertEquals($expectedOffset, $dateTime->format('P'));
+        self::assertEquals($expectedUtc, $dateTime->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'));
+    }
+
+    public static function repeatedLocalTimes(): iterable
+    {
+        yield 'Paris, repeated hour' => ['20261025T023000', 'Europe/Paris', '2026-10-25 00:30:00', '+02:00'];
+        yield 'Paris, before the repeated hour' => ['20261025T015959', 'Europe/Paris', '2026-10-24 23:59:59', '+02:00'];
+        yield 'Paris, after the repeated hour' => ['20261025T030000', 'Europe/Paris', '2026-10-25 02:00:00', '+01:00'];
+        yield 'Paris, skipped hour' => ['20260329T023000', 'Europe/Paris', '2026-03-29 01:30:00', '+02:00'];
+        yield 'Auckland, repeated hour' => ['20270404T023000', 'Pacific/Auckland', '2027-04-03 13:30:00', '+13:00'];
+        yield 'New York, repeated hour' => ['20261101T013000', 'America/New_York', '2026-11-01 05:30:00', '-04:00'];
+        yield 'New York, after the repeated hour' => ['20261101T020000', 'America/New_York', '2026-11-01 07:00:00', '-05:00'];
+        yield 'Lord Howe, repeated half hour' => ['20270404T014500', 'Australia/Lord_Howe', '2027-04-03 14:45:00', '+11:00'];
+    }
+
+    /**
      * @depends testParseICalendarDateTime
      */
     public function testParseICalendarDateTimeBadFormat(): void
