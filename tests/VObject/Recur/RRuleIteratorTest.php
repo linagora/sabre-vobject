@@ -743,6 +743,63 @@ class RRuleIteratorTest extends TestCase
     }
 
     /**
+     * An UNTIL falling, at the series' time of day, on a day the rule skips
+     * must not add an occurrence at the UNTIL itself (Exchange bounds its
+     * series that way).
+     *
+     * @param string[] $expected
+     */
+    #[DataProvider('monthlyUntilOnSkippedDayProvider')]
+    public function testMonthlyUntilOnSkippedDay(string $rule, string $start, array $expected): void
+    {
+        $this->parse($rule, $start, $expected);
+    }
+
+    public static function monthlyUntilOnSkippedDayProvider(): iterable
+    {
+        yield 'BYDAY' => [
+            'FREQ=MONTHLY;UNTIL=20270901T090000Z;BYDAY=2SA',
+            '2027-04-10 09:00:00',
+            ['2027-04-10 09:00:00', '2027-05-08 09:00:00', '2027-06-12 09:00:00', '2027-07-10 09:00:00', '2027-08-14 09:00:00'],
+        ];
+        yield 'BYMONTHDAY' => [
+            'FREQ=MONTHLY;UNTIL=20270901T090000Z;BYMONTHDAY=10',
+            '2027-04-10 09:00:00',
+            ['2027-04-10 09:00:00', '2027-05-10 09:00:00', '2027-06-10 09:00:00', '2027-07-10 09:00:00', '2027-08-10 09:00:00'],
+        ];
+        yield 'BYDAY and BYSETPOS' => [
+            'FREQ=MONTHLY;UNTIL=20271201T090000Z;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1',
+            '2027-04-10 09:00:00',
+            [
+                '2027-04-10 09:00:00',
+                '2027-04-30 09:00:00',
+                '2027-05-31 09:00:00',
+                '2027-06-30 09:00:00',
+                '2027-07-30 09:00:00',
+                '2027-08-31 09:00:00',
+                '2027-09-30 09:00:00',
+                '2027-10-29 09:00:00',
+                '2027-11-30 09:00:00',
+            ],
+        ];
+        yield 'DATE-valued UNTIL' => [
+            'FREQ=MONTHLY;UNTIL=20270901;BYDAY=2SA',
+            '2027-04-10 00:00:00',
+            ['2027-04-10 00:00:00', '2027-05-08 00:00:00', '2027-06-12 00:00:00', '2027-07-10 00:00:00', '2027-08-14 00:00:00'],
+        ];
+        yield 'UNTIL one second earlier' => [
+            'FREQ=MONTHLY;UNTIL=20270901T085959Z;BYDAY=2SA',
+            '2027-04-10 09:00:00',
+            ['2027-04-10 09:00:00', '2027-05-08 09:00:00', '2027-06-12 09:00:00', '2027-07-10 09:00:00', '2027-08-14 09:00:00'],
+        ];
+        yield 'UNTIL on the first of the month, which is an occurrence' => [
+            'FREQ=MONTHLY;UNTIL=20270901T090000Z;BYMONTHDAY=1,10',
+            '2027-07-10 09:00:00',
+            ['2027-07-10 09:00:00', '2027-08-01 09:00:00', '2027-08-10 09:00:00', '2027-09-01 09:00:00'],
+        ];
+    }
+
+    /**
      * @param string[] $expected
      */
     #[DataProvider('dstMonthlyTransitionProvider')]

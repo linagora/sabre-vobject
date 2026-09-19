@@ -537,8 +537,11 @@ class RRuleIterator implements \Iterator
 
             // For some reason the "until" parameter was not being used here,
             // that's why the workaround of the 10000-year bug was needed at all
-            // let's stop it before the "until" parameter date
-            if ($this->until && $this->currentDate->getTimestamp() >= $this->until->getTimestamp()) {
+            // let's stop it before the "until" parameter date.
+            // The first of the month at the start time is not an occurrence
+            // in itself: when it equals UNTIL, we still need to check if that
+            // day is an occurrence, so only stop once we are past UNTIL.
+            if ($this->until && $this->currentDate->getTimestamp() > $this->until->getTimestamp()) {
                 return;
             }
 
