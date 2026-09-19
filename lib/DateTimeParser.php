@@ -46,7 +46,44 @@ class DateTimeParser
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
         }
 
-        return $date;
+        return self::firstOccurrenceOfLocalTime($date);
+    }
+
+    /**
+     * When the clock goes back, a local time occurs twice. RFC 5545 section
+     * 3.3.5 says the DATE-TIME value then refers to the first occurrence,
+     * but PHP may pick the second one (it does east of Greenwich).
+     *
+     * Returns the earliest instant showing the same local time as $date.
+     */
+    private static function firstOccurrenceOfLocalTime(\DateTimeImmutable $date): \DateTimeImmutable
+    {
+        $tz = $date->getTimezone();
+        $timestamp = $date->getTimestamp();
+        $offset = $date->getOffset();
+
+        // Only a transition that happened in the day before can make the
+        // local time ambiguous; getTransitions() returns false for
+        // timezones that are a mere UTC offset.
+        $transitions = $tz->getTransitions($timestamp - 86400, $timestamp);
+        if (!is_array($transitions) || count($transitions) < 2) {
+            return $date;
+        }
+
+        $wallClock = $timestamp + $offset;
+        $earliest = $timestamp;
+        foreach ($transitions as $transition) {
+            $candidate = $wallClock - $transition['offset'];
+            if ($candidate < $earliest && $tz->getOffset(new \DateTimeImmutable('@'.$candidate)) === $transition['offset']) {
+                $earliest = $candidate;
+            }
+        }
+
+        if ($earliest === $timestamp) {
+            return $date;
+        }
+
+        return (new \DateTimeImmutable('@'.$earliest))->setTimezone($tz);
     }
 
     /**
