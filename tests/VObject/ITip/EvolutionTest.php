@@ -2,14 +2,16 @@
 
 namespace Sabre\VObject\ITip;
 
+use Sabre\VObject\Version;
+
 class EvolutionTest extends BrokerTester
 {
     /**
-     * Evolution does things as usual a little bit differently.
+     * Evolution does things as usual a little differently.
      *
      * We're adding a separate test just for it.
      */
-    public function testNewEvolutionEvent()
+    public function testNewEvolutionEvent(): void
     {
         $ics = <<<ICS
 BEGIN:VCALENDAR
@@ -844,7 +846,6 @@ END:STANDARD
 END:VTIMEZONE
 BEGIN:VEVENT
 UID:20140813T153116Z-12176-1000-1065-6@johnny-lubuntu
-DTSTAMP:20140813T142829Z
 DTSTART;TZID=/freeassociation.sourceforge.net/Tzfile/America/Toronto:201408
  15T110000
 DTEND;TZID=/freeassociation.sourceforge.net/Tzfile/America/Toronto:20140815
@@ -866,7 +867,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $version = \Sabre\VObject\Version::VERSION;
+        $version = Version::VERSION;
         $expectedICS = <<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -1701,7 +1702,6 @@ END:STANDARD
 END:VTIMEZONE
 BEGIN:VEVENT
 UID:20140813T153116Z-12176-1000-1065-6@johnny-lubuntu
-DTSTAMP:20140813T142829Z
 DTSTART;TZID=/freeassociation.sourceforge.net/Tzfile/America/Toronto:201408
  15T110000
 DTEND;TZID=/freeassociation.sourceforge.net/Tzfile/America/Toronto:20140815
@@ -1719,6 +1719,7 @@ ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=
  TRUE;LANGUAGE=en:MAILTO:dominik@fruux.com
 CREATED:20140813T153211Z
 LAST-MODIFIED:20140813T155353Z
+DTSTAMP:**ANY**
 END:VEVENT
 END:VCALENDAR
 ICS;
@@ -1742,7 +1743,7 @@ ICS;
      * again mangled by iCal. This triggered a few bugs related to email
      * address scheme casing.
      */
-    public function testAttendeeModify()
+    public function testAttendeeModify(): void
     {
         $old = <<<ICS
 BEGIN:VCALENDAR

@@ -2,8 +2,6 @@
 
 namespace Sabre\VObject\Component;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject;
 use Sabre\VObject\Reader;
@@ -14,74 +12,74 @@ use Sabre\VObject\Reader;
  */
 class VAvailabilityTest extends TestCase
 {
-    public function testVAvailabilityComponent()
+    public function testVAvailabilityComponent(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
         $document = Reader::read($vcal);
 
-        $this->assertInstanceOf(__NAMESPACE__.'\VAvailability', $document->VAVAILABILITY);
+        self::assertInstanceOf(VAvailability::class, $document->VAVAILABILITY);
     }
 
-    public function testGetEffectiveStartEnd()
+    public function testGetEffectiveStartEnd(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-DTSTART:20150717T162200Z
-DTEND:20150717T172200Z
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        DTSTART:20150717T162200Z
+        DTEND:20150717T172200Z
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $tz = new DateTimeZone('UTC');
-        $this->assertEquals(
+        $tz = new \DateTimeZone('UTC');
+        self::assertEquals(
             [
-                new DateTimeImmutable('2015-07-17 16:22:00', $tz),
-                new DateTimeImmutable('2015-07-17 17:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 16:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 17:22:00', $tz),
             ],
             $document->VAVAILABILITY->getEffectiveStartEnd()
         );
     }
 
-    public function testGetEffectiveStartDuration()
+    public function testGetEffectiveStartDuration(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-DTSTART:20150717T162200Z
-DURATION:PT1H
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        DTSTART:20150717T162200Z
+        DURATION:PT1H
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $tz = new DateTimeZone('UTC');
-        $this->assertEquals(
+        $tz = new \DateTimeZone('UTC');
+        self::assertEquals(
             [
-                new DateTimeImmutable('2015-07-17 16:22:00', $tz),
-                new DateTimeImmutable('2015-07-17 17:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 16:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 17:22:00', $tz),
             ],
             $document->VAVAILABILITY->getEffectiveStartEnd()
         );
     }
 
-    public function testGetEffectiveStartEndUnbound()
+    public function testGetEffectiveStartEndUnbound(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $this->assertEquals(
+        self::assertEquals(
             [
                 null,
                 null,
@@ -90,94 +88,94 @@ VCAL;
         );
     }
 
-    public function testIsInTimeRangeUnbound()
+    public function testIsInTimeRangeUnbound(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $this->assertTrue(
-            $document->VAVAILABILITY->isInTimeRange(new DateTimeImmutable('2015-07-17'), new DateTimeImmutable('2015-07-18'))
+        self::assertTrue(
+            $document->VAVAILABILITY->isInTimeRange(new \DateTimeImmutable('2015-07-17'), new \DateTimeImmutable('2015-07-18'))
         );
     }
 
-    public function testIsInTimeRangeOutside()
+    public function testIsInTimeRangeOutside(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-DTSTART:20140101T000000Z
-DTEND:20140102T000000Z
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        DTSTART:20140101T000000Z
+        DTEND:20140102T000000Z
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
 
         $document = Reader::read($vcal);
-        $this->assertFalse(
-            $document->VAVAILABILITY->isInTimeRange(new DateTimeImmutable('2015-07-17'), new DateTimeImmutable('2015-07-18'))
+        self::assertFalse(
+            $document->VAVAILABILITY->isInTimeRange(new \DateTimeImmutable('2015-07-17'), new \DateTimeImmutable('2015-07-18'))
         );
     }
 
-    public function testRFCxxxSection3_1_availabilityprop_required()
+    public function testRFCxxxSection3Part1AvailabilityPropRequired(): void
     {
         // UID and DTSTAMP are present.
-        $this->assertIsValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // UID and DTSTAMP are missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // DTSTAMP is missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // UID is missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-DTSTAMP:20111005T133225Z
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            DTSTAMP:20111005T133225Z
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
     }
 
-    public function testRFCxxxSection3_1_availabilityprop_optional_once()
+    public function testRFCxxxSection3Part1AvailabilityPropOptionalOnce(): void
     {
         $properties = [
             'BUSYTYPE:BUSY',
@@ -194,163 +192,163 @@ VCAL
         ];
 
         // They are all present, only once.
-        $this->assertIsValid(Reader::read($this->template($properties)));
+        self::assertIsValid(Reader::read($this->template($properties)));
 
         // We duplicate each one to see if it fails.
         foreach ($properties as $property) {
-            $this->assertIsNotValid(Reader::read($this->template([
+            self::assertIsNotValid(Reader::read($this->template([
                 $property,
                 $property,
             ])));
         }
     }
 
-    public function testRFCxxxSection3_1_availabilityprop_dtend_duration()
+    public function testRFCxxxSection3Part1AvailabilityPropDtendDuration(): void
     {
         // Only DTEND.
-        $this->assertIsValid(Reader::read($this->template([
+        self::assertIsValid(Reader::read($this->template([
             'DTEND:21111005T133225Z',
         ])));
 
         // Only DURATION.
-        $this->assertIsValid(Reader::read($this->template([
+        self::assertIsValid(Reader::read($this->template([
             'DURATION:PT1H',
         ])));
 
         // Both (not allowed).
-        $this->assertIsNotValid(Reader::read($this->template([
+        self::assertIsNotValid(Reader::read($this->template([
             'DTEND:21111005T133225Z',
             'DURATION:PT1H',
         ])));
     }
 
-    public function testAvailableSubComponent()
+    public function testAvailableSubComponent(): void
     {
-        $vcal = <<<VCAL
-BEGIN:VCALENDAR
-BEGIN:VAVAILABILITY
-BEGIN:AVAILABLE
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL;
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:VAVAILABILITY
+        BEGIN:AVAILABLE
+        END:AVAILABLE
+        END:VAVAILABILITY
+        END:VCALENDAR
+        VCAL_WRAP;
         $document = Reader::read($vcal);
 
-        $this->assertInstanceOf(__NAMESPACE__, $document->VAVAILABILITY->AVAILABLE);
+        self::assertInstanceOf(Available::class, $document->VAVAILABILITY->AVAILABLE);
     }
 
-    public function testRFCxxxSection3_1_availableprop_required()
+    public function testRFCxxxSection3Part1AvailablePropRequired(): void
     {
         // UID, DTSTAMP and DTSTART are present.
-        $this->assertIsValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-BEGIN:AVAILABLE
-UID:foo@test
-DTSTAMP:20111005T133225Z
-DTSTART:20111005T133225Z
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            BEGIN:AVAILABLE
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            DTSTART:20111005T133225Z
+            END:AVAILABLE
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // UID, DTSTAMP and DTSTART are missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-BEGIN:AVAILABLE
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            BEGIN:AVAILABLE
+            END:AVAILABLE
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // UID is missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-BEGIN:AVAILABLE
-DTSTAMP:20111005T133225Z
-DTSTART:20111005T133225Z
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            BEGIN:AVAILABLE
+            DTSTAMP:20111005T133225Z
+            DTSTART:20111005T133225Z
+            END:AVAILABLE
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // DTSTAMP is missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-BEGIN:AVAILABLE
-UID:foo@test
-DTSTART:20111005T133225Z
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            BEGIN:AVAILABLE
+            UID:foo@test
+            DTSTART:20111005T133225Z
+            END:AVAILABLE
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
 
         // DTSTART is missing.
-        $this->assertIsNotValid(Reader::read(
-<<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-BEGIN:AVAILABLE
-UID:foo@test
-DTSTAMP:20111005T133225Z
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
+        self::assertIsNotValid(Reader::read(
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            BEGIN:AVAILABLE
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            END:AVAILABLE
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP
         ));
     }
 
-    public function testRFCxxxSection3_1_available_dtend_duration()
+    public function testRFCxxxSection3Part1AvailableDtendDuration(): void
     {
         // Only DTEND.
-        $this->assertIsValid(Reader::read($this->templateAvailable([
+        self::assertIsValid(Reader::read($this->templateAvailable([
             'DTEND:21111005T133225Z',
         ])));
 
         // Only DURATION.
-        $this->assertIsValid(Reader::read($this->templateAvailable([
+        self::assertIsValid(Reader::read($this->templateAvailable([
             'DURATION:PT1H',
         ])));
 
         // Both (not allowed).
-        $this->assertIsNotValid(Reader::read($this->templateAvailable([
+        self::assertIsNotValid(Reader::read($this->templateAvailable([
             'DTEND:21111005T133225Z',
             'DURATION:PT1H',
         ])));
     }
 
-    public function testRFCxxxSection3_1_available_optional_once()
+    public function testRFCxxxSection3Part1AvailableOptionalOnce(): void
     {
         $properties = [
             'CREATED:20111005T135125Z',
@@ -362,20 +360,20 @@ VCAL
         ];
 
         // They are all present, only once.
-        $this->assertIsValid(Reader::read($this->templateAvailable($properties)));
+        self::assertIsValid(Reader::read($this->templateAvailable($properties)));
 
         // We duplicate each one to see if it fails.
         foreach ($properties as $property) {
-            $this->assertIsNotValid(Reader::read($this->templateAvailable([
+            self::assertIsNotValid(Reader::read($this->templateAvailable([
                 $property,
                 $property,
             ])));
         }
     }
 
-    public function testRFCxxxSection3_2()
+    public function testRFCxxxSection3Part2(): void
     {
-        $this->assertEquals(
+        self::assertEquals(
             'BUSY',
             Reader::read($this->templateAvailable([
                 'BUSYTYPE:BUSY',
@@ -386,7 +384,7 @@ VCAL
                 ->getValue()
         );
 
-        $this->assertEquals(
+        self::assertEquals(
             'BUSY-UNAVAILABLE',
             Reader::read($this->templateAvailable([
                 'BUSYTYPE:BUSY-UNAVAILABLE',
@@ -397,7 +395,7 @@ VCAL
                 ->getValue()
         );
 
-        $this->assertEquals(
+        self::assertEquals(
             'BUSY-TENTATIVE',
             Reader::read($this->templateAvailable([
                 'BUSYTYPE:BUSY-TENTATIVE',
@@ -409,36 +407,35 @@ VCAL
         );
     }
 
-    protected function assertIsValid(VObject\Document $document)
+    protected function assertIsValid(VObject\Document $document): void
     {
         $validationResult = $document->validate();
         if ($validationResult) {
-            $messages = array_map(function ($item) { return $item['message']; }, $validationResult);
-            $this->fail('Failed to assert that the supplied document is a valid document. Validation messages: '.implode(', ', $messages));
+            $messages = array_map(fn ($item) => $item['message'], $validationResult);
+            self::fail('Failed to assert that the supplied document is a valid document. Validation messages: '.implode(', ', $messages));
         }
-        $this->assertEmpty($document->validate());
+        self::assertEmpty($document->validate());
     }
 
-    protected function assertIsNotValid(VObject\Document $document)
+    protected function assertIsNotValid(VObject\Document $document): void
     {
-        $this->assertNotEmpty($document->validate());
+        self::assertNotEmpty($document->validate());
     }
 
     protected function template(array $properties)
     {
         return $this->_template(
-            <<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-…
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
-,
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            …
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP,
             $properties
         );
     }
@@ -446,23 +443,22 @@ VCAL
     protected function templateAvailable(array $properties)
     {
         return $this->_template(
-            <<<VCAL
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//id
-BEGIN:VAVAILABILITY
-UID:foo@test
-DTSTAMP:20111005T133225Z
-BEGIN:AVAILABLE
-UID:foo@test
-DTSTAMP:20111005T133225Z
-DTSTART:20111005T133225Z
-…
-END:AVAILABLE
-END:VAVAILABILITY
-END:VCALENDAR
-VCAL
-,
+            <<<VCAL_WRAP
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//id
+            BEGIN:VAVAILABILITY
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            BEGIN:AVAILABLE
+            UID:foo@test
+            DTSTAMP:20111005T133225Z
+            DTSTART:20111005T133225Z
+            …
+            END:AVAILABLE
+            END:VAVAILABILITY
+            END:VCALENDAR
+            VCAL_WRAP,
             $properties
         );
     }
