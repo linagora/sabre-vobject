@@ -414,7 +414,7 @@ class RRuleIterator implements \Iterator
             $currentDay = $this->currentDate->format('w');
 
             // Current hour of the day
-            $currentHour = $this->currentDate->format('G');
+            $currentHour = (int) $this->currentDate->format('G');
 
             if ($this->currentDate->getTimestamp() > self::dateUpperLimit) {
                 $this->currentDate = null;
@@ -476,8 +476,14 @@ class RRuleIterator implements \Iterator
                 }
             }
 
+            if ($this->currentDate->getTimestamp() > self::dateUpperLimit) {
+                $this->currentDate = null;
+
+                return;
+            }
+
             // We have a match
-        } while (($this->byDay && !in_array($currentDay, $recurrenceDays, true)) || ($this->byHour && !in_array((string) $currentHour, $recurrenceHours, true)));
+        } while (($this->byDay && !in_array($currentDay, $recurrenceDays, true)) || ($this->byHour && !in_array($currentHour, $recurrenceHours, true)));
     }
 
     /**
@@ -831,6 +837,11 @@ class RRuleIterator implements \Iterator
 
                 case 'BYHOUR':
                     $this->byHour = (array) $value;
+                    foreach ($this->byHour as $byHour) {
+                        if (!is_numeric($byHour) || (int) $byHour < 0 || (int) $byHour > 23) {
+                            throw new InvalidDataException('BYHOUR in RRULE must have value(s) between 0 and 23!');
+                        }
+                    }
                     break;
 
                 case 'BYDAY':
@@ -1032,7 +1043,7 @@ class RRuleIterator implements \Iterator
     {
         $recurrenceHours = [];
         foreach ($this->byHour as $byHour) {
-            $recurrenceHours[] = $byHour;
+            $recurrenceHours[] = (int) $byHour;
         }
 
         return $recurrenceHours;
