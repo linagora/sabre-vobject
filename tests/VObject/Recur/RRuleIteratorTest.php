@@ -421,6 +421,53 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testWeeklyByHourWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=MO;BYHOUR=09;COUNT=3',
+            '2026-01-05 09:00:00',
+            [
+                '2026-01-05 09:00:00',
+                '2026-01-12 09:00:00',
+                '2026-01-19 09:00:00',
+            ]
+        );
+    }
+
+    public function testDailyByHourWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYHOUR=08,09;COUNT=4',
+            '2026-01-05 08:00:00',
+            [
+                '2026-01-05 08:00:00',
+                '2026-01-05 09:00:00',
+                '2026-01-06 08:00:00',
+                '2026-01-06 09:00:00',
+            ]
+        );
+    }
+
+    public function testByHourOutOfRange(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=MO;BYHOUR=24;COUNT=3',
+            '2026-01-05 09:00:00',
+            []
+        );
+    }
+
+    public function testByHourNotNumeric(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=MO;BYHOUR=0x;COUNT=3',
+            '2026-01-05 09:00:00',
+            []
+        );
+    }
+
     public function testWeeklyByDaySpecificHour(): void
     {
         $this->parse(
