@@ -542,13 +542,14 @@ class Component extends Node
         $messages = [];
 
         foreach ($this->children() as $child) {
-            $name = strtoupper((string) $child->name);
-            if (!isset($propertyCounters[$name])) {
-                $propertyCounters[$name] = 1;
-            } else {
-                ++$propertyCounters[$name];
-            }
             $messages = array_merge($messages, $child->validate($options));
+        }
+
+        // Counting once the children are validated, as a child may remove
+        // itself while repairing (e.g. an RRULE without FREQ).
+        foreach ($this->children() as $child) {
+            $name = strtoupper((string) $child->name);
+            $propertyCounters[$name] = ($propertyCounters[$name] ?? 0) + 1;
         }
 
         foreach ($rules as $propName => $rule) {
@@ -594,7 +595,7 @@ class Component extends Node
                         // We try to repair the same property appearing multiple times with the exact same value
                         // by removing the duplicates and keeping only one property
                         if ($options & self::REPAIR) {
-                            $properties = array_unique($this->select($propName), SORT_REGULAR);
+                            $properties = array_values(array_unique($this->select($propName), SORT_REGULAR));
 
                             if (1 === count($properties)) {
                                 $this->remove($propName);
