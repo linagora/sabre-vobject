@@ -790,7 +790,7 @@ class RRuleIterator implements \Iterator
             $key = strtoupper((string) $key);
             switch ($key) {
                 case 'FREQ':
-                    $value = strtolower((string) $value);
+                    $value = strtolower(self::scalarPart($key, $value));
                     if (!in_array(
                         $value,
                         ['secondly', 'minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'],
@@ -802,7 +802,7 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'UNTIL':
-                    $this->until = DateTimeParser::parse($value, $this->startDate->getTimezone());
+                    $this->until = DateTimeParser::parse(self::scalarPart($key, $value), $this->startDate->getTimezone());
 
                     // In some cases events are generated with an UNTIL=
                     // parameter before the actual start of the event.
@@ -819,7 +819,7 @@ class RRuleIterator implements \Iterator
 
                 case 'INTERVAL':
                 case 'COUNT':
-                    $val = (int) $value;
+                    $val = (int) self::scalarPart($key, $value);
                     if ($val < 1) {
                         throw new InvalidDataException(strtoupper($key).' in RRULE must be a positive integer!');
                     }
@@ -855,7 +855,7 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'BYMONTHDAY':
-                    $this->byMonthDay = (array) $value;
+                    $this->byMonthDay = self::integerParts($key, $value, 31);
                     break;
 
                 case 'BYYEARDAY':
@@ -886,11 +886,15 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'BYSETPOS':
-                    $this->bySetPos = (array) $value;
+                    $this->bySetPos = self::integerParts($key, $value, 366);
                     break;
 
                 case 'WKST':
-                    $this->weekStart = strtoupper((string) $value);
+                    $value = strtoupper(self::scalarPart($key, $value));
+                    if (!isset($this->dayMap[$value])) {
+                        throw new InvalidDataException('Invalid value for WKST in RRULE: '.$value);
+                    }
+                    $this->weekStart = $value;
                     break;
 
                 default:
@@ -1024,6 +1028,42 @@ class RRuleIterator implements \Iterator
         sort($filteredResult, SORT_NUMERIC);
 
         return $filteredResult;
+    }
+
+    /**
+     * Returns the value of an RRULE part that only takes a single value.
+     *
+     * @throws InvalidDataException
+     */
+    private static function scalarPart(string $key, mixed $value): string
+    {
+        if (!is_scalar($value)) {
+            throw new InvalidDataException($key.' in RRULE must have a single value!');
+        }
+
+        return (string) $value;
+    }
+
+    /**
+     * Returns the values of an RRULE part that takes a list of integers from
+     * 1 to $max or -$max to -1.
+     *
+     * @return int[]
+     *
+     * @throws InvalidDataException
+     */
+    private static function integerParts(string $key, mixed $value, int $max): array
+    {
+        $result = [];
+        foreach ((array) $value as $part) {
+            if (!is_scalar($part) || !preg_match('/^[+-]?[0-9]+$/', (string) $part)
+                || 0 === (int) $part || abs((int) $part) > $max) {
+                throw new InvalidDataException($key.' in RRULE must have value(s) from 1 to '.$max.', or -'.$max.' to -1!');
+            }
+            $result[] = (int) $part;
+        }
+
+        return $result;
     }
 
     /**

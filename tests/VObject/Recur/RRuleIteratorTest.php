@@ -1026,6 +1026,47 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    #[DataProvider('invalidPartProvider')]
+    public function testInvalidPart(string|array $rule): void
+    {
+        $this->expectException(InvalidDataException::class);
+        iterator_to_array(new RRuleIterator($rule, new \DateTimeImmutable('2026-01-15 10:00:00', new \DateTimeZone('UTC'))));
+    }
+
+    public static function invalidPartProvider(): array
+    {
+        return [
+            'non-numeric BYSETPOS' => ['FREQ=MONTHLY;BYMONTHDAY=15;BYSETPOS=x'],
+            'zero BYSETPOS' => ['FREQ=MONTHLY;BYDAY=MO;BYSETPOS=0'],
+            'out of range BYSETPOS' => ['FREQ=MONTHLY;BYDAY=MO;BYSETPOS=367'],
+            'non-integer BYSETPOS' => ['FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1.5'],
+            'non-numeric BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY=x'],
+            'zero BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY=0'],
+            'out of range BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY=1,-32'],
+            'empty BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY='],
+            'multi-valued FREQ' => ['FREQ=DAILY,WEEKLY;COUNT=2'],
+            'multi-valued UNTIL' => ['FREQ=DAILY;UNTIL=20260201,20260301'],
+            'multi-valued COUNT' => ['FREQ=DAILY;COUNT=1,2'],
+            'multi-valued INTERVAL' => ['FREQ=DAILY;COUNT=2;INTERVAL=1,2'],
+            'multi-valued WKST' => ['FREQ=WEEKLY;COUNT=2;WKST=MO,SU'],
+            'unknown WKST' => ['FREQ=WEEKLY;COUNT=2;BYDAY=MO;WKST=XX'],
+            'nested array BYSETPOS' => [['FREQ' => 'MONTHLY', 'BYDAY' => 'MO', 'BYSETPOS' => [['1']]]],
+        ];
+    }
+
+    public function testSignedBySetPosAndByMonthDay(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;COUNT=3;BYMONTHDAY=+1,-1;BYSETPOS=+2',
+            '2026-01-01 10:00:00',
+            [
+                '2026-01-01 10:00:00',
+                '2026-01-31 10:00:00',
+                '2026-02-28 10:00:00',
+            ]
+        );
+    }
+
     public function testYearlyByMonthByDay(): void
     {
         $this->parse(
