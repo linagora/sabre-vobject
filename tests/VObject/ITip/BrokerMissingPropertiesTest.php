@@ -175,4 +175,87 @@ ICS;
         self::assertSame('mailto:white@example.org', $result[0]->recipient);
         self::assertCount(2, $result[0]->message->VEVENT);
     }
+
+    public function testCancelForARemovedAttendeeWithoutSequence(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20140716T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=One:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20140716T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $version = Version::VERSION;
+        $expectedMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:CANCEL
+BEGIN:VEVENT
+UID:foobar
+DTSTAMP:**ANY**
+SEQUENCE:0
+DTSTART:20140716T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=One:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->parse($oldMessage, $newMessage, [
+            [
+                'method' => 'CANCEL',
+                'recipient' => 'mailto:one@example.org',
+                'message' => $expectedMessage,
+            ],
+        ], 'mailto:strunk@example.org');
+    }
+
+    public function testCancelledStatusWithoutSequence(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20140716T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=One:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20140716T120000Z
+STATUS:CANCELLED
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=One:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $result = (new Broker())->parseEvent(Reader::read($newMessage), 'mailto:strunk@example.org', Reader::read($oldMessage));
+
+        self::assertCount(1, $result);
+        self::assertSame('CANCEL', $result[0]->method);
+        self::assertSame('0', (string) Reader::read($result[0]->message->serialize())->VEVENT->SEQUENCE);
+    }
 }

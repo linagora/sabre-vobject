@@ -635,7 +635,8 @@ class Broker
                 /** @var VEvent $event */
                 $event = $icalMsg->add('VEVENT', [
                     'UID' => $message->uid,
-                    'SEQUENCE' => $message->sequence,
+                    // An event without SEQUENCE has the default sequence 0.
+                    'SEQUENCE' => $message->sequence ?? 0,
                     'DTSTAMP' => gmdate('Ymd\\THis\\Z'),
                 ]);
                 if (isset($calendar->VEVENT->SUMMARY)) {
