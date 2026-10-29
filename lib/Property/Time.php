@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Property;
 
 use Sabre\VObject\DateTimeParser;
+use Sabre\VObject\InvalidDataException;
 
 /**
  * Time property.
@@ -18,20 +19,16 @@ class Time extends Text
     /**
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
-     *
-     * @var string|null
      */
-    public $delimiter = null;
+    public string $delimiter = '';
 
     /**
      * Returns the type of value.
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'TIME';
     }
@@ -40,10 +37,8 @@ class Time extends Text
      * Sets the JSON value, as it would appear in a jCard or jCal object.
      *
      * The value must always be an array.
-     *
-     * @param array $value
      */
-    public function setJsonValue(array $value)
+    public function setJsonValue(array $value): void
     {
         // Removing colons from value.
         $value = str_replace(
@@ -64,9 +59,9 @@ class Time extends Text
      *
      * This method must always return an array.
      *
-     * @return array
+     * @throws InvalidDataException
      */
-    public function getJsonValue()
+    public function getJsonValue(): array
     {
         $parts = DateTimeParser::parseVCardTime($this->getValue());
         $timeStr = '';
@@ -109,7 +104,7 @@ class Time extends Text
                 $timeStr .= 'Z';
             } else {
                 $timeStr .=
-                    preg_replace('/([0-9]{2})([0-9]{2})$/', '$1:$2', $parts['timezone']);
+                    preg_replace('/([0-9]{2})([0-9]{2})$/', '$1:$2', (string) $parts['timezone']);
             }
         }
 
@@ -117,17 +112,13 @@ class Time extends Text
     }
 
     /**
-     * Hydrate data from a XML subtree, as it would appear in a xCard or xCal
+     * Hydrate data from an XML subtree, as it would appear in a xCard or xCal
      * object.
-     *
-     * @param array $value
      */
-    public function setXmlValue(array $value)
+    public function setXmlValue(array $value): void
     {
         $value = array_map(
-            function ($value) {
-                return str_replace(':', '', $value);
-            },
+            fn ($value) => str_replace(':', '', $value),
             $value
         );
         parent::setXmlValue($value);

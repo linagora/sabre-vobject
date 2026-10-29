@@ -3,28 +3,32 @@
 namespace Sabre\VObject;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\Component\VCard;
 
 class VCardConverterTest extends TestCase
 {
-    use \Sabre\VObject\PHPUnitAssertions;
+    use PHPUnitAssertions;
 
-    public function testConvert30to40()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvert30to40(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:3.0
-PRODID:foo
-FN;CHARSET=UTF-8:Steve
-TEL;TYPE=PREF,HOME:+1 555 666 777
-ITEM1.TEL:+1 444 555 666
-ITEM1.X-ABLABEL:CustomLabel
-PHOTO;ENCODING=b;TYPE=JPEG,HOME:Zm9v
-PHOTO;ENCODING=b;TYPE=GIF:Zm9v
-PHOTO;X-PARAM=FOO;ENCODING=b;TYPE=PNG:Zm9v
-PHOTO;VALUE=URI:http://example.org/foo.png
-X-ABShowAs:COMPANY
-END:VCARD
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:3.0
+        PRODID:foo
+        FN;CHARSET=UTF-8:Steve
+        TEL;TYPE=PREF,HOME:+1 555 666 777
+        ITEM1.TEL:+1 444 555 666
+        ITEM1.X-ABLABEL:CustomLabel
+        PHOTO;ENCODING=b;TYPE=JPEG,HOME:Zm9v
+        PHOTO;ENCODING=b;TYPE=GIF:Zm9v
+        PHOTO;X-PARAM=FOO;ENCODING=b;TYPE=PNG:Zm9v
+        PHOTO;VALUE=URI:http://example.org/foo.png
+        X-ABShowAs:COMPANY
+        END:VCARD
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -41,29 +45,33 @@ KIND:ORG
 END:VCARD
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testConvert40to40()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvert40to40(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:4.0
-FN:Steve
-TEL;PREF=1;TYPE=HOME:+1 555 666 777
-PHOTO:data:image/jpeg;base64,Zm9v
-PHOTO:data:image/gif;base64,Zm9v
-PHOTO;X-PARAM=FOO:data:image/png;base64,Zm9v
-PHOTO:http://example.org/foo.png
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.0
+        FN:Steve
+        TEL;PREF=1;TYPE=HOME:+1 555 666 777
+        PHOTO:data:image/jpeg;base64,Zm9v
+        PHOTO:data:image/gif;base64,Zm9v
+        PHOTO;X-PARAM=FOO:data:image/png;base64,Zm9v
+        PHOTO:http://example.org/foo.png
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -78,30 +86,34 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testConvert21to40()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvert21to40(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:2.1
-N:Family;Johnson
-FN:Johnson Family
-TEL;HOME;VOICE:555-12345-345
-ADR;HOME:;;100 Street Lane;Saubel Beach;ON;H0H0H0
-LABEL;HOME;ENCODING=QUOTED-PRINTABLE:100 Street Lane=0D=0ASaubel Beach,
- ON H0H0H0
-REV:20110731T040251Z
-UID:12345678
-END:VCARD
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:2.1
+        N:Family;Johnson
+        FN:Johnson Family
+        TEL;HOME;VOICE:555-12345-345
+        ADR;HOME:;;100 Street Lane;Saubel Beach;ON;H0H0H0
+        LABEL;HOME;ENCODING=QUOTED-PRINTABLE:100 Street Lane=0D=0ASaubel Beach,
+         ON H0H0H0
+        REV:20110731T040251Z
+        UID:12345678
+        END:VCARD
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -116,30 +128,34 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testConvert30to30()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvert30to30(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:3.0
-PRODID:foo
-FN;CHARSET=UTF-8:Steve
-TEL;TYPE=PREF,HOME:+1 555 666 777
-PHOTO;ENCODING=b;TYPE=JPEG:Zm9v
-PHOTO;ENCODING=b;TYPE=GIF:Zm9v
-PHOTO;X-PARAM=FOO;ENCODING=b;TYPE=PNG:Zm9v
-PHOTO;VALUE=URI:http://example.org/foo.png
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:3.0
+        PRODID:foo
+        FN;CHARSET=UTF-8:Steve
+        TEL;TYPE=PREF,HOME:+1 555 666 777
+        PHOTO;ENCODING=b;TYPE=JPEG:Zm9v
+        PHOTO;ENCODING=b;TYPE=GIF:Zm9v
+        PHOTO;X-PARAM=FOO;ENCODING=b;TYPE=PNG:Zm9v
+        PHOTO;VALUE=URI:http://example.org/foo.png
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -155,31 +171,35 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testConvert40to30()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvert40to30(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:4.0
-PRODID:foo
-FN:Steve
-TEL;PREF=1;TYPE=HOME:+1 555 666 777
-PHOTO:data:image/jpeg;base64,Zm9v
-PHOTO:data:image/gif,foo
-PHOTO;X-PARAM=FOO:data:image/png;base64,Zm9v
-PHOTO:http://example.org/foo.png
-KIND:ORG
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.0
+        PRODID:foo
+        FN:Steve
+        TEL;PREF=1;TYPE=HOME:+1 555 666 777
+        PHOTO:data:image/jpeg;base64,Zm9v
+        PHOTO:data:image/gif,foo
+        PHOTO;X-PARAM=FOO:data:image/png;base64,Zm9v
+        PHOTO:http://example.org/foo.png
+        KIND:ORG
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -195,38 +215,47 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testConvertGroupCard()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvertGroupCard(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:3.0
-PRODID:foo
-X-ADDRESSBOOKSERVER-KIND:GROUP
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:3.0
+        PRODID:foo
+        X-ADDRESSBOOKSERVER-KIND:GROUP
+        X-ADDRESSBOOKSERVER-MEMBER:mailto:someone@example.com
+        X-ADDRESSBOOKSERVER-MEMBER:mailto:sometwo@example.com
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
 VERSION:4.0
 KIND:GROUP
+MEMBER:mailto:someone@example.com
+MEMBER:mailto:sometwo@example.com
 END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
@@ -236,29 +265,35 @@ OUT;
 BEGIN:VCARD
 VERSION:3.0
 X-ADDRESSBOOKSERVER-KIND:GROUP
+X-ADDRESSBOOKSERVER-MEMBER:mailto:someone@example.com
+X-ADDRESSBOOKSERVER-MEMBER:mailto:sometwo@example.com
 END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
+    /**
+     * @throws InvalidDataException
+     */
     public function testBDAYConversion()
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:3.0
-PRODID:foo
-BDAY;X-APPLE-OMIT-YEAR=1604:1604-04-16
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:3.0
+        PRODID:foo
+        BDAY;X-APPLE-OMIT-YEAR=1604:1604-04-16
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -268,10 +303,11 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
@@ -285,68 +321,76 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
     /**
-     * @expectedException \InvalidArgumentException
+     * @throws InvalidDataException
      */
-    public function testUnknownSourceVCardVersion()
+    public function testUnknownSourceVCardVersion(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:4.2
-PRODID:foo
-FN;CHARSET=UTF-8:Steve
-TEL;TYPE=PREF,HOME:+1 555 666 777
-ITEM1.TEL:+1 444 555 666
-ITEM1.X-ABLABEL:CustomLabel
-PHOTO;ENCODING=b;TYPE=JPEG,HOME:Zm9v
-PHOTO;ENCODING=b;TYPE=GIF:Zm9v
-PHOTO;X-PARAM=FOO;ENCODING=b;TYPE=PNG:Zm9v
-PHOTO;VALUE=URI:http://example.org/foo.png
-X-ABShowAs:COMPANY
-END:VCARD
+        $this->expectException(\InvalidArgumentException::class);
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.2
+        PRODID:foo
+        FN;CHARSET=UTF-8:Steve
+        TEL;TYPE=PREF,HOME:+1 555 666 777
+        ITEM1.TEL:+1 444 555 666
+        ITEM1.X-ABLABEL:CustomLabel
+        PHOTO;ENCODING=b;TYPE=JPEG,HOME:Zm9v
+        PHOTO;ENCODING=b;TYPE=GIF:Zm9v
+        PHOTO;X-PARAM=FOO;ENCODING=b;TYPE=PNG:Zm9v
+        PHOTO;VALUE=URI:http://example.org/foo.png
+        X-ABShowAs:COMPANY
+        END:VCARD
+        
+        IN_WRAP;
 
-IN;
-
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard->convert(Document::VCARD40);
     }
 
     /**
-     * @expectedException \InvalidArgumentException
+     * @throws InvalidDataException
      */
     public function testUnknownTargetVCardVersion()
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:3.0
-PRODID:foo
-END:VCARD
+        $this->expectException(\InvalidArgumentException::class);
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:3.0
+        PRODID:foo
+        END:VCARD
+        
+        IN_WRAP;
 
-IN;
-
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard->convert(Document::VCARD21);
     }
 
-    public function testConvertIndividualCard()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testConvertIndividualCard(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:4.0
-PRODID:foo
-KIND:INDIVIDUAL
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.0
+        PRODID:foo
+        KIND:INDIVIDUAL
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<OUT
 BEGIN:VCARD
@@ -355,10 +399,11 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
@@ -371,24 +416,28 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testAnniversary()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testAnniversary(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:4.0
-ITEM1.ANNIVERSARY:20081210
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.0
+        ITEM1.ANNIVERSARY:20081210
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<'OUT'
 BEGIN:VCARD
@@ -400,10 +449,11 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
@@ -411,32 +461,36 @@ OUT;
         // Swapping input and output
         list(
             $input,
-            $output
+            $output,
         ) = [
             $output,
             $input,
         ];
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testMultipleAnniversaries()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testMultipleAnniversaries(): void
     {
-        $input = <<<IN
-BEGIN:VCARD
-VERSION:4.0
-ITEM1.ANNIVERSARY:20081210
-ITEM2.ANNIVERSARY:20091210
-ITEM3.ANNIVERSARY:20101210
-END:VCARD
-
-IN;
+        $input = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.0
+        ITEM1.ANNIVERSARY:20081210
+        ITEM2.ANNIVERSARY:20091210
+        ITEM3.ANNIVERSARY:20101210
+        END:VCARD
+        
+        IN_WRAP;
 
         $output = <<<'OUT'
 BEGIN:VCARD
@@ -454,10 +508,11 @@ END:VCARD
 
 OUT;
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD30);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
@@ -465,22 +520,26 @@ OUT;
         // Swapping input and output
         list(
             $input,
-            $output
+            $output,
         ) = [
             $output,
             $input,
         ];
 
+        /** @var VCard $vcard */
         $vcard = Reader::read($input);
         $vcard = $vcard->convert(Document::VCARD40);
 
-        $this->assertVObjectEqualsVObject(
+        self::assertVObjectEqualsVObject(
             $output,
             $vcard
         );
     }
 
-    public function testNoLabel()
+    /**
+     * @throws InvalidDataException
+     */
+    public function testNoLabel(): void
     {
         $input = <<<VCF
 BEGIN:VCARD
@@ -495,10 +554,12 @@ VCF;
 
         $vcard = Reader::read($input);
 
-        $this->assertInstanceOf('Sabre\\VObject\\Component\\VCard', $vcard);
+        self::assertInstanceOf(VCard::class, $vcard);
+        /** @var VCard $vcard */
         $vcard = $vcard->convert(Document::VCARD40);
         $vcard = $vcard->serialize();
 
+        /** @var VCard $converted */
         $converted = Reader::read($vcard);
         $converted->validate();
 
@@ -516,6 +577,40 @@ END:VCARD
 
 VCF;
 
-        $this->assertEquals($expected, str_replace("\r", '', $vcard));
+        self::assertEquals($expected, str_replace("\r", '', $vcard));
+    }
+
+    /**
+     * @throws InvalidDataException
+     */
+    public function testPhoneNumberValueTypeGetsRemoved(): void
+    {
+        $input = <<<VCF
+BEGIN:VCARD
+VERSION:3.0
+UID:foo
+FN:John Doe
+TEL;TYPE=HOME;VALUE=PHONE-NUMBER:+1234
+END:VCARD
+
+VCF;
+
+        $output = <<<VCF
+BEGIN:VCARD
+VERSION:4.0
+UID:foo
+FN:John Doe
+TEL;TYPE=HOME:+1234
+END:VCARD
+VCF;
+
+        /** @var VCard $vcard */
+        $vcard = Reader::read($input);
+        $vcard = $vcard->convert(Document::VCARD40);
+
+        self::assertVObjectEqualsVObject(
+            $output,
+            $vcard
+        );
     }
 }

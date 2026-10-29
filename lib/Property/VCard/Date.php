@@ -18,20 +18,16 @@ class Date extends DateAndOrTime
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'DATE';
     }
 
     /**
      * Sets the property as a DateTime object.
-     *
-     * @param \DateTimeInterface $dt
      */
-    public function setDateTime(\DateTimeInterface $dt)
+    public function setDateTime(\DateTimeInterface $dt): void
     {
         $this->value = $dt->format('Ymd');
     }

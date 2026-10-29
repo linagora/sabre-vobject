@@ -2,6 +2,9 @@
 
 namespace Sabre\VObject;
 
+use Sabre\VObject\Property\Binary;
+use Sabre\VObject\Property\Uri;
+
 /**
  * This utility converts vcards from one version to another.
  *
@@ -26,20 +29,19 @@ class VCardConverter
      *
      * If input and output version are identical, a clone is returned.
      *
-     * @param Component\VCard $input
-     * @param int             $targetVersion
+     * @throws InvalidDataException
      */
-    public function convert(Component\VCard $input, $targetVersion)
+    public function convert(Component\VCard $input, int $targetVersion): Component\VCard
     {
         $inputVersion = $input->getDocumentType();
         if ($inputVersion === $targetVersion) {
             return clone $input;
         }
 
-        if (!in_array($inputVersion, [Document::VCARD21, Document::VCARD30, Document::VCARD40])) {
+        if (!in_array($inputVersion, [Document::VCARD21, Document::VCARD30, Document::VCARD40], true)) {
             throw new \InvalidArgumentException('Only vCard 2.1, 3.0 and 4.0 are supported for the input data');
         }
-        if (!in_array($targetVersion, [Document::VCARD30, Document::VCARD40])) {
+        if (!in_array($targetVersion, [Document::VCARD30, Document::VCARD40], true)) {
             throw new \InvalidArgumentException('You can only use vCard 3.0 or 4.0 for the target version');
         }
 
@@ -62,15 +64,12 @@ class VCardConverter
     /**
      * Handles conversion of a single property.
      *
-     * @param Component\VCard $input
-     * @param Component\VCard $output
-     * @param Property        $property
-     * @param int             $targetVersion
+     * @throws InvalidDataException
      */
-    protected function convertProperty(Component\VCard $input, Component\VCard $output, Property $property, $targetVersion)
+    protected function convertProperty(Component\VCard $input, Component\VCard $output, Property $property, int $targetVersion): void
     {
         // Skipping these, those are automatically added.
-        if (in_array($property->name, ['VERSION', 'PRODID'])) {
+        if (in_array($property->name, ['VERSION', 'PRODID'], true)) {
             return;
         }
 
@@ -83,6 +82,9 @@ class VCardConverter
         if (!$valueType) {
             $valueType = $property->getValueType();
         }
+        if (Document::VCARD30 !== $targetVersion && 'PHONE-NUMBER' === $valueType) {
+            $valueType = null;
+        }
         $newProperty = $output->createProperty(
             $property->name,
             $property->getParts(),
@@ -91,15 +93,16 @@ class VCardConverter
         );
 
         if (Document::VCARD30 === $targetVersion) {
-            if ($property instanceof Property\Uri && in_array($property->name, ['PHOTO', 'LOGO', 'SOUND'])) {
+            if ($property instanceof Uri && in_array($property->name, ['PHOTO', 'LOGO', 'SOUND'], true)) {
+                /** @var Uri $newProperty */
                 $newProperty = $this->convertUriToBinary($output, $newProperty);
             } elseif ($property instanceof Property\VCard\DateAndOrTime) {
                 // In vCard 4, the birth year may be optional. This is not the
                 // case for vCard 3. Apple has a workaround for this that
                 // allows applications that support Apple's extension still
-                // omit birthyears in vCard 3, but applications that do not
-                // support this, will just use a random birthyear. We're
-                // choosing 1604 for the birthyear, because that's what apple
+                // omit birth years in vCard 3, but applications that do not
+                // support this, will just use a random birth year. We're
+                // choosing 1604 for the birth year, because that's what apple
                 // uses.
                 $parts = DateTimeParser::parseVCardDateTime($property->getValue());
                 if (is_null($parts['year'])) {
@@ -108,7 +111,7 @@ class VCardConverter
                     $newProperty['X-APPLE-OMIT-YEAR'] = '1604';
                 }
 
-                if ('ANNIVERSARY' == $newProperty->name) {
+                if ('ANNIVERSARY' === $newProperty->name) {
                     // Microsoft non-standard anniversary
                     $newProperty->name = 'X-ANNIVERSARY';
 
@@ -124,7 +127,7 @@ class VCardConverter
                     $output->add('ITEM'.$x.'.X-ABLABEL', '_$!<Anniversary>!$_');
                 }
             } elseif ('KIND' === $property->name) {
-                switch (strtolower($property->getValue())) {
+                switch (strtolower((string) $property->getValue())) {
                     case 'org':
                         // vCard 3.0 does not have an equivalent to KIND:ORG,
                         // but apple has an extension that means the same
@@ -141,14 +144,17 @@ class VCardConverter
                         $newProperty = $output->createProperty('X-ADDRESSBOOKSERVER-KIND', 'GROUP');
                         break;
                 }
+            } elseif ('MEMBER' === $property->name) {
+                $newProperty = $output->createProperty('X-ADDRESSBOOKSERVER-MEMBER', $property->getValue());
             }
         } elseif (Document::VCARD40 === $targetVersion) {
             // These properties were removed in vCard 4.0
-            if (in_array($property->name, ['NAME', 'MAILER', 'LABEL', 'CLASS'])) {
+            if (in_array($property->name, ['NAME', 'MAILER', 'LABEL', 'CLASS'], true)) {
                 return;
             }
 
-            if ($property instanceof Property\Binary) {
+            if ($property instanceof Binary) {
+                /** @var Binary $newProperty */
                 $newProperty = $this->convertBinaryToUri($output, $newProperty, $parameters);
             } elseif ($property instanceof Property\VCard\DateAndOrTime && isset($parameters['X-APPLE-OMIT-YEAR'])) {
                 // If a property such as BDAY contained 'X-APPLE-OMIT-YEAR',
@@ -165,14 +171,17 @@ class VCardConverter
             }
             switch ($property->name) {
                 case 'X-ABSHOWAS':
-                    if ('COMPANY' === strtoupper($property->getValue())) {
+                    if ('COMPANY' === strtoupper((string) $property->getValue())) {
                         $newProperty = $output->createProperty('KIND', 'ORG');
                     }
                     break;
                 case 'X-ADDRESSBOOKSERVER-KIND':
-                    if ('GROUP' === strtoupper($property->getValue())) {
+                    if ('GROUP' === strtoupper((string) $property->getValue())) {
                         $newProperty = $output->createProperty('KIND', 'GROUP');
                     }
+                    break;
+                case 'X-ADDRESSBOOKSERVER-MEMBER':
+                    $newProperty = $output->createProperty('MEMBER', $property->getValue());
                     break;
                 case 'X-ANNIVERSARY':
                     $newProperty->name = 'ANNIVERSARY';
@@ -205,7 +214,7 @@ class VCardConverter
                     }
                     $newProperty->name = 'ANNIVERSARY';
                     break;
-                // Apple's per-property label system.
+                    // Apple's per-property label system.
                 case 'X-ABLABEL':
                     if ('_$!<Anniversary>!$_' === $newProperty->getValue()) {
                         // We can safely remove these, as they are converted to
@@ -227,7 +236,7 @@ class VCardConverter
 
         // Lastly, we need to see if there's a need for a VALUE parameter.
         //
-        // We can do that by instantating a empty property with that name, and
+        // We can do that by instantiating an empty property with that name, and
         // seeing if the default valueType is identical to the current one.
         $tempProperty = $output->createProperty($newProperty->name);
         if ($tempProperty->getValueType() !== $newProperty->getValueType()) {
@@ -242,16 +251,15 @@ class VCardConverter
      *
      * vCard 4.0 no longer supports BINARY properties.
      *
-     * @param Component\VCard $output
-     * @param Property\Uri    $property the input property
-     * @param $parameters list of parameters that will eventually be added to
-     *                    the new property
+     * @param array $parameters list of parameters that will eventually be added to
+     *                          the new property
      *
-     * @return Property\Uri
+     * @throws InvalidDataException
      */
-    protected function convertBinaryToUri(Component\VCard $output, Property\Binary $newProperty, array &$parameters)
+    protected function convertBinaryToUri(Component\VCard $output, Binary $newProperty, array &$parameters): Uri
     {
         $value = $newProperty->getValue();
+        /** @var Uri $newProperty */
         $newProperty = $output->createProperty(
             $newProperty->name,
             null, // no value
@@ -266,10 +274,11 @@ class VCardConverter
             $newTypes = [];
             foreach ($parameters['TYPE']->getParts() as $typePart) {
                 if (in_array(
-                    strtoupper($typePart),
-                    ['JPEG', 'PNG', 'GIF']
+                    strtoupper((string) $typePart),
+                    ['JPEG', 'PNG', 'GIF'],
+                    true
                 )) {
-                    $mimeType = 'image/'.strtolower($typePart);
+                    $mimeType = 'image/'.strtolower((string) $typePart);
                 } else {
                     $newTypes[] = $typePart;
                 }
@@ -284,7 +293,7 @@ class VCardConverter
             }
         }
 
-        $newProperty->setValue('data:'.$mimeType.';base64,'.base64_encode($value));
+        $newProperty->setValue('data:'.$mimeType.';base64,'.base64_encode((string) $value));
 
         return $newProperty;
     }
@@ -296,20 +305,20 @@ class VCardConverter
      * be valid in vCard 3.0 as well, we should convert those to BINARY if
      * possible, to improve compatibility.
      *
-     * @param Component\VCard $output
-     * @param Property\Uri    $property the input property
+     * @return Binary|Uri|null
      *
-     * @return Property\Binary|null
+     * @throws InvalidDataException
      */
-    protected function convertUriToBinary(Component\VCard $output, Property\Uri $newProperty)
+    protected function convertUriToBinary(Component\VCard $output, Uri $newProperty): Property
     {
         $value = $newProperty->getValue();
 
         // Only converting data: uris
-        if ('data:' !== substr($value, 0, 5)) {
+        if (!str_starts_with((string) $value, 'data:')) {
             return $newProperty;
         }
 
+        /** @var Binary $newProperty */
         $newProperty = $output->createProperty(
             $newProperty->name,
             null, // no value
@@ -317,12 +326,12 @@ class VCardConverter
             'BINARY'
         );
 
-        $mimeType = substr($value, 5, strpos($value, ',') - 5);
+        $mimeType = substr((string) $value, 5, strpos((string) $value, ',') - 5);
         if (strpos($mimeType, ';')) {
             $mimeType = substr($mimeType, 0, strpos($mimeType, ';'));
-            $newProperty->setValue(base64_decode(substr($value, strpos($value, ',') + 1)));
+            $newProperty->setValue(base64_decode(substr((string) $value, strpos((string) $value, ',') + 1), true));
         } else {
-            $newProperty->setValue(substr($value, strpos($value, ',') + 1));
+            $newProperty->setValue(substr((string) $value, strpos((string) $value, ',') + 1));
         }
         unset($value);
 
@@ -344,11 +353,8 @@ class VCardConverter
 
     /**
      * Adds parameters to a new property for vCard 4.0.
-     *
-     * @param Property $newProperty
-     * @param array    $parameters
      */
-    protected function convertParameters40(Property $newProperty, array $parameters)
+    protected function convertParameters40(Property $newProperty, array $parameters): void
     {
         // Adding all parameters.
         foreach ($parameters as $param) {
@@ -362,14 +368,14 @@ class VCardConverter
                 // that's now PREF=1.
                 case 'TYPE':
                     foreach ($param->getParts() as $paramPart) {
-                        if ('PREF' === strtoupper($paramPart)) {
+                        if ('PREF' === strtoupper((string) $paramPart)) {
                             $newProperty->add('PREF', '1');
                         } else {
                             $newProperty->add($param->name, $paramPart);
                         }
                     }
                     break;
-                // These no longer exist in vCard 4
+                    // These no longer exist in vCard 4
                 case 'ENCODING':
                 case 'CHARSET':
                     break;
@@ -383,11 +389,8 @@ class VCardConverter
 
     /**
      * Adds parameters to a new property for vCard 3.0.
-     *
-     * @param Property $newProperty
-     * @param array    $parameters
      */
-    protected function convertParameters30(Property $newProperty, array $parameters)
+    protected function convertParameters30(Property $newProperty, array $parameters): void
     {
         // Adding all parameters.
         foreach ($parameters as $param) {
@@ -400,18 +403,18 @@ class VCardConverter
                 case 'ENCODING':
                     // This value only existed in vCard 2.1, and should be
                     // removed for anything else.
-                    if ('QUOTED-PRINTABLE' !== strtoupper($param->getValue())) {
+                    if ('QUOTED-PRINTABLE' !== strtoupper((string) $param->getValue())) {
                         $newProperty->add($param->name, $param->getParts());
                     }
                     break;
 
-                /*
-                 * Converting PREF=1 to TYPE=PREF.
-                 *
-                 * Any other PREF numbers we'll drop.
-                 */
+                    /*
+                     * Converting PREF=1 to TYPE=PREF.
+                     *
+                     * Any other PREF numbers we'll drop.
+                     */
                 case 'PREF':
-                    if ('1' == $param->getValue()) {
+                    if ('1' === (string) $param->getValue()) {
                         $newProperty->add('TYPE', 'PREF');
                     }
                     break;

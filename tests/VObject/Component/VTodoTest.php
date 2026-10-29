@@ -2,20 +2,19 @@
 
 namespace Sabre\VObject\Component;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Reader;
 
 class VTodoTest extends TestCase
 {
-    /**
-     * @dataProvider timeRangeTestData
-     */
-    public function testInTimeRange(VTodo $vtodo, $start, $end, $outcome)
+    #[DataProvider('timeRangeTestData')]
+    public function testInTimeRange(VTodo $vtodo, \DateTime $start, \DateTime $end, bool $outcome): void
     {
-        $this->assertEquals($outcome, $vtodo->isInTimeRange($start, $end));
+        self::assertEquals($outcome, $vtodo->isInTimeRange($start, $end));
     }
 
-    public function timeRangeTestData()
+    public static function timeRangeTestData(): array
     {
         $tests = [];
 
@@ -64,7 +63,7 @@ class VTodoTest extends TestCase
         return $tests;
     }
 
-    public function testValidate()
+    public function testValidate(): void
     {
         $input = <<<HI
 BEGIN:VCALENDAR
@@ -85,10 +84,35 @@ HI;
             $messages[] = $warning['message'];
         }
 
-        $this->assertEquals([], $messages);
+        self::assertEquals([], $messages);
     }
 
-    public function testValidateInvalid()
+    public function testValidateExtraProperty(): void
+    {
+        $input = <<<HI
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:YoYo
+BEGIN:VTODO
+UID:1234-21355-123156
+DTSTAMP:20140402T183400Z
+PERCENT:80
+END:VTODO
+END:VCALENDAR
+HI;
+
+        $obj = Reader::read($input);
+
+        $warnings = $obj->validate();
+        $messages = [];
+        foreach ($warnings as $warning) {
+            $messages[] = $warning['message'];
+        }
+
+        self::assertEquals([], $messages);
+    }
+
+    public function testValidateInvalid(): void
     {
         $input = <<<HI
 BEGIN:VCALENDAR
@@ -107,13 +131,13 @@ HI;
             $messages[] = $warning['message'];
         }
 
-        $this->assertEquals([
+        self::assertEquals([
             'UID MUST appear exactly once in a VTODO component',
             'DTSTAMP MUST appear exactly once in a VTODO component',
         ], $messages);
     }
 
-    public function testValidateDUEDTSTARTMisMatch()
+    public function testValidateDueDateTimeStartMisMatch(): void
     {
         $input = <<<HI
 BEGIN:VCALENDAR
@@ -136,12 +160,12 @@ HI;
             $messages[] = $warning['message'];
         }
 
-        $this->assertEquals([
+        self::assertEquals([
             'The value type (DATE or DATE-TIME) must be identical for DUE and DTSTART',
         ], $messages);
     }
 
-    public function testValidateDUEbeforeDTSTART()
+    public function testValidateDueBeforeDateTimeStart(): void
     {
         $input = <<<HI
 BEGIN:VCALENDAR
@@ -164,8 +188,35 @@ HI;
             $messages[] = $warning['message'];
         }
 
-        $this->assertEquals([
+        self::assertEquals([
             'DUE must occur after DTSTART',
+        ], $messages);
+    }
+
+    public function testValidateDuplicatePercentComplete(): void
+    {
+        $input = <<<HI
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:YoYo
+BEGIN:VTODO
+UID:8ed267e1-67c4-467d-8ae2-28e6ff03b033
+DTSTAMP:20240729T133309Z
+PERCENT-COMPLETE:70
+PERCENT-COMPLETE:80
+END:VTODO
+END:VCALENDAR
+HI;
+        $obj = Reader::read($input);
+
+        $warnings = $obj->validate();
+        $messages = [];
+        foreach ($warnings as $warning) {
+            $messages[] = $warning['message'];
+        }
+
+        self::assertEquals([
+            'PERCENT-COMPLETE MUST NOT appear more than once in a VTODO component',
         ], $messages);
     }
 }

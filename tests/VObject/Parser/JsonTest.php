@@ -2,37 +2,39 @@
 
 namespace Sabre\VObject\Parser;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject;
+use Sabre\VObject\ParseException;
 
 class JsonTest extends TestCase
 {
-    public function testRoundTripJCard()
+    public function testRoundTripJCard(): void
     {
         $input = [
             'vcard',
             [
                 [
                     'version',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     '4.0',
                 ],
                 [
                     'prodid',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     '-//Sabre//Sabre VObject '.VObject\Version::VERSION.'//EN',
                 ],
                 [
                     'uid',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     'foo',
                 ],
                 [
                     'bday',
-                    new \StdClass(),
+                    new \stdClass(),
                     'date-and-or-time',
                     '1985-04-07',
                 ],
@@ -46,25 +48,25 @@ class JsonTest extends TestCase
                 ],
                 [
                     'bday',
-                    new \StdClass(),
+                    new \stdClass(),
                     'date-time',
                     '1979-12-25T02:00:00',
                 ],
                 [
                     'rev',
-                    new \StdClass(),
+                    new \stdClass(),
                     'timestamp',
                     '1995-10-31T22:27:10Z',
                 ],
                 [
                     'lang',
-                    new \StdClass(),
+                    new \stdClass(),
                     'language-tag',
                     'nl',
                 ],
                 [
                     'n',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     ['Last', 'First', 'Middle', '', ''],
                 ],
@@ -86,70 +88,70 @@ class JsonTest extends TestCase
                 ],
                 [
                     'adr',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
-                        [
-                            '',
-                            '',
-                            ['My Street', 'Left Side', 'Second Shack'],
-                            'Hometown',
-                            'PA',
-                            '18252',
-                            'U.S.A',
-                        ],
+                    [
+                        '',
+                        '',
+                        ['My Street', 'Left Side', 'Second Shack'],
+                        'Hometown',
+                        'PA',
+                        '18252',
+                        'U.S.A',
+                    ],
                 ],
 
                 [
                     'x-truncated',
-                    new \StdClass(),
+                    new \stdClass(),
                     'date',
                     '--12-25',
                 ],
                 [
                     'x-time-local',
-                    new \StdClass(),
+                    new \stdClass(),
                     'time',
                     '12:30:00',
                 ],
                 [
                     'x-time-utc',
-                    new \StdClass(),
+                    new \stdClass(),
                     'time',
                     '12:30:00Z',
                 ],
                 [
                     'x-time-offset',
-                    new \StdClass(),
+                    new \stdClass(),
                     'time',
                     '12:30:00-08:00',
                 ],
                 [
                     'x-time-reduced',
-                    new \StdClass(),
+                    new \stdClass(),
                     'time',
                     '23',
                 ],
                 [
                     'x-time-truncated',
-                    new \StdClass(),
+                    new \stdClass(),
                     'time',
                     '--30',
                 ],
                 [
                     'x-karma-points',
-                    new \StdClass(),
+                    new \stdClass(),
                     'integer',
                     42,
                 ],
                 [
                     'x-grade',
-                    new \StdClass(),
+                    new \stdClass(),
                     'float',
                     1.3,
                 ],
                 [
                     'tz',
-                    new \StdClass(),
+                    new \stdClass(),
                     'utc-offset',
                     '-05:00',
                 ],
@@ -188,34 +190,34 @@ TZ;VALUE=UTC-OFFSET:-0500
 END:VCARD
 
 VCF;
-        $this->assertEquals($expected, str_replace("\r", '', $result));
+        self::assertEquals($expected, str_replace("\r", '', $result));
 
-        $this->assertEquals(
+        self::assertEquals(
             $input,
             $vobj->jsonSerialize()
         );
     }
 
-    public function testRoundTripJCal()
+    public function testRoundTripJCal(): void
     {
         $input = [
             'vcalendar',
             [
                 [
                     'version',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     '2.0',
                 ],
                 [
                     'prodid',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     '-//Sabre//Sabre VObject '.VObject\Version::VERSION.'//EN',
                 ],
                 [
                     'calscale',
-                    new \StdClass(),
+                    new \stdClass(),
                     'text',
                     'GREGORIAN',
                 ],
@@ -224,25 +226,25 @@ VCF;
                 ['vevent',
                     [
                         [
-                            'uid', new \StdClass(), 'text', 'foo',
+                            'uid', new \stdClass(), 'text', 'foo',
                         ],
                         [
-                            'dtstart', new \StdClass(), 'date', '2013-05-26',
+                            'dtstart', new \stdClass(), 'date', '2013-05-26',
                         ],
                         [
-                            'duration', new \StdClass(), 'duration', 'P1D',
+                            'duration', new \stdClass(), 'duration', 'P1D',
                         ],
                         [
-                            'categories', new \StdClass(), 'text', 'home', 'testing',
+                            'categories', new \stdClass(), 'text', 'home', 'testing',
                         ],
                         [
-                            'created', new \StdClass(), 'date-time', '2013-05-26T18:10:00Z',
+                            'created', new \stdClass(), 'date-time', '2013-05-26T18:10:00Z',
                         ],
                         [
-                            'attach', new \StdClass(), 'binary', base64_encode('attachment'),
+                            'attach', new \stdClass(), 'binary', base64_encode('attachment'),
                         ],
                         [
-                            'attendee', new \StdClass(), 'cal-address', 'mailto:armin@example.org',
+                            'attendee', new \stdClass(), 'cal-address', 'mailto:armin@example.org',
                         ],
                         [
                             'attendee',
@@ -254,41 +256,41 @@ VCF;
                             'mailto:dominik@example.org',
                         ],
                         [
-                            'geo', new \StdClass(), 'float', [51.96668, 7.61876],
+                            'geo', new \stdClass(), 'float', [51.96668, 7.61876],
                         ],
                         [
-                            'sequence', new \StdClass(), 'integer', 5,
+                            'sequence', new \stdClass(), 'integer', 5,
                         ],
                         [
-                            'freebusy', new \StdClass(), 'period',  ['2013-05-26T21:02:13', 'PT1H'], ['2013-06-26T12:00:00', '2013-06-26T13:00:00'],
+                            'freebusy', new \stdClass(), 'period',  ['2013-05-26T21:02:13Z', 'PT1H'], ['2013-06-26T12:00:00Z', '2013-06-26T13:00:00Z'],
                         ],
                         [
-                            'url', new \StdClass(), 'uri', 'http://example.org/',
+                            'url', new \stdClass(), 'uri', 'http://example.org/',
                         ],
                         [
-                            'tzoffsetfrom', new \StdClass(), 'utc-offset', '+05:00',
+                            'tzoffsetfrom', new \stdClass(), 'utc-offset', '+05:00',
                         ],
                         [
-                            'rrule', new \StdClass(), 'recur', [
+                            'rrule', new \stdClass(), 'recur', [
                                 'freq' => 'WEEKLY',
                                 'byday' => ['MO', 'TU'],
                             ],
                         ],
                         [
-                            'x-bool', new \StdClass(), 'boolean', true,
+                            'x-bool', new \stdClass(), 'boolean', true,
                         ],
                         [
-                            'x-time', new \StdClass(), 'time', '08:00:00',
+                            'x-time', new \stdClass(), 'time', '08:00:00',
                         ],
                         [
                             'request-status',
-                            new \StdClass(),
+                            new \stdClass(),
                             'text',
                             ['2.0', 'Success'],
                         ],
                         [
                             'request-status',
-                            new \StdClass(),
+                            new \stdClass(),
                             'text',
                             ['3.7', 'Invalid Calendar User', 'ATTENDEE:mailto:jsmith@example.org'],
                         ],
@@ -297,7 +299,7 @@ VCF;
                         ['valarm',
                             [
                                 [
-                                    'action', new \StdClass(), 'text', 'DISPLAY',
+                                    'action', new \stdClass(), 'text', 'DISPLAY',
                                 ],
                             ],
                             [],
@@ -329,7 +331,7 @@ ATTENDEE:mailto:armin@example.org
 ATTENDEE;CN=Dominik;PARTSTAT=DECLINED:mailto:dominik@example.org
 GEO:51.96668;7.61876
 SEQUENCE:5
-FREEBUSY:20130526T210213/PT1H,20130626T120000/20130626T130000
+FREEBUSY:20130526T210213Z/PT1H,20130626T120000Z/20130626T130000Z
 URL;VALUE=URI:http://example.org/
 TZOFFSETFROM:+0500
 RRULE:FREQ=WEEKLY;BYDAY=MO,TU
@@ -344,21 +346,21 @@ END:VEVENT
 END:VCALENDAR
 
 VCF;
-        $this->assertEquals($expected, str_replace("\r", '', $result));
+        self::assertEquals($expected, str_replace("\r", '', $result));
 
-        $this->assertEquals(
+        self::assertEquals(
             $input,
             $vobj->jsonSerialize()
         );
     }
 
-    public function testParseStreamArg()
+    public function testParseStreamArg(): void
     {
         $input = [
             'vcard',
             [
                 [
-                    'FN', new \StdClass(), 'text', 'foo',
+                    'FN', new \stdClass(), 'text', 'foo',
                 ],
             ],
         ];
@@ -368,24 +370,118 @@ VCF;
         rewind($stream);
 
         $result = VObject\Reader::readJson($stream, 0);
-        $this->assertEquals('foo', $result->FN->getValue());
+        self::assertEquals('foo', $result->FN->getValue());
     }
 
-    /**
-     * @expectedException \Sabre\VObject\ParseException
-     */
-    public function testParseInvalidData()
+    public function testParseInvalidData(): void
     {
+        $this->expectException(ParseException::class);
         $json = new Json();
         $input = [
             'vlist',
             [
                 [
-                    'FN', new \StdClass(), 'text', 'foo',
+                    'FN', new \stdClass(), 'text', 'foo',
                 ],
             ],
         ];
 
         $json->parse(json_encode($input), 0);
+    }
+
+    #[DataProvider('invalidNames')]
+    public function testParseInvalidName(array $input): void
+    {
+        $this->expectException(ParseException::class);
+        (new Json())->parse(json_encode($input));
+    }
+
+    public static function invalidNames(): array
+    {
+        $prop = fn (string $name, array $parameters = []) => [$name, (object) $parameters, 'text', 'foo'];
+
+        return [
+            'property named end' => [['vcalendar', [$prop('end')]]],
+            'property named begin' => [['vcalendar', [], [['vevent', [$prop('begin')]]]]],
+            'line break in a property name' => [['vcalendar', [$prop("x-foo:bar\r\nEND")]]],
+            'line break in a group' => [['vcard', [$prop('fn', ['group' => "a\r\nEND:VCARD\r\nX"])]]],
+            'line break in a component name' => [['vcalendar', [], [["vevent\r\nX-FOO:bar", []]]]],
+            'nested vcalendar' => [['vcalendar', [], [['vevent', [], [['vcalendar', []]]]]]],
+            'nested vcard' => [['vcard', [], [['vcard', []]]]],
+        ];
+    }
+
+    #[DataProvider('malformedDocuments')]
+    public function testParseMalformedDocument(string $input): void
+    {
+        $this->expectException(ParseException::class);
+        (new Json())->parse($input);
+    }
+
+    public static function malformedDocuments(): array
+    {
+        $documents = [
+            // Structure
+            'root is not an array' => '"vcalendar"',
+            'empty root' => '[]',
+            'root without properties' => '["vcalendar"]',
+            'root properties are not a list' => '["vcalendar","x"]',
+            'root components are not a list' => '["vcalendar",[],"x"]',
+            'component is a string' => '["vcalendar",[],["x"]]',
+            'component is an integer' => '["vcalendar",[],[1]]',
+            'component without properties' => '["vcalendar",[],[["vevent"]]]',
+            'component properties are an object' => '["vcalendar",[],[["vevent",{}]]]',
+            'sub-components are a string' => '["vcalendar",[],[["vevent",[],"x"]]]',
+            'property is a string' => '["vcalendar",["x"]]',
+            'property without parameters' => '["vcalendar",[["summary"]]]',
+            'property without value type' => '["vcalendar",[["summary",{}]]]',
+            'property name is an object' => '["vcalendar",[[{},{},"text","a"]]]',
+            'value type is an object' => '["vcalendar",[["summary",{},{},"a"]]]',
+            'value type is an array' => '["vcalendar",[["summary",{},[],"a"]]]',
+            // Parameters
+            'parameter is an object' => '["vcalendar",[["summary",{"x-a":{"b":1}},"text","a"]]]',
+            'parameter is a list of objects' => '["vcalendar",[["summary",{"x-a":[{"b":1}]},"text","a"]]]',
+            'parameter is a nested list' => '["vcalendar",[["summary",{"x-a":[["b"]]},"text","a"]]]',
+            // Values
+            'text is an object' => '["vcalendar",[["summary",{},"text",{"a":"b"}]]]',
+            'text is nested too deep' => '["vcalendar",[["summary",{},"text",[[["a"]]]]]]',
+            'second text value is an object' => '["vcalendar",[["summary",{},"text","a",{"a":"b"}]]]',
+            'structured text has an object' => '["vcard",[["n",{},"text",["a",{"b":1}]]]]',
+            'structured text is nested too deep' => '["vcard",[["adr",{},"text",["a",["b",["c"]]]]]]',
+            'uri is an object' => '["vcalendar",[["url",{},"uri",{"a":"b"}]]]',
+            'cal-address is an object' => '["vcalendar",[],[["vevent",[["attendee",{},"cal-address",{"a":1}]]]]]',
+            'unknown is an object' => '["vcalendar",[["x-a",{},"unknown",{"a":1}]]]',
+            'date-time is an object' => '["vcalendar",[],[["vevent",[["dtstart",{},"date-time",{"a":"b"}]]]]]',
+            'date-time is an array' => '["vcalendar",[],[["vevent",[["dtstart",{},"date-time",["2026"]]]]]]',
+            'duration is a nested array' => '["vcalendar",[],[["vevent",[["duration",{},"duration",[["a"]]]]]]]',
+            'duration is an object' => '["vcalendar",[],[["vevent",[["duration",{},"duration",{"a":1}]]]]]',
+            'period is a string' => '["vcalendar",[],[["vevent",[["freebusy",{},"period","a"]]]]]',
+            'period is an object' => '["vcalendar",[],[["vevent",[["freebusy",{},"period",{"a":1}]]]]]',
+            'recur has an object part' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":{"a":1}}]]]]]',
+            'recur has a multi-valued until' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":"daily","until":["a","b"]}]]]]]',
+            'recur is an integer' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",1]]]]]',
+            'recur has two values' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":"daily"},{"freq":"daily"}]]]]]',
+            'utc-offset is an object' => '["vcalendar",[],[["vtimezone",[],[["standard",[["tzoffsetfrom",{},"utc-offset",{"a":1}]]]]]]]',
+            'binary is an object' => '["vcard",[["photo",{},"binary",{"a":1}]]]',
+            'binary is an array' => '["vcalendar",[["attach",{},"binary",["a"]]]]',
+            'time is an object' => '["vcard",[["bday",{},"time",{"a":1}]]]',
+            'date is an object' => '["vcard",[["bday",{},"date",{"a":1}]]]',
+            'timestamp is an object' => '["vcard",[["rev",{},"timestamp",{"a":1}]]]',
+            'integer is an object' => '["vcalendar",[],[["vevent",[["sequence",{},"integer",{"a":1}]]]]]',
+            'float is an object' => '["vcalendar",[],[["vevent",[["geo",{},"float",{"a":1}]]]]]',
+            'language-tag is an object' => '["vcard",[["lang",{},"language-tag",{"a":1}]]]',
+        ];
+
+        return array_map(fn (string $document) => [$document], $documents);
+    }
+
+    public function testParseValidValueShapes(): void
+    {
+        $vcard = (new Json())->parse('["vcard",[["n",{"x-a":["b","c"]},"text",["Doe",["John","J"],"","",""]],'
+            .'["geo",{},"float",[51.96668,7.61876]],["x-a",{"x-b":null},"text",null]]]');
+
+        self::assertSame(['Doe', ['John', 'J'], '', '', ''], $vcard->N->getParts());
+        self::assertSame("N;X-A=b,c:Doe;John,J;;;\r\n", $vcard->N->serialize());
+        self::assertSame('51.96668;7.61876', (string) $vcard->GEO);
     }
 }
