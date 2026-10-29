@@ -655,9 +655,9 @@ class Broker
                     'CN' => $attendee['name'],
                 ]);
 
-                if (isset($calendar->VEVENT->VALARM) && 'EMAIL' === $calendar->VEVENT->VALARM->ACTION->getValue()) {
+                if (isset($calendar->VEVENT->VALARM) && 'EMAIL' === $calendar->VEVENT->VALARM->ACTION?->getValue()) {
                     $event->add(clone $calendar->VEVENT->VALARM);
-                    $event->VALARM->ATTENDEE->setValue($attendee['href']);
+                    $event->VALARM->ATTENDEE?->setValue($attendee['href']);
                 }
                 $message->significantChange = true;
             } else {
@@ -689,8 +689,8 @@ class Broker
 
                 foreach ($attendee['newInstances'] as $instanceId => $instanceInfo) {
                     $currentEvent = clone $eventInfo['instances'][$instanceId];
-                    if (isset($currentEvent->VALARM) && 'EMAIL' === $currentEvent->VALARM->ACTION->getValue()) {
-                        $currentEvent->VALARM->ATTENDEE->setValue($attendee['href']);
+                    if (isset($currentEvent->VALARM) && 'EMAIL' === $currentEvent->VALARM->ACTION?->getValue()) {
+                        $currentEvent->VALARM->ATTENDEE?->setValue($attendee['href']);
                     }
 
                     if ('master' === $instanceId) {
@@ -721,8 +721,10 @@ class Broker
 
                         // Cleaning up any scheduling information that
                         // shouldn't be sent along.
-                        unset($currentEvent->ORGANIZER['SCHEDULE-FORCE-SEND']);
-                        unset($currentEvent->ORGANIZER['SCHEDULE-STATUS']);
+                        if (isset($currentEvent->ORGANIZER)) {
+                            unset($currentEvent->ORGANIZER['SCHEDULE-FORCE-SEND']);
+                            unset($currentEvent->ORGANIZER['SCHEDULE-STATUS']);
+                        }
 
                         foreach ($currentEvent->ATTENDEE as $currentEventAttendee) {
                             unset($currentEventAttendee['SCHEDULE-FORCE-SEND']);
