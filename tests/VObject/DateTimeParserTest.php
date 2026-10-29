@@ -47,6 +47,18 @@ class DateTimeParserTest extends TestCase
         DateTimeParser::parseDurationAsString('P1X');
     }
 
+    public function testParseEmptyString(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parse('');
+    }
+
+    public function testParseSingleDash(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parse('-');
+    }
+
     public function testParseICalendarDateTime(): void
     {
         $dateTime = DateTimeParser::parseDateTime('20100316T141405');
