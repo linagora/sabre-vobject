@@ -85,9 +85,15 @@ class Json extends Parser
      * Parses a component.
      *
      * @throws InvalidDataException
+     * @throws ParseException
      */
     public function parseComponent(array $jComp): Component
     {
+        // The name is written as-is when serializing to MimeDir.
+        if (!is_string($jComp[0] ?? null) || !preg_match('/^[A-Z0-9-]+$/i', $jComp[0])) {
+            throw new ParseException('Invalid component name');
+        }
+
         // We can remove $self from PHP 5.4 onward.
         $self = $this;
 
@@ -116,6 +122,7 @@ class Json extends Parser
      * Parses properties.
      *
      * @throws InvalidDataException
+     * @throws ParseException
      */
     public function parseProperty(array $jProp): Property
     {
@@ -126,6 +133,12 @@ class Json extends Parser
         ) = $jProp;
 
         $propertyName = strtoupper((string) $propertyName);
+
+        // The name is written as-is when serializing to MimeDir: it must not
+        // be able to produce a component boundary or another line.
+        if (!preg_match('/^[A-Z0-9-]+$/', $propertyName) || 'BEGIN' === $propertyName || 'END' === $propertyName) {
+            throw new ParseException('Invalid property name: '.$propertyName);
+        }
 
         // This is the default class we would be using if we didn't know the
         // value type. We're using this value later in this function.
@@ -138,6 +151,9 @@ class Json extends Parser
         $valueType = strtoupper((string) $valueType);
 
         if (isset($parameters['group'])) {
+            if (!is_string($parameters['group']) || !preg_match('/^[A-Z0-9-]+$/i', $parameters['group'])) {
+                throw new ParseException('Invalid group name for property '.$propertyName);
+            }
             $propertyName = $parameters['group'].'.'.$propertyName;
             unset($parameters['group']);
         }
