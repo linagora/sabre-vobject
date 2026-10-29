@@ -291,4 +291,38 @@ EOF;
 
         echo $vcard->serialize();
     }
+
+    #[DataProvider('boundaryPropertyNames')]
+    public function testPropertyNamedBeginOrEndIsRejected(string $line): void
+    {
+        $iCal = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\nEND:VEVENT\r\n"
+            .$line."\r\nEND:VCALENDAR\r\n";
+
+        $this->expectException(ParseException::class);
+        (new MimeDir())->parse($iCal);
+    }
+
+    #[DataProvider('boundaryPropertyNames')]
+    public function testPropertyNamedBeginOrEndIsIgnoredAsInvalidLine(string $line): void
+    {
+        $iCal = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\nEND:VEVENT\r\n"
+            .$line."\r\nEND:VCALENDAR\r\n";
+
+        $vcal = (new MimeDir())->parse($iCal, MimeDir::OPTION_IGNORE_INVALID_LINES);
+
+        self::assertSame(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            $vcal->serialize()
+        );
+    }
+
+    public static function boundaryPropertyNames(): array
+    {
+        return [
+            'END with a parameter' => ['END;VCALENDAR'],
+            'END with an empty group' => ['.END:VCALENDAR'],
+            'BEGIN with an empty group' => ['.BEGIN:VEVENT'],
+            'BEGIN with a group' => ['foo.begin:VEVENT'],
+        ];
+    }
 }

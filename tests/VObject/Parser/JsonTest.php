@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject\Parser;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject;
 use Sabre\VObject\ParseException;
@@ -386,5 +387,25 @@ VCF;
         ];
 
         $json->parse(json_encode($input), 0);
+    }
+
+    #[DataProvider('invalidNames')]
+    public function testParseInvalidName(array $input): void
+    {
+        $this->expectException(ParseException::class);
+        (new Json())->parse(json_encode($input));
+    }
+
+    public static function invalidNames(): array
+    {
+        $prop = fn (string $name, array $parameters = []) => [$name, (object) $parameters, 'text', 'foo'];
+
+        return [
+            'property named end' => [['vcalendar', [$prop('end')]]],
+            'property named begin' => [['vcalendar', [], [['vevent', [$prop('begin')]]]]],
+            'line break in a property name' => [['vcalendar', [$prop("x-foo:bar\r\nEND")]]],
+            'line break in a group' => [['vcard', [$prop('fn', ['group' => "a\r\nEND:VCARD\r\nX"])]]],
+            'line break in a component name' => [['vcalendar', [], [["vevent\r\nX-FOO:bar", []]]]],
+        ];
     }
 }

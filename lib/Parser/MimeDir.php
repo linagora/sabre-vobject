@@ -446,6 +446,16 @@ class MimeDir extends Parser
             throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.' did not follow iCalendar/vCard conventions');
         }
 
+        // A property named BEGIN or END would be serialized as a component
+        // boundary, changing the structure of the document.
+        $nameWithoutGroup = false !== ($i = strpos($property['name'], '.')) ? \substr($property['name'], $i + 1) : $property['name'];
+        if ('BEGIN' === $nameWithoutGroup || 'END' === $nameWithoutGroup) {
+            if ($this->options & self::OPTION_IGNORE_INVALID_LINES) {
+                return false;
+            }
+            throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': '.$nameWithoutGroup.' is not a valid property name');
+        }
+
         // vCard 2.1 states that parameters may appear without a name, and only
         // a value. We can deduce the value based on its name.
         //
