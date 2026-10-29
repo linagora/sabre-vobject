@@ -61,11 +61,12 @@ class Json extends Parser
             $this->options = $options;
         }
 
-        $this->root = match ($this->input[0]) {
+        $this->root = match ($this->input[0] ?? null) {
             'vcalendar' => new VCalendar([], false),
             'vcard' => new VCard([], false),
             default => throw new ParseException('The root component must either be a vcalendar, or a vcard'),
         };
+        self::assertComponentShape($this->input);
         foreach ($this->input[1] as $prop) {
             $this->root->add($this->parseProperty($prop));
         }
@@ -87,8 +88,12 @@ class Json extends Parser
      * @throws InvalidDataException
      * @throws ParseException
      */
-    public function parseComponent(array $jComp): Component
+    public function parseComponent(mixed $jComp): Component
     {
+        if (!is_array($jComp)) {
+            throw new ParseException('A component must be an array');
+        }
+        self::assertComponentShape($jComp);
         // The name is written as-is when serializing to MimeDir.
         if (!is_string($jComp[0] ?? null) || !preg_match('/^[A-Z0-9-]+$/i', $jComp[0])) {
             throw new ParseException('Invalid component name');
@@ -127,15 +132,24 @@ class Json extends Parser
      * @throws InvalidDataException
      * @throws ParseException
      */
-    public function parseProperty(array $jProp): Property
+    public function parseProperty(mixed $jProp): Property
     {
+        if (!is_array($jProp) || !array_is_list($jProp) || count($jProp) < 3) {
+            throw new ParseException('A property must be an array of a name, parameters, a value type and values');
+        }
+
         list(
             $propertyName,
             $parameters,
             $valueType,
         ) = $jProp;
 
-        $propertyName = strtoupper((string) $propertyName);
+        if (!is_string($propertyName) || !is_string($valueType)
+            || (!is_array($parameters) && !$parameters instanceof \stdClass)) {
+            throw new ParseException('A property must be an array of a name, parameters, a value type and values');
+        }
+
+        $propertyName = strtoupper($propertyName);
 
         // The name is written as-is when serializing to MimeDir: it must not
         // be able to produce a component boundary or another line.
@@ -148,10 +162,15 @@ class Json extends Parser
         $defaultPropertyClass = $this->root->getClassNameForPropertyName($propertyName);
 
         $parameters = (array) $parameters;
+        foreach ($parameters as $parameterName => $parameterValue) {
+            if (!self::isScalarOrList($parameterValue)) {
+                throw new ParseException('Invalid value for parameter '.$parameterName.' of property '.$propertyName);
+            }
+        }
 
         $value = array_slice($jProp, 3);
 
-        $valueType = strtoupper((string) $valueType);
+        $valueType = strtoupper($valueType);
 
         if (isset($parameters['group'])) {
             if (!is_string($parameters['group']) || !preg_match('/^[A-Z0-9-]+$/i', $parameters['group'])) {
@@ -162,6 +181,7 @@ class Json extends Parser
         }
 
         $prop = $this->root->createProperty($propertyName, null, $parameters, $valueType);
+        self::assertValues($prop, $value);
         $prop->setJsonValue($value);
 
         // We have to do something awkward here. FlatText as well as Text
@@ -183,9 +203,84 @@ class Json extends Parser
     }
 
     /**
+     * Checks a component (or the root) is an array of a name, a list of
+     * properties and an optional list of sub-components.
+     *
+     * @throws ParseException
+     */
+    private static function assertComponentShape(array $jComp): void
+    {
+        if (!is_array($jComp[1] ?? null) || (isset($jComp[2]) && !is_array($jComp[2]))) {
+            throw new ParseException('A component must be an array of a name, a list of properties and a list of components');
+        }
+    }
+
+    /**
+     * Checks the values of a property have the shape its class can handle, so
+     * that malformed values are rejected now rather than failing later, e.g.
+     * when the document is serialized.
+     *
+     * @throws ParseException
+     */
+    private static function assertValues(Property $prop, array $values): void
+    {
+        foreach ($values as $value) {
+            $valid = match (true) {
+                // A recurrence rule is an object of (lists of) scalars.
+                $prop instanceof Property\ICalendar\Recur => 1 === count($values) && (is_string($value) || (
+                    (is_array($value) || $value instanceof \stdClass)
+                    && self::all((array) $value, fn ($part, $key) => 'until' === $key ? is_scalar($part) : self::isScalarOrList($part))
+                )),
+                // A period is a [start, end or duration] pair.
+                $prop instanceof Property\ICalendar\Period => is_array($value) && array_is_list($value) && self::all($value, self::isScalar(...)),
+                // GEO is a [latitude, longitude] pair.
+                $prop instanceof Property\FloatValue => self::isScalarOrList($value),
+                $prop instanceof Property\Time,
+                $prop instanceof Property\UtcOffset,
+                $prop instanceof Property\VCard\TimeStamp => self::isScalar($value),
+                // Structured text (N, ADR, ...) has components, which may
+                // themselves have several values.
+                $prop instanceof Text => self::isScalar($value) || (
+                    is_array($value) && array_is_list($value) && self::all($value, self::isScalarOrList(...))
+                ),
+                default => self::isScalar($value),
+            };
+            if (!$valid) {
+                throw new ParseException('Invalid value for property '.$prop->name);
+            }
+        }
+    }
+
+    /**
+     * Returns true if $callback returns true for every item of $array.
+     */
+    private static function all(array $array, callable $callback): bool
+    {
+        foreach ($array as $key => $item) {
+            if (!$callback($item, $key)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function isScalar(mixed $value): bool
+    {
+        return null === $value || is_scalar($value);
+    }
+
+    private static function isScalarOrList(mixed $value): bool
+    {
+        return self::isScalar($value) || (is_array($value) && array_is_list($value) && self::all($value, self::isScalar(...)));
+    }
+
+    /**
      * Sets the input data.
      *
      * @param resource|string|array $input
+     *
+     * @throws ParseException
      */
     public function setInput($input): void
     {
@@ -194,6 +289,9 @@ class Json extends Parser
         }
         if (is_string($input)) {
             $input = json_decode($input);
+        }
+        if (!is_null($input) && !is_array($input)) {
+            throw new ParseException('A jCal or jCard document must be an array');
         }
         $this->input = $input;
     }
