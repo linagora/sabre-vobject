@@ -325,4 +325,19 @@ EOF;
             'BEGIN with a group' => ['foo.begin:VEVENT'],
         ];
     }
+
+    #[DataProvider('nestedDocuments')]
+    public function testNestedDocumentIsRejected(string $input): void
+    {
+        $this->expectException(ParseException::class);
+        (new MimeDir())->parse($input);
+    }
+
+    public static function nestedDocuments(): array
+    {
+        return [
+            'vcalendar in a vevent' => ["BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nBEGIN:vcalendar\r\nEND:vcalendar\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"],
+            'vcard in a vcard' => ["BEGIN:VCARD\r\nVERSION:4.0\r\nBEGIN:vcard\r\nEND:vcard\r\nEND:VCARD\r\n"],
+        ];
+    }
 }

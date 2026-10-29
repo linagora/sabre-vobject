@@ -93,6 +93,9 @@ class Json extends Parser
         if (!is_string($jComp[0] ?? null) || !preg_match('/^[A-Z0-9-]+$/i', $jComp[0])) {
             throw new ParseException('Invalid component name');
         }
+        if (strtoupper($jComp[0]) === $this->root->name) {
+            throw new ParseException('Unexpected component: '.$jComp[0].' in document type '.$this->root->name);
+        }
 
         // We can remove $self from PHP 5.4 onward.
         $self = $this;
