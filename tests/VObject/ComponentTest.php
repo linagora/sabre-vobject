@@ -548,6 +548,21 @@ class ComponentTest extends TestCase
         self::assertCount(1, $component->GIR);
     }
 
+    public function testValidateRepairWithAPropertyRemovedDuringValidation(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:x\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20351005T090000Z\r\nRRULE:COUNT=3\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $messages = $vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+
+        self::assertCount(1, $vcal->VEVENT->select('RRULE'));
+        self::assertSame('FREQ=DAILY;COUNT=5', (string) $vcal->VEVENT->RRULE);
+        foreach ($messages as $message) {
+            self::assertStringNotContainsString('RRULE MUST NOT appear more than once', $message['message']);
+        }
+    }
+
     public static function ruleData(): array
     {
         return [
