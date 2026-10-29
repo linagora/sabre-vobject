@@ -5,6 +5,7 @@ namespace Sabre\VObject\Recur;
 use Sabre\VObject\Component;
 use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\InvalidDataException;
+use Sabre\VObject\Property;
 use Sabre\VObject\Settings;
 
 /**
@@ -112,6 +113,7 @@ class EventIterator implements \Iterator
 
         /** @var VEvent[] $events */
         foreach ($events as $vevent) {
+            self::assertDateTimeProperties($vevent);
             if (!isset($vevent->{'RECURRENCE-ID'})) {
                 $this->masterEvent = $vevent;
             } else {
@@ -133,6 +135,10 @@ class EventIterator implements \Iterator
                 throw new \InvalidArgumentException('This VCALENDAR did not have an event with UID: '.$uid);
             }
             $this->masterEvent = array_shift($this->overriddenEvents);
+        }
+
+        if (isset($this->masterEvent->DURATION) && !$this->masterEvent->DURATION instanceof Property\ICalendar\Duration) {
+            throw new InvalidDataException('DURATION must be a duration value');
         }
 
         $this->startDate = $this->masterEvent->DTSTART->getDateTime($this->timeZone);
@@ -188,6 +194,27 @@ class EventIterator implements \Iterator
         $this->rewind();
         if (!$this->valid()) {
             throw new NoInstancesException('This recurrence rule does not generate any valid instances');
+        }
+    }
+
+    /**
+     * Ensures the date properties the iterator reads are date or date-time
+     * values, so that malformed events (e.g. RECURRENCE-ID;VALUE=PERIOD)
+     * are rejected with an InvalidDataException.
+     *
+     * @throws InvalidDataException
+     */
+    private static function assertDateTimeProperties(VEvent $vevent): void
+    {
+        if (!isset($vevent->DTSTART)) {
+            throw new InvalidDataException('A VEVENT must have a DTSTART to be expanded');
+        }
+        foreach (['DTSTART', 'DTEND', 'RECURRENCE-ID', 'EXDATE'] as $name) {
+            foreach ($vevent->select($name) as $property) {
+                if (!$property instanceof Property\ICalendar\DateTime) {
+                    throw new InvalidDataException($name.' must be a date or date-time value');
+                }
+            }
         }
     }
 
