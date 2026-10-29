@@ -483,8 +483,14 @@ class MimeDir extends Parser
         }
 
         if (isset($propObj['ENCODING']) && 'QUOTED-PRINTABLE' === strtoupper($propObj['ENCODING'])) {
-            /* @var Property\Text|Property\FlatText $propObj */
-            $propObj->setQuotedPrintableValue($this->extractQuotedPrintableValue());
+            if ($propObj instanceof Property\Text) {
+                $propObj->setQuotedPrintableValue($this->extractQuotedPrintableValue());
+            } else {
+                // Only text values are written back quoted-printable: the
+                // others keep their decoded value, without the encoding.
+                unset($propObj['ENCODING']);
+                $propObj->setRawMimeDirValue(quoted_printable_decode($this->extractQuotedPrintableValue()));
+            }
         } else {
             $charset = $this->charset;
             if (Document::VCARD21 === $this->root->getDocumentType() && isset($propObj['CHARSET'])) {
@@ -685,7 +691,9 @@ class MimeDir extends Parser
             (.*)$
         /xs';
 
-        preg_match($regex, $this->rawLine, $matches);
+        if (!preg_match($regex, $this->rawLine, $matches)) {
+            throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': could not read the quoted-printable value');
+        }
 
         $value = $matches[1];
         // Removing the first whitespace character from every line. Kind of
