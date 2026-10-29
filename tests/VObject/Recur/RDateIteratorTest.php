@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Recur;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\InvalidDataException;
 
 class RDateIteratorTest extends TestCase
 {
@@ -23,6 +24,15 @@ class RDateIteratorTest extends TestCase
         );
 
         self::assertFalse($it->isInfinite());
+    }
+
+    public function testEmptyDate(): void
+    {
+        $utc = new \DateTimeZone('UTC');
+        $it = new RDateIterator('20140901T000000Z,', new \DateTimeImmutable('2014-08-01 00:00:00', $utc));
+
+        $this->expectException(InvalidDataException::class);
+        iterator_to_array($it);
     }
 
     public function testTimezone(): void
