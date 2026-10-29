@@ -472,6 +472,10 @@ class MimeDir extends Parser
             }
         }
 
+        if (isset($namedParameters['VALUE']) && !is_string($namedParameters['VALUE'])) {
+            throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': the VALUE parameter must have a single value');
+        }
+
         $propObj = $this->root->createProperty($property['name'], null, $namedParameters, null, $this->startLine, $line);
 
         foreach ($namelessParameters as $namelessParameter) {

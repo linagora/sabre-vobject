@@ -208,6 +208,9 @@ abstract class Document extends Component
         //  type, then this parameter MUST be specified.
         if (!$valueType) {
             $valueType = $parameters['VALUE'] ?? null;
+            if (null !== $valueType && !is_string($valueType)) {
+                throw new InvalidDataException('The VALUE parameter of '.$name.' must have a single value');
+            }
         }
 
         if ($valueType) {
