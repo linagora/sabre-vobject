@@ -21,6 +21,20 @@ class QuotedPrintableTest extends TestCase
         self::assertEquals('Aachen', $this->getPropertyValue($result->LABEL));
     }
 
+    public function testReadQuotedPrintableNonTextValue(): void
+    {
+        $data = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;ENCODING=QUOTED-PRINTABLE:2026=301=301\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        $result = Reader::read($data);
+
+        self::assertInstanceOf(Property\ICalendar\DateTime::class, $result->VEVENT->DTSTART);
+        self::assertEquals('20260101', $result->VEVENT->DTSTART->getValue());
+        self::assertSame(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20260101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            $result->serialize()
+        );
+    }
+
     public function testReadQuotedPrintableNewlineSoft(): void
     {
         $data = "BEGIN:VCARD\r\nLABEL;ENCODING=QUOTED-PRINTABLE:Aa=\r\n ch=\r\n en\r\nEND:VCARD";
