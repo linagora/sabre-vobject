@@ -410,4 +410,78 @@ VCF;
             'nested vcard' => [['vcard', [], [['vcard', []]]]],
         ];
     }
+
+    #[DataProvider('malformedDocuments')]
+    public function testParseMalformedDocument(string $input): void
+    {
+        $this->expectException(ParseException::class);
+        (new Json())->parse($input);
+    }
+
+    public static function malformedDocuments(): array
+    {
+        $documents = [
+            // Structure
+            'root is not an array' => '"vcalendar"',
+            'empty root' => '[]',
+            'root without properties' => '["vcalendar"]',
+            'root properties are not a list' => '["vcalendar","x"]',
+            'root components are not a list' => '["vcalendar",[],"x"]',
+            'component is a string' => '["vcalendar",[],["x"]]',
+            'component is an integer' => '["vcalendar",[],[1]]',
+            'component without properties' => '["vcalendar",[],[["vevent"]]]',
+            'component properties are an object' => '["vcalendar",[],[["vevent",{}]]]',
+            'sub-components are a string' => '["vcalendar",[],[["vevent",[],"x"]]]',
+            'property is a string' => '["vcalendar",["x"]]',
+            'property without parameters' => '["vcalendar",[["summary"]]]',
+            'property without value type' => '["vcalendar",[["summary",{}]]]',
+            'property name is an object' => '["vcalendar",[[{},{},"text","a"]]]',
+            'value type is an object' => '["vcalendar",[["summary",{},{},"a"]]]',
+            'value type is an array' => '["vcalendar",[["summary",{},[],"a"]]]',
+            // Parameters
+            'parameter is an object' => '["vcalendar",[["summary",{"x-a":{"b":1}},"text","a"]]]',
+            'parameter is a list of objects' => '["vcalendar",[["summary",{"x-a":[{"b":1}]},"text","a"]]]',
+            'parameter is a nested list' => '["vcalendar",[["summary",{"x-a":[["b"]]},"text","a"]]]',
+            // Values
+            'text is an object' => '["vcalendar",[["summary",{},"text",{"a":"b"}]]]',
+            'text is nested too deep' => '["vcalendar",[["summary",{},"text",[[["a"]]]]]]',
+            'second text value is an object' => '["vcalendar",[["summary",{},"text","a",{"a":"b"}]]]',
+            'structured text has an object' => '["vcard",[["n",{},"text",["a",{"b":1}]]]]',
+            'structured text is nested too deep' => '["vcard",[["adr",{},"text",["a",["b",["c"]]]]]]',
+            'uri is an object' => '["vcalendar",[["url",{},"uri",{"a":"b"}]]]',
+            'cal-address is an object' => '["vcalendar",[],[["vevent",[["attendee",{},"cal-address",{"a":1}]]]]]',
+            'unknown is an object' => '["vcalendar",[["x-a",{},"unknown",{"a":1}]]]',
+            'date-time is an object' => '["vcalendar",[],[["vevent",[["dtstart",{},"date-time",{"a":"b"}]]]]]',
+            'date-time is an array' => '["vcalendar",[],[["vevent",[["dtstart",{},"date-time",["2026"]]]]]]',
+            'duration is a nested array' => '["vcalendar",[],[["vevent",[["duration",{},"duration",[["a"]]]]]]]',
+            'duration is an object' => '["vcalendar",[],[["vevent",[["duration",{},"duration",{"a":1}]]]]]',
+            'period is a string' => '["vcalendar",[],[["vevent",[["freebusy",{},"period","a"]]]]]',
+            'period is an object' => '["vcalendar",[],[["vevent",[["freebusy",{},"period",{"a":1}]]]]]',
+            'recur has an object part' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":{"a":1}}]]]]]',
+            'recur has a multi-valued until' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":"daily","until":["a","b"]}]]]]]',
+            'recur is an integer' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",1]]]]]',
+            'recur has two values' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":"daily"},{"freq":"daily"}]]]]]',
+            'utc-offset is an object' => '["vcalendar",[],[["vtimezone",[],[["standard",[["tzoffsetfrom",{},"utc-offset",{"a":1}]]]]]]]',
+            'binary is an object' => '["vcard",[["photo",{},"binary",{"a":1}]]]',
+            'binary is an array' => '["vcalendar",[["attach",{},"binary",["a"]]]]',
+            'time is an object' => '["vcard",[["bday",{},"time",{"a":1}]]]',
+            'date is an object' => '["vcard",[["bday",{},"date",{"a":1}]]]',
+            'timestamp is an object' => '["vcard",[["rev",{},"timestamp",{"a":1}]]]',
+            'integer is an object' => '["vcalendar",[],[["vevent",[["sequence",{},"integer",{"a":1}]]]]]',
+            'float is an object' => '["vcalendar",[],[["vevent",[["geo",{},"float",{"a":1}]]]]]',
+            'language-tag is an object' => '["vcard",[["lang",{},"language-tag",{"a":1}]]]',
+        ];
+
+        return array_map(fn (string $document) => [$document], $documents);
+    }
+
+    public function testParseValidValueShapes(): void
+    {
+        $vcard = (new Json())->parse('["vcard",[["n",{"x-a":["b","c"]},"text",["Doe",["John","J"],"","",""]],'
+            .'["geo",{},"float",[51.96668,7.61876]],["x-a",{"x-b":null},"text",null]]]');
+
+        self::assertSame(['Doe', ['John', 'J'], '', '', ''], $vcard->N->getParts());
+        self::assertSame("N;X-A=b,c:Doe;John,J;;;\r\n", $vcard->N->serialize());
+        self::assertSame('51.96668;7.61876', (string) $vcard->GEO);
+    }
 }
