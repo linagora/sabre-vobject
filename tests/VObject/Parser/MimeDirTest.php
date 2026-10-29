@@ -340,4 +340,11 @@ EOF;
             'vcard in a vcard' => ["BEGIN:VCARD\r\nVERSION:4.0\r\nBEGIN:vcard\r\nEND:vcard\r\nEND:VCARD\r\n"],
         ];
     }
+
+    public function testMultiValuedValueParameterIsRejected(): void
+    {
+        $this->expectException(ParseException::class);
+        (new MimeDir())->parse("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\n"
+            ."DTEND;VALUE=DATE,DATE-TIME:20260101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+    }
 }

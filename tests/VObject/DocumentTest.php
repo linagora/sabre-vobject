@@ -49,6 +49,14 @@ class DocumentTest extends TestCase
         $vcal->createComponent('vcalendar');
     }
 
+    public function testCreatePropertyRejectsAMultiValuedValueParameter(): void
+    {
+        $vcal = new Component\VCalendar([], false);
+
+        $this->expectException(InvalidDataException::class);
+        $vcal->createProperty('DTEND', '20260101', ['VALUE' => ['DATE', 'DATE-TIME']]);
+    }
+
     public function testCreate(): void
     {
         $vcal = new Component\VCalendar([], false);
