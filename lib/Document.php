@@ -154,6 +154,8 @@ abstract class Document extends Component
      * By default, a set of sensible values will be added to the component. For
      * an iCalendar object, this may be something like CALSCALE:GREGORIAN. To
      * ensure that this does not happen, set $defaults to false.
+     *
+     * @throws InvalidDataException
      */
     public function createComponent(string $name, ?array $children = null, bool $defaults = true): Component
     {
@@ -162,6 +164,9 @@ abstract class Document extends Component
 
         if (isset(static::$componentMap[$name])) {
             $class = static::$componentMap[$name];
+        }
+        if (is_a($class, Document::class, true)) {
+            throw new InvalidDataException('A '.$name.' cannot be nested in another component');
         }
         $children ??= [];
 

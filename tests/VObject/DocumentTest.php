@@ -41,6 +41,14 @@ class DocumentTest extends TestCase
         self::assertEquals("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nX-PROP;X-PARAM=3:1234256\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n", $out);
     }
 
+    public function testCreateComponentRejectsANestedDocument(): void
+    {
+        $vcal = new Component\VCalendar([], false);
+
+        $this->expectException(InvalidDataException::class);
+        $vcal->createComponent('vcalendar');
+    }
+
     public function testCreate(): void
     {
         $vcal = new Component\VCalendar([], false);
