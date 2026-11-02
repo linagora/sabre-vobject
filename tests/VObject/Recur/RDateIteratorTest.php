@@ -29,10 +29,9 @@ class RDateIteratorTest extends TestCase
     public function testEmptyDate(): void
     {
         $utc = new \DateTimeZone('UTC');
-        $it = new RDateIterator('20140901T000000Z,', new \DateTimeImmutable('2014-08-01 00:00:00', $utc));
 
         $this->expectException(InvalidDataException::class);
-        iterator_to_array($it);
+        new RDateIterator('20140901T000000Z,', new \DateTimeImmutable('2014-08-01 00:00:00', $utc));
     }
 
     public function testTimezone(): void
@@ -78,5 +77,57 @@ class RDateIteratorTest extends TestCase
         );
 
         self::assertFalse($it->isInfinite());
+    }
+
+    public function testUnsortedDates(): void
+    {
+        $utc = new \DateTimeZone('UTC');
+        $it = new RDateIterator(
+            '20260601T090000Z,20260520T090000Z,20260401T090000Z',
+            new \DateTimeImmutable('2026-05-10 09:00:00', $utc)
+        );
+
+        self::assertEquals(
+            [
+                new \DateTimeImmutable('2026-04-01 09:00:00', $utc),
+                new \DateTimeImmutable('2026-05-10 09:00:00', $utc),
+                new \DateTimeImmutable('2026-05-20 09:00:00', $utc),
+                new \DateTimeImmutable('2026-06-01 09:00:00', $utc),
+            ],
+            iterator_to_array($it)
+        );
+    }
+
+    public function testDuplicateDates(): void
+    {
+        $utc = new \DateTimeZone('UTC');
+        $it = new RDateIterator(
+            '20140901T000000Z,20140801T000000Z,20140901T000000Z',
+            new \DateTimeImmutable('2014-08-01 00:00:00', $utc)
+        );
+
+        self::assertEquals(
+            [
+                new \DateTimeImmutable('2014-08-01 00:00:00', $utc),
+                new \DateTimeImmutable('2014-09-01 00:00:00', $utc),
+            ],
+            iterator_to_array($it)
+        );
+    }
+
+    public function testFastForwardUnsorted(): void
+    {
+        $utc = new \DateTimeZone('UTC');
+        $it = new RDateIterator('20141001T000000Z,20140901T000000Z', new \DateTimeImmutable('2014-08-01 00:00:00', $utc));
+
+        $it->fastForward(new \DateTimeImmutable('2014-08-15 00:00:00'));
+
+        self::assertEquals(new \DateTimeImmutable('2014-09-01 00:00:00', $utc), $it->current());
+    }
+
+    public function testDurationValueIsInvalidData(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        new RDateIterator('PT1H', new \DateTimeImmutable('2014-08-01 00:00:00', new \DateTimeZone('UTC')));
     }
 }
