@@ -2,11 +2,13 @@
 
 namespace Sabre\VObject\ITip;
 
+use Sabre\VObject\Component;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\DateTimeParser;
 use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\ParseException;
+use Sabre\VObject\Property;
 use Sabre\VObject\Reader;
 use Sabre\VObject\Recur\EventIterator;
 use Sabre\VObject\Recur\MaxInstancesExceededException;
@@ -326,7 +328,7 @@ class Broker
                     // It's an exception to a recurring event, we try to find it in the original event to remove it
                     if (isset($component->{'RECURRENCE-ID'})) {
                         foreach ($existingObject->select('VEVENT') as $vEvent) {
-                            if (isset($vEvent->{'RECURRENCE-ID'}) && $vEvent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() === $component->{'RECURRENCE-ID'}->getDateTime()->getTimestamp()) {
+                            if (isset($vEvent->{'RECURRENCE-ID'}) && self::recurrenceId($vEvent)->getTimestamp() === self::recurrenceId($component)->getTimestamp()) {
                                 $existingObject->remove($vEvent);
 
                                 break;
@@ -362,7 +364,7 @@ class Broker
             // Finding all the instances that are cancelled.
             foreach ($itipMessage->message->VEVENT as $vevent) {
                 if (isset($vevent->{'RECURRENCE-ID'})) {
-                    $recurdate = $vevent->{'RECURRENCE-ID'}->getDateTime();
+                    $recurdate = self::recurrenceId($vevent);
                     $recurIdTimestamp = $recurdate->getTimeStamp();
 
                     $instancesToCancel[$recurIdTimestamp] = $recurdate;
@@ -375,7 +377,7 @@ class Broker
             $masterObject = null;
 
             foreach ($existingObject->VEVENT as $vevent) {
-                $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimeStamp() : 'master';
+                $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? self::recurrenceId($vevent)->getTimeStamp() : 'master';
 
                 if ('master' === $recurIdTimestamp) {
                     $masterObject = $vevent;
@@ -389,7 +391,9 @@ class Broker
                 }
             }
 
-            if (!$cancelWholeEvent) {
+            // Without a master, the cancelled instances were removed above and
+            // there is no EXDATE to update.
+            if (!$cancelWholeEvent && $masterObject) {
                 $exDates = [];
                 $masterTimeZone = $masterObject->DTSTART->getDateTime()->getTimeZone();
 
@@ -454,11 +458,16 @@ class Broker
             // Use the Unix timestamp returned by getTimestamp as a unique identifier for the recurrence.
             // The Unix timestamp will be the same for an event, even if the reply from the attendee
             // used a different format/timezone to express the event date-time.
-            $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() : 'master';
+            $recurIdDateTime = self::recurrenceId($vevent);
+            $recurIdTimestamp = $recurIdDateTime ? $recurIdDateTime->getTimestamp() : 'master';
             $attendee = $vevent->ATTENDEE;
+            if (!$attendee) {
+                // A reply without an attendee does not tell who replied.
+                continue;
+            }
             $instances[$recurIdTimestamp] = [
-                'partstat' => $attendee['PARTSTAT']->getValue(),
-                'recurIdDateTime' => isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime() : null,
+                'partstat' => isset($attendee['PARTSTAT']) ? (string) $attendee['PARTSTAT']->getValue() : 'NEEDS-ACTION',
+                'recurIdDateTime' => $recurIdDateTime,
             ];
             if (isset($vevent->{'REQUEST-STATUS'})) {
                 $requestStatus = $vevent->{'REQUEST-STATUS'}->getValue();
@@ -471,7 +480,7 @@ class Broker
         $masterObject = null;
         foreach ($existingObject->VEVENT as $vevent) {
             // Use the Unix timestamp returned by getTimestamp as a unique identifier for the recurrence.
-            $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() : 'master';
+            $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? self::recurrenceId($vevent)->getTimestamp() : 'master';
             if ('master' === $recurIdTimestamp) {
                 $masterObject = $vevent;
             }
@@ -980,10 +989,10 @@ class Broker
 
             if (isset($vevent->ORGANIZER)) {
                 if (is_null($organizer)) {
-                    $organizer = $vevent->ORGANIZER->getNormalizedValue();
+                    $organizer = self::normalizedAddress($vevent->ORGANIZER);
                     $organizerName = $vevent->ORGANIZER['CN'] ?? null;
                 } else {
-                    if (strtoupper($organizer) !== strtoupper((string) $vevent->ORGANIZER->getNormalizedValue())) {
+                    if (strtoupper($organizer) !== strtoupper(self::normalizedAddress($vevent->ORGANIZER))) {
                         throw new SameOrganizerForAllComponentsException('Every instance of the event must have the same organizer.');
                     }
                 }
@@ -1029,7 +1038,7 @@ class Broker
                 if ('master' === $recurId) {
                     $timezone = $vevent->DTSTART->getDateTime()->getTimeZone();
                 } else {
-                    $timezone = $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimeZone();
+                    $timezone = self::recurrenceId($vevent)->getTimeZone();
                 }
             }
 
@@ -1037,6 +1046,11 @@ class Broker
 
             if (isset($vevent->ATTENDEE)) {
                 foreach ($vevent->ATTENDEE as $attendee) {
+                    if (!$attendee instanceof Property\ICalendar\CalAddress) {
+                        // Not an address (e.g. ATTENDEE;VALUE=PERIOD): there
+                        // is nobody to schedule.
+                        continue;
+                    }
                     if ($this->scheduleAgentServerRules
                         && isset($attendee['SCHEDULE-AGENT'])
                         && 'CLIENT' === strtoupper((string) $attendee['SCHEDULE-AGENT']->getValue())
@@ -1053,15 +1067,16 @@ class Broker
                             strtoupper($attendee['SCHEDULE-FORCE-SEND']) :
                             null;
 
-                    if (isset($attendees[$attendee->getNormalizedValue()])) {
-                        $attendees[$attendee->getNormalizedValue()]['instances'][$recurId] = [
+                    $href = $attendee->getNormalizedValue();
+                    if (isset($attendees[$href])) {
+                        $attendees[$href]['instances'][$recurId] = [
                             'id' => $recurId,
                             'partstat' => $partStat,
                             'forceSend' => $forceSend,
                         ];
                     } else {
-                        $attendees[$attendee->getNormalizedValue()] = [
-                            'href' => $attendee->getNormalizedValue(),
+                        $attendees[$href] = [
+                            'href' => $href,
                             'instances' => [
                                 $recurId => [
                                     'id' => $recurId,
@@ -1131,5 +1146,40 @@ class Broker
             'changeHash',
             'status'
         );
+    }
+
+    /**
+     * Returns the instant of the RECURRENCE-ID of a component, or null if it
+     * has none.
+     *
+     * @throws InvalidDataException if the RECURRENCE-ID is not a date or date-time
+     */
+    private static function recurrenceId(Component $component): ?\DateTimeImmutable
+    {
+        if (!isset($component->{'RECURRENCE-ID'})) {
+            return null;
+        }
+        $recurrenceId = $component->{'RECURRENCE-ID'};
+        $dateTime = $recurrenceId instanceof Property\ICalendar\DateTime ? $recurrenceId->getDateTime() : null;
+        if (!$dateTime) {
+            throw new InvalidDataException('RECURRENCE-ID must be a date or date-time value');
+        }
+
+        return $dateTime;
+    }
+
+    /**
+     * Returns the normalized address of an ORGANIZER or ATTENDEE property.
+     *
+     * Only a CAL-ADDRESS value can be normalized. Any other value type is
+     * returned as is.
+     */
+    private static function normalizedAddress(Property $property): string
+    {
+        if ($property instanceof Property\ICalendar\CalAddress) {
+            return $property->getNormalizedValue();
+        }
+
+        return (string) $property->getValue();
     }
 }
