@@ -41,6 +41,35 @@ class DateTimeParserTest extends TestCase
         self::assertEquals($expected, DateTimeParser::parseDuration('P'));
     }
 
+    #[DataProvider('overflowingDurations')]
+    public function testParseDurationOverflowIsInvalidData(string $duration): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseDuration($duration);
+    }
+
+    public static function overflowingDurations(): array
+    {
+        return [
+            'hours' => ['PT99999999999999999999H'],
+            'days at PHP_INT_MAX' => ['P9223372036854775807DT2H'],
+            'hours at PHP_INT_MAX' => ['PT9223372036854775807H'],
+            'weeks times 7' => ['P9223372036854775807W'],
+            'weeks plus days' => ['P1317624576693539401W7D'],
+            'negative seconds' => ['-PT99999999999999999999S'],
+        ];
+    }
+
+    public function testParseDurationWithLeadingZeros(): void
+    {
+        self::assertEquals(new \DateInterval('P15DT2H'), DateTimeParser::parseDuration('P0002W001DT02H'));
+    }
+
+    public function testParseDurationLarge(): void
+    {
+        self::assertEquals(new \DateInterval('PT9999999999S'), DateTimeParser::parseDuration('PT9999999999S'));
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);
