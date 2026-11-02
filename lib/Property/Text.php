@@ -88,6 +88,11 @@ class Text extends Property
      */
     public function setRawMimeDirValue(string $val): void
     {
+        // A bare carriage return is not allowed in a TEXT value, and
+        // getRawMimeDirValue() drops it. Dropping it here as well makes the
+        // parsed value equal to the one that gets serialized.
+        $val = str_replace("\r", '', $val);
+
         $this->setValue(MimeDir::unescapeValue($val, $this->delimiter));
     }
 
