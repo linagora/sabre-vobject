@@ -141,16 +141,31 @@ class DateTimeParser
         ];
 
         foreach ($parts as $part) {
-            $matches[$part] = isset($matches[$part]) && $matches[$part] ? (int) $matches[$part] : 0;
+            $value = isset($matches[$part]) ? ltrim($matches[$part], '0') : '';
+            if ('' === $value) {
+                $matches[$part] = 0;
+                continue;
+            }
+            // (int) silently saturates a number that does not fit in an
+            // integer.
+            if ((string) (int) $value !== $value) {
+                throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$duration);
+            }
+            $matches[$part] = (int) $value;
         }
 
         // We need to re-construct the $duration string, because weeks and
         // days are not supported by DateInterval in the same string.
+        $originalDuration = $duration;
         $duration = 'P';
         $days = $matches['day'];
 
         if ($matches['week']) {
             $days += $matches['week'] * 7;
+        }
+
+        if (!is_int($days)) {
+            throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$originalDuration);
         }
 
         if ($days) {
@@ -177,7 +192,11 @@ class DateTimeParser
             $duration = 'PT0S';
         }
 
-        $iv = new \DateInterval($duration);
+        try {
+            $iv = new \DateInterval($duration);
+        } catch (\Exception) {
+            throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$originalDuration);
+        }
 
         if ($invert) {
             $iv->invert = true;
