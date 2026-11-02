@@ -4,6 +4,7 @@ namespace Sabre\VObject\Property;
 
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCard;
+use Sabre\VObject\Reader;
 
 class TextTest extends TestCase
 {
@@ -75,7 +76,7 @@ class TextTest extends TestCase
         END:VCARD
         IN_WRAP;
 
-        $vcard = \Sabre\VObject\Reader::read($vcard);
+        $vcard = Reader::read($vcard);
         self::assertCount(1, $vcard->validate());
 
         self::assertCount(1, $vcard->N->getParts());
@@ -83,5 +84,27 @@ class TextTest extends TestCase
         $vcard->validate(\Sabre\VObject\Node::REPAIR);
 
         self::assertCount(5, $vcard->N->getParts());
+    }
+
+    public function testBareCarriageReturnRoundTrips(): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\rb\r\nSUMMARY:x\ry\\nz\r\n"
+            ."DTSTART:20351005T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $again = Reader::read($vcal->serialize());
+
+        self::assertSame('ab', (string) $vcal->VEVENT->UID);
+        self::assertSame((string) $vcal->VEVENT->UID, (string) $again->VEVENT->UID);
+        self::assertSame("xy\nz", (string) $vcal->VEVENT->SUMMARY);
+        self::assertSame((string) $vcal->VEVENT->SUMMARY, (string) $again->VEVENT->SUMMARY);
+    }
+
+    public function testBareCarriageReturnInStructuredValue(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nN:Do\re;Jo\rhn;;;\r\nEND:VCARD\r\n");
+
+        self::assertSame(['Doe', 'John', '', '', ''], $vcard->N->getParts());
+        self::assertSame($vcard->N->getParts(), Reader::read($vcard->serialize())->N->getParts());
     }
 }
