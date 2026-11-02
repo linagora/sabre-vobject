@@ -374,4 +374,47 @@ class DateTimeTest extends TestCase
 
         self::assertEquals("DTSTART;VALUE=DATE:20140307\r\n", $dtstart->serialize());
     }
+
+    /**
+     * A DATE-TIME property holding a duration must not fatal when it is
+     * read as a date or serialized to jCal.
+     */
+    #[DataProvider('durationValues')]
+    public function testDurationValueIsInvalidData(string $name, string $value, string $method): void
+    {
+        $event = $this->vcal->add('VEVENT', ['UID' => 'evt-1']);
+        $property = $event->add($this->vcal->createProperty($name, $value));
+
+        self::assertInstanceOf(DateTime::class, $property);
+
+        $this->expectException(InvalidDataException::class);
+        match ($method) {
+            'getJsonValue' => $property->getJsonValue(),
+            'getDateTime' => $property->getDateTime(),
+            'getDateTimes' => $property->getDateTimes(),
+        };
+    }
+
+    public static function durationValues(): array
+    {
+        $result = [];
+        foreach (['DTSTAMP' => 'PT1H', 'DTSTART' => 'P1D', 'DTEND' => '-PT5M', 'RECURRENCE-ID' => 'P'] as $name => $value) {
+            foreach (['getJsonValue', 'getDateTime', 'getDateTimes'] as $method) {
+                $result[$name.' '.$method] = [$name, $value, $method];
+            }
+        }
+
+        return $result;
+    }
+
+    public function testJsonSerializeOfADurationValueIsInvalidData(): void
+    {
+        $vcal = \Sabre\VObject\Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:evt-1\r\nDTSTAMP:PT1H\r\n"
+            ."DTSTART:20361005T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $this->expectException(InvalidDataException::class);
+        $vcal->jsonSerialize();
+    }
 }
