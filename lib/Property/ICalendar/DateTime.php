@@ -145,7 +145,7 @@ class DateTime extends Property
      * property or floating time, we will use the DateTimeZone argument to
      * figure out the exact date.
      *
-     * @return \DateInterval[]|\DateTimeImmutable[]
+     * @return \DateTimeImmutable[]
      *
      * @throws InvalidDataException
      */
@@ -161,7 +161,12 @@ class DateTime extends Property
 
         $dts = [];
         foreach ($this->getParts() as $part) {
-            $dts[] = DateTimeParser::parse($part, $timeZone);
+            $dt = DateTimeParser::parse((string) $part, $timeZone);
+            // parse() also accepts durations, which are not valid here.
+            if (!$dt instanceof \DateTimeImmutable) {
+                throw new InvalidDataException('The supplied value ('.$part.') is not a correct '.$this->getValueType());
+            }
+            $dts[] = $dt;
         }
 
         return $dts;
