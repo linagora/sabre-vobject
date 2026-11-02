@@ -30,6 +30,103 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testMinutely(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=15;COUNT=4',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-01 23:50:00',
+                '2026-11-02 00:05:00',
+                '2026-11-02 00:20:00',
+                '2026-11-02 00:35:00',
+            ]
+        );
+    }
+
+    public function testMinutelyWithoutEnd(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-01 23:50:00',
+                '2026-11-01 23:51:00',
+                '2026-11-01 23:52:00',
+            ]
+        );
+    }
+
+    public function testMinutelyUntil(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=20;UNTIL=20261102T003000Z',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-01 23:50:00',
+                '2026-11-02 00:10:00',
+                '2026-11-02 00:30:00',
+            ]
+        );
+    }
+
+    public function testMinutelyFastForward(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=10',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-02 01:00:00',
+                '2026-11-02 01:10:00',
+            ],
+            '2026-11-02 00:55:00'
+        );
+    }
+
+    public function testMinutelyAcrossDstEnd(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=30;COUNT=4',
+            '2026-10-25 01:30:00',
+            [
+                '2026-10-25 01:30:00',
+                '2026-10-25 02:00:00',
+                '2026-10-25 02:30:00',
+                '2026-10-25 02:00:00',
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testMinutelyAcrossDstStart(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=30;COUNT=3',
+            '2026-03-29 01:30:00',
+            [
+                '2026-03-29 01:30:00',
+                '2026-03-29 03:00:00',
+                '2026-03-29 03:30:00',
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testSecondly(): void
+    {
+        $this->parse(
+            'FREQ=SECONDLY;INTERVAL=30;COUNT=3',
+            '2026-11-01 23:59:00',
+            [
+                '2026-11-01 23:59:00',
+                '2026-11-01 23:59:30',
+                '2026-11-02 00:00:00',
+            ]
+        );
+    }
+
     /**
      * @param string[] $expected
      */
