@@ -152,15 +152,19 @@ class EventIterator implements \Iterator
             }
         }
 
+        // The duration of an all-day event is a number of whole days. It is
+        // measured in UTC, so that a change of UTC offset in the reference
+        // timezone does not shorten or lengthen it.
+        $durationTimeZone = $this->allDay ? new \DateTimeZone('UTC') : $this->timeZone;
+        $durationStart = $this->masterEvent->DTSTART->getDateTime($durationTimeZone);
         if (isset($this->masterEvent->DTEND)) {
             $this->eventDuration =
-                $this->masterEvent->DTEND->getDateTime($this->timeZone)->getTimeStamp() -
-                $this->startDate->getTimeStamp();
+                $this->masterEvent->DTEND->getDateTime($durationTimeZone)->getTimeStamp() -
+                $durationStart->getTimeStamp();
         } elseif (isset($this->masterEvent->DURATION)) {
             $duration = $this->masterEvent->DURATION->getDateInterval();
-            $end = clone $this->startDate;
-            $end = $end->add($duration);
-            $this->eventDuration = $end->getTimeStamp() - $this->startDate->getTimeStamp();
+            $end = $durationStart->add($duration);
+            $this->eventDuration = $end->getTimeStamp() - $durationStart->getTimeStamp();
         } elseif ($this->allDay) {
             $this->eventDuration = 3600 * 24;
         } else {
@@ -266,9 +270,16 @@ class EventIterator implements \Iterator
         if ($this->currentOverriddenEvent && $this->currentOverriddenEvent->DTEND) {
             return $this->currentOverriddenEvent->DTEND->getDateTime($this->timeZone);
         }
-        $end = clone $this->currentDate;
+        if ($this->allDay) {
+            // All-day events last a number of whole days: add them to the
+            // wall-clock date, whatever the UTC offset changes in between.
+            return $this->currentDate->modify('+'.$this->eventDuration.' seconds');
+        }
 
-        return $end->modify('+'.$this->eventDuration.' seconds');
+        // The duration is elapsed time: modify('+N seconds') would add it to
+        // the wall-clock time, which is off by the offset change when the
+        // instance spans a DST transition.
+        return $this->currentDate->setTimestamp($this->currentDate->getTimestamp() + $this->eventDuration);
     }
 
     /**
