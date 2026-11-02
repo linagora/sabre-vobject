@@ -133,6 +133,14 @@ class RRuleIterator implements \Iterator
         // Otherwise, we find the next event in the normal RRULE
         // sequence.
         switch ($this->frequency) {
+            case 'secondly':
+                $this->nextSecondly();
+                break;
+
+            case 'minutely':
+                $this->nextMinutely();
+                break;
+
             case 'hourly':
                 $this->nextHourly();
                 break;
@@ -357,6 +365,25 @@ class RRuleIterator implements \Iterator
             $this->currentDate = $this->currentDate->sub(new \DateInterval('PT'.$this->hourJump.'H'));
             $this->hourJump = 0;
         }
+    }
+
+    /**
+     * Does the processing for advancing the iterator for secondly frequency.
+     *
+     * The interval is elapsed time: modify() would add it to the wall-clock
+     * time and skip or repeat an hour on a DST change.
+     */
+    protected function nextSecondly(): void
+    {
+        $this->currentDate = $this->currentDate->setTimestamp($this->currentDate->getTimestamp() + $this->interval);
+    }
+
+    /**
+     * Does the processing for advancing the iterator for minutely frequency.
+     */
+    protected function nextMinutely(): void
+    {
+        $this->currentDate = $this->currentDate->setTimestamp($this->currentDate->getTimestamp() + $this->interval * 60);
     }
 
     /**
