@@ -34,7 +34,7 @@ class RDateIterator implements \Iterator
         protected \DateTimeInterface $startDate)
     {
         $this->parseRDate($rrule);
-        $this->currentDate = clone $this->startDate;
+        $this->currentDate = $this->dates[0];
     }
 
     /* Implementation of the Iterator interface {{{ */
@@ -65,7 +65,7 @@ class RDateIterator implements \Iterator
     #[\ReturnTypeWillChange]
     public function valid(): bool
     {
-        return $this->counter <= count($this->dates);
+        return $this->counter < count($this->dates);
     }
 
     /**
@@ -74,14 +74,12 @@ class RDateIterator implements \Iterator
     #[\ReturnTypeWillChange]
     public function rewind(): void
     {
-        $this->currentDate = clone $this->startDate;
         $this->counter = 0;
+        $this->currentDate = $this->dates[0];
     }
 
     /**
      * Goes on to the next iteration.
-     *
-     * @throws InvalidDataException
      */
     #[\ReturnTypeWillChange]
     public function next(): void
@@ -91,11 +89,7 @@ class RDateIterator implements \Iterator
             return;
         }
 
-        $this->currentDate =
-            DateTimeParser::parse(
-                $this->dates[$this->counter - 1],
-                $this->startDate->getTimezone()
-            );
+        $this->currentDate = $this->dates[$this->counter];
     }
 
     /* End of Iterator implementation }}} */
@@ -111,8 +105,6 @@ class RDateIterator implements \Iterator
     /**
      * This method allows you to quickly go to the next occurrence after the
      * specified date.
-     *
-     * @throws InvalidDataException
      */
     public function fastForward(\DateTimeInterface $dt): void
     {
@@ -137,10 +129,16 @@ class RDateIterator implements \Iterator
     /* }}} */
 
     /**
-     * This method receives a string from an RRULE property, and populates this
+     * This method receives a string from an RDATE property, and populates this
      * class with all the values.
      *
+     * The start date and the RDATE values are sorted chronologically, and a
+     * value equal to an earlier one is only kept once, so that the iterator
+     * yields the recurrence set in ascending order.
+     *
      * @param string|array $rdate
+     *
+     * @throws InvalidDataException
      */
     protected function parseRDate($rdate): void
     {
@@ -148,11 +146,26 @@ class RDateIterator implements \Iterator
             $rdate = explode(',', $rdate);
         }
 
-        $this->dates = $rdate;
+        $dates = [$this->startDate->getTimestamp() => clone $this->startDate];
+        foreach ($rdate as $value) {
+            if (!is_string($value)) {
+                throw new InvalidDataException('RDATE values must be dates or date-times');
+            }
+            $date = DateTimeParser::parse($value, $this->startDate->getTimezone());
+            if (!$date instanceof \DateTimeInterface) {
+                throw new InvalidDataException('RDATE values must be dates or date-times, got: '.$value);
+            }
+            $dates[$date->getTimestamp()] ??= $date;
+        }
+        ksort($dates);
+
+        $this->dates = array_values($dates);
     }
 
     /**
-     * Array with the RRULE dates.
+     * The start date and the RDATE dates, in chronological order.
+     *
+     * @var \DateTimeInterface[]
      */
     protected array $dates = [];
 }

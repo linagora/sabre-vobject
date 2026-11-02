@@ -176,6 +176,14 @@ class EventIterator implements \Iterator
                 $rdateValues,
                 $this->startDate
             );
+            if (isset($this->masterEvent->RRULE)) {
+                // The recurrence set is the union of the RRULE and RDATE
+                // instances.
+                $this->recurIterator = new RecurrenceSetIterator(
+                    new RRuleIterator($this->masterEvent->RRULE->getParts(), $this->startDate),
+                    $this->recurIterator
+                );
+            }
         } elseif (isset($this->masterEvent->RRULE)) {
             $this->recurIterator = new RRuleIterator(
                 $this->masterEvent->RRULE->getParts(),
@@ -439,7 +447,7 @@ class EventIterator implements \Iterator
     /**
      * RRULE parser.
      *
-     * @var RRuleIterator|RDateIterator
+     * @var RRuleIterator|RDateIterator|RecurrenceSetIterator
      */
     protected \Iterator $recurIterator;
 
