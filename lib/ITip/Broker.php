@@ -396,6 +396,10 @@ class Broker
             // there is no EXDATE to update.
             if (!$cancelWholeEvent && $masterObject) {
                 $exDates = [];
+                // VALUE=TEXT or VALUE=PERIOD gives DTSTART another class.
+                if (!$masterObject->DTSTART instanceof Property\ICalendar\DateTime) {
+                    throw new InvalidDataException('The DTSTART of an event MUST be a DATE or DATE-TIME value.');
+                }
                 $masterTimeZone = $masterObject->DTSTART->getDateTime()->getTimeZone();
 
                 if (isset($masterObject->EXDATE)) {
@@ -999,6 +1003,10 @@ class Broker
 
             if (!isset($vevent->DTSTART)) {
                 throw new ITipException('An event MUST have a DTSTART property.');
+            }
+            // VALUE=TEXT or VALUE=PERIOD gives DTSTART another class.
+            if (!$vevent->DTSTART instanceof Property\ICalendar\DateTime) {
+                throw new ITipException('The DTSTART of an event MUST be a DATE or DATE-TIME value.');
             }
 
             if (isset($vevent->ORGANIZER)) {
