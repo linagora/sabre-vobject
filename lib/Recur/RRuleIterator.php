@@ -471,7 +471,9 @@ class RRuleIterator implements \Iterator
             $recurrenceHours = $this->getHours();
         }
 
-        $recurrenceDays = [];
+        // Without BYDAY, the weekday comes from DTSTART (RFC 5545 section
+        // 3.3.10): BYHOUR only expands the hours of that day.
+        $recurrenceDays = [(int) $this->startDate->format('w')];
         if ($this->byDay) {
             $recurrenceDays = $this->getDays();
         }
@@ -510,7 +512,7 @@ class RRuleIterator implements \Iterator
             }
 
             // We have a match
-        } while (($this->byDay && !in_array($currentDay, $recurrenceDays, true)) || ($this->byHour && !in_array($currentHour, $recurrenceHours, true)));
+        } while (!in_array($currentDay, $recurrenceDays, true) || ($this->byHour && !in_array($currentHour, $recurrenceHours, true)));
     }
 
     /**
