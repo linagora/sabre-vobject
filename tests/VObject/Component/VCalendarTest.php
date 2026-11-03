@@ -832,4 +832,25 @@ ICS;
         self::assertCount(1, $expanded->select('VEVENT'));
         self::assertSame('20261110T090000Z', (string) $expanded->VEVENT->{'RECURRENCE-ID'});
     }
+
+    public function testExpandNonRecurringMasterWithOverride(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:moved\r\nDTSTAMP:20261103T100000Z\r\nRECURRENCE-ID:20260325T100000Z\r\n"
+            ."DTSTART:20260326T100000Z\r\nDTEND:20260326T110000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:moved\r\nDTSTAMP:20261103T100000Z\r\n"
+            ."DTSTART:20260325T100000Z\r\nDTEND:20260325T110000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:other\r\nDTSTAMP:20261103T100000Z\r\n"
+            ."DTSTART:20260327T100000Z\r\nDTEND:20260327T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-03-01T00:00:00Z'), new \DateTimeImmutable('2026-04-01T00:00:00Z'));
+        $events = [];
+        foreach ($expanded->select('VEVENT') as $event) {
+            $events[] = $event->UID.' '.$event->DTSTART.' '.$event->{'RECURRENCE-ID'};
+        }
+        sort($events);
+        self::assertSame([
+            'moved 20260326T100000Z 20260325T100000Z',
+            'other 20260327T100000Z ',
+        ], $events);
+    }
 }

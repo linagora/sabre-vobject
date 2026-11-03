@@ -299,6 +299,17 @@ class VCalendar extends VObject\Document
             return $component;
         };
 
+        // A UID is recurring when any of its VEVENTs is: its other VEVENTs,
+        // such as a master without RRULE whose instance was overridden, are
+        // then expanded with it.
+        $recurringUids = [];
+        foreach ($this->select('VEVENT') as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'}) || isset($vevent->RRULE) || isset($vevent->RDATE)) {
+                $recurringUids[(string) $vevent->UID] = true;
+            }
+        }
+        unset($recurringUids['']);
+
         foreach ($this->children() as $child) {
             if ($child instanceof Property && 'PRODID' !== $child->name) {
                 // We explicitly want to ignore PRODID, because we want to
@@ -307,7 +318,7 @@ class VCalendar extends VObject\Document
             } elseif ($child instanceof Component && 'VTIMEZONE' !== $child->name) {
                 // We're also stripping all VTIMEZONE objects because we're
                 // converting everything to UTC.
-                if ('VEVENT' === $child->name && (isset($child->{'RECURRENCE-ID'}) || isset($child->RRULE) || isset($child->RDATE))) {
+                if ('VEVENT' === $child->name && (isset($child->{'RECURRENCE-ID'}) || isset($child->RRULE) || isset($child->RDATE) || isset($recurringUids[(string) $child->UID]))) {
                     // Handle these a bit later.
                     $uid = (string) $child->UID;
                     if (!$uid) {
