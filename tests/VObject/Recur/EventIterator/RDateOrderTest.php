@@ -130,4 +130,55 @@ class RDateOrderTest extends TestCase
         $it->fastForward(new \DateTimeImmutable('2026-06-03 11:00:00Z'));
         self::assertSame('2026-06-03 12:00', $it->current()->format('Y-m-d H:i'));
     }
+
+    public function testRDatesInTheirOwnTimeZone(): void
+    {
+        $vcal = self::event(
+            "DTSTART;TZID=Europe/Paris:20260601T090000\r\nDTEND;TZID=Europe/Paris:20260601T100000\r\n"
+            ."RDATE:20260520T090000Z\r\n"
+            ."RDATE;TZID=America/New_York:20260519T230000\r\n"
+            ."RDATE:20260610T090000\r\n"
+        );
+
+        $starts = [];
+        foreach (new EventIterator($vcal->VEVENT) as $start) {
+            $starts[] = $start->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i');
+        }
+        // 23:00 in New York is 03:00Z, a floating RDATE is in the time zone of DTSTART.
+        self::assertSame(['2026-05-20 03:00', '2026-05-20 09:00', '2026-06-01 07:00', '2026-06-10 07:00'], $starts);
+
+        self::assertTrue($vcal->VEVENT->isInTimeRange(
+            new \DateTimeImmutable('2026-05-20 02:00:00Z'),
+            new \DateTimeImmutable('2026-05-20 04:00:00Z')
+        ));
+        self::assertFalse($vcal->VEVENT->isInTimeRange(
+            new \DateTimeImmutable('2026-05-19 20:00:00Z'),
+            new \DateTimeImmutable('2026-05-19 22:00:00Z')
+        ));
+    }
+
+    public function testRDatePeriods(): void
+    {
+        $vcal = self::event(
+            "DTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\n"
+            ."RDATE;VALUE=PERIOD:20260620T090000Z/PT2H,20260520T090000Z/20260520T110000Z\r\n"
+        );
+
+        self::assertSame(['2026-05-20 09:00', '2026-06-01 09:00', '2026-06-20 09:00'], self::starts($vcal));
+        self::assertTrue($vcal->VEVENT->isInTimeRange(
+            new \DateTimeImmutable('2026-05-20 08:00:00Z'),
+            new \DateTimeImmutable('2026-05-20 11:00:00Z')
+        ));
+    }
+
+    public function testRDateNotADate(): void
+    {
+        $vcal = self::event(
+            "DTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\n"
+            ."RDATE;VALUE=PERIOD:PT2H/20260520T110000Z\r\n"
+        );
+
+        $this->expectException(\Sabre\VObject\InvalidDataException::class);
+        new EventIterator($vcal->VEVENT);
+    }
 }

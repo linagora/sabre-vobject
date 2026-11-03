@@ -24,7 +24,9 @@ class RDateIterator implements \Iterator
     /**
      * Creates the Iterator.
      *
-     * @param string|array $rrule
+     * @param string|array<string|\DateTimeInterface> $rrule RDATE values, as strings
+     *                                                       or as dates already resolved
+     *                                                       (e.g. to honour their TZID)
      */
     public function __construct($rrule, /**
      * The reference start date/time for the rrule.
@@ -136,7 +138,7 @@ class RDateIterator implements \Iterator
      * value equal to an earlier one is only kept once, so that the iterator
      * yields the recurrence set in ascending order.
      *
-     * @param string|array $rdate
+     * @param string|array<string|\DateTimeInterface> $rdate
      *
      * @throws InvalidDataException
      */
@@ -148,6 +150,10 @@ class RDateIterator implements \Iterator
 
         $dates = [$this->startDate->getTimestamp() => clone $this->startDate];
         foreach ($rdate as $value) {
+            if ($value instanceof \DateTimeInterface) {
+                $dates[$value->getTimestamp()] ??= $value;
+                continue;
+            }
             if (!is_string($value)) {
                 throw new InvalidDataException('RDATE values must be dates or date-times');
             }

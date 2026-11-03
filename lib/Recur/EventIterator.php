@@ -4,9 +4,11 @@ namespace Sabre\VObject\Recur;
 
 use Sabre\VObject\Component;
 use Sabre\VObject\Component\VEvent;
+use Sabre\VObject\DateTimeParser;
 use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Property;
 use Sabre\VObject\Settings;
+use Sabre\VObject\TimeZoneUtil;
 
 /**
  * This class is used to determine new for a recurring event, when the next
@@ -174,7 +176,7 @@ class EventIterator implements \Iterator
         if (isset($this->masterEvent->RDATE)) {
             $rdateValues = [];
             foreach ($this->masterEvent->RDATE as $rdate) {
-                $rdateValues = array_merge($rdateValues, $rdate->getParts());
+                $rdateValues = array_merge($rdateValues, $this->rdateStarts($rdate));
             }
             $this->recurIterator = new RDateIterator(
                 $rdateValues,
@@ -228,6 +230,44 @@ class EventIterator implements \Iterator
                 }
             }
         }
+    }
+
+    /**
+     * Returns the instance starts listed by an RDATE property.
+     *
+     * Each RDATE property is resolved in its own time zone: its TZID, a UTC
+     * value, or the time zone of DTSTART for a floating or DATE value. For a
+     * PERIOD value, the instance starts at the start of the period.
+     *
+     * @return \DateTimeInterface[]
+     *
+     * @throws InvalidDataException
+     */
+    private function rdateStarts(Property $rdate): array
+    {
+        $timeZone = $this->startDate->getTimezone();
+
+        if ($rdate instanceof Property\ICalendar\DateTime) {
+            return $rdate->getDateTimes($timeZone);
+        }
+
+        if ($rdate instanceof Property\ICalendar\Period) {
+            if (isset($rdate['TZID'])) {
+                $timeZone = TimeZoneUtil::getTimeZone((string) $rdate['TZID'], $rdate->root);
+            }
+            $starts = [];
+            foreach ($rdate->getParts() as $period) {
+                $start = DateTimeParser::parse(explode('/', (string) $period)[0], $timeZone);
+                if (!$start instanceof \DateTimeInterface) {
+                    throw new InvalidDataException('RDATE periods must start with a date-time, got: '.$period);
+                }
+                $starts[] = $start;
+            }
+
+            return $starts;
+        }
+
+        throw new InvalidDataException('RDATE values must be dates, date-times or periods');
     }
 
     /**
