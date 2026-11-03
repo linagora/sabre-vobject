@@ -640,6 +640,13 @@ class Broker
                 // we need to send the attendee a CANCEL message.
                 $message->method = 'CANCEL';
 
+                // The attendee has the stored copy: a CANCEL older than it
+                // could be discarded (RFC 5546 section 2.1.4), even when the
+                // update lowered SEQUENCE.
+                if (isset($oldEventInfo['sequence']) && (int) $oldEventInfo['sequence'] > (int) $message->sequence) {
+                    $message->sequence = (int) $oldEventInfo['sequence'];
+                }
+
                 $icalMsg->METHOD = $message->method;
 
                 /** @var VEvent $event */

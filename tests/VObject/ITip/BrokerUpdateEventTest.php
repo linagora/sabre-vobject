@@ -244,7 +244,7 @@ METHOD:CANCEL
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
-SEQUENCE:1
+SEQUENCE:2
 DTSTART:20140716T120000Z
 DTEND:20140716T130000Z
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
@@ -1205,5 +1205,22 @@ ICS,
         ];
 
         $this->parse($oldMessage, $newMessage, $expected, 'mailto:strunk@example.org');
+    }
+
+    public function testCancelOfRemovedAttendeeNeverLowersSequence(): void
+    {
+        $make = fn (int $seq, string $attendees) => \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nSEQUENCE:$seq\r\nDTSTART:20260105T090000Z\r\n"
+            ."DTEND:20260105T100000Z\r\nORGANIZER:mailto:o@example.com\r\n$attendees\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $old = $make(2, "ATTENDEE:mailto:a@example.com\r\nATTENDEE:mailto:d@example.com");
+        $new = $make(1, 'ATTENDEE:mailto:a@example.com');
+
+        $messages = (new Broker())->parseEvent($new, 'mailto:o@example.com', $old);
+        $cancels = array_values(array_filter($messages, fn ($m) => 'CANCEL' === $m->method));
+
+        self::assertCount(1, $cancels);
+        self::assertSame('mailto:d@example.com', $cancels[0]->recipient);
+        self::assertSame(2, $cancels[0]->sequence);
+        self::assertSame(2, $cancels[0]->message->VEVENT->SEQUENCE->getValue());
     }
 }
