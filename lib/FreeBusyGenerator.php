@@ -437,7 +437,7 @@ class FreeBusyGenerator
 
                     case 'VFREEBUSY':
                         /** @var VFreeBusy $component */
-                        foreach ($component->FREEBUSY as $freebusy) {
+                        foreach ($component->select('FREEBUSY') as $freebusy) {
                             $fbType = isset($freebusy['FBTYPE']) ? strtoupper($freebusy['FBTYPE']) : 'BUSY';
 
                             // Skipping intervals marked as 'free'
@@ -447,15 +447,26 @@ class FreeBusyGenerator
 
                             $values = explode(',', (string) $freebusy);
                             foreach ($values as $value) {
-                                [$startTime, $endTime] = explode('/', $value);
-                                $startTime = DateTimeParser::parseDateTime($startTime);
+                                $period = explode('/', $value);
+                                if (2 !== count($period)) {
+                                    // Not a period: it gives no busy time.
+                                    continue;
+                                }
+                                [$startTime, $endTime] = $period;
+                                try {
+                                    $startTime = DateTimeParser::parseDateTime($startTime);
 
-                                if (str_starts_with($endTime, 'P') || str_starts_with($endTime, '-P')) {
-                                    $duration = DateTimeParser::parseDuration($endTime);
-                                    $endTime = clone $startTime;
-                                    $endTime = $endTime->add($duration);
-                                } else {
-                                    $endTime = DateTimeParser::parseDateTime($endTime);
+                                    if (str_starts_with($endTime, 'P') || str_starts_with($endTime, '-P')) {
+                                        $duration = DateTimeParser::parseDuration($endTime);
+                                        $endTime = clone $startTime;
+                                        $endTime = $endTime->add($duration);
+                                    } else {
+                                        $endTime = DateTimeParser::parseDateTime($endTime);
+                                    }
+                                } catch (InvalidDataException) {
+                                    // A period that does not parse gives no
+                                    // busy time.
+                                    continue;
                                 }
 
                                 if ($this->start && $this->start > $endTime) {
