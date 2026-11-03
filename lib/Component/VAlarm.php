@@ -32,36 +32,38 @@ class VAlarm extends VObject\Component
     public function getEffectiveTriggerTime(): \DateTimeImmutable
     {
         $trigger = $this->TRIGGER;
-        if (!isset($trigger['VALUE']) || ($trigger['VALUE'] && 'DURATION' === strtoupper((string) $trigger['VALUE']))) {
-            $triggerDuration = VObject\DateTimeParser::parseDuration($this->TRIGGER);
+        if ($trigger instanceof VObject\Property\ICalendar\Duration) {
+            $triggerDuration = VObject\DateTimeParser::parseDuration($trigger);
             $related = (isset($trigger['RELATED']) && 'END' === strtoupper($trigger['RELATED'])) ? 'END' : 'START';
 
             /** @var VEvent|VTodo $parentComponent */
             $parentComponent = $this->parent;
             if ('START' === $related) {
-                $effectiveTrigger = $parentComponent->DTSTART->getDateTime();
+                $effectiveTrigger = self::getAnchor($parentComponent, 'DTSTART');
             } else {
-                if ('VTODO' === $parentComponent->name) {
+                if ('VTODO' === $parentComponent?->name) {
                     $endProp = 'DUE';
-                } elseif ('VEVENT' === $parentComponent->name) {
+                } elseif ('VEVENT' === $parentComponent?->name) {
                     $endProp = 'DTEND';
                 } else {
                     throw new InvalidDataException('time-range filters on VALARM components are only supported when they are a child of VTODO or VEVENT');
                 }
 
                 if (isset($parentComponent->$endProp)) {
-                    $effectiveTrigger = $parentComponent->$endProp->getDateTime();
+                    $effectiveTrigger = self::getAnchor($parentComponent, $endProp);
                 } elseif (isset($parentComponent->DURATION)) {
-                    $effectiveTrigger = $parentComponent->DTSTART->getDateTime();
+                    $effectiveTrigger = self::getAnchor($parentComponent, 'DTSTART');
                     $duration = VObject\DateTimeParser::parseDuration($parentComponent->DURATION);
                     $effectiveTrigger = $effectiveTrigger->add($duration);
                 } else {
-                    $effectiveTrigger = $parentComponent->DTSTART->getDateTime();
+                    $effectiveTrigger = self::getAnchor($parentComponent, 'DTSTART');
                 }
             }
             $effectiveTrigger = $effectiveTrigger->add($triggerDuration);
-        } else {
+        } elseif ($trigger instanceof VObject\Property\ICalendar\DateTime) {
             $effectiveTrigger = $trigger->getDateTime();
+        } else {
+            throw new InvalidDataException('The TRIGGER of a VALARM must be a duration or a date-time');
         }
 
         return $effectiveTrigger;
@@ -109,6 +111,21 @@ class VAlarm extends VObject\Component
         }
 
         return $start <= $effectiveTrigger && $end > $effectiveTrigger;
+    }
+
+    /**
+     * Returns the date and time a relative TRIGGER is related to.
+     *
+     * @throws InvalidDataException
+     */
+    private static function getAnchor(?VObject\Component $parent, string $name): \DateTimeImmutable
+    {
+        $property = $parent?->__get($name);
+        if (!$property instanceof VObject\Property\ICalendar\DateTime) {
+            throw new InvalidDataException('A VALARM with a TRIGGER relative to '.$name.' requires its parent component to have a '.$name.' date or date-time');
+        }
+
+        return $property->getDateTime();
     }
 
     /**
