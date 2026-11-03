@@ -277,6 +277,18 @@ class VCard extends VObject\Document
             ];
         }
 
+        // A vCard has no sub-components (RFC 6350 section 3.3).
+        foreach ($this->getComponents() as $component) {
+            $warnings[] = [
+                'level' => $options & self::REPAIR ? 1 : 3,
+                'message' => 'A VCARD cannot contain a '.$component->name.' component',
+                'node' => $this,
+            ];
+            if ($options & self::REPAIR) {
+                $this->remove($component);
+            }
+        }
+
         $fn = $this->select('FN');
         if (1 !== count($fn)) {
             $repaired = false;
@@ -481,7 +493,10 @@ class VCard extends VObject\Document
         $properties = [];
 
         foreach ($this->children() as $child) {
-            $properties[] = $child->jsonSerialize();
+            // A component would be read back as a malformed property.
+            if ($child instanceof VObject\Property) {
+                $properties[] = $child->jsonSerialize();
+            }
         }
 
         return [
