@@ -179,4 +179,44 @@ BLA;
 
         self::assertTrue($vobj->VTODO->VALARM->isInTimeRange(new \DateTime('2012-10-01 00:00:00'), new \DateTime('2012-11-01 00:00:00')));
     }
+
+    public function testInTimeRangeRepeatOutOfRange(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:e1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260105T100000Z\r\nBEGIN:VALARM\r\nTRIGGER:-PT15M\r\n"
+            ."ACTION:DISPLAY\r\nDESCRIPTION:x\r\nREPEAT:-1\r\nDURATION:PT10M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $start = new \DateTimeImmutable('2026-01-01T00:00:00Z');
+        $end = new \DateTimeImmutable('2026-01-05T18:00:00Z');
+        // A negative REPEAT means no repetition: only the trigger, at 09:45Z.
+        self::assertTrue($vcal->VEVENT->VALARM->isInTimeRange($start, $end));
+        self::assertFalse($vcal->VEVENT->VALARM->isInTimeRange(new \DateTimeImmutable('2026-01-05T09:46:00Z'), $end));
+
+        $vcal->VEVENT->VALARM->REPEAT = '100000000000';
+        self::assertTrue($vcal->VEVENT->VALARM->isInTimeRange(new \DateTimeImmutable('2027-01-05T09:46:00Z'), new \DateTimeImmutable('2027-01-05T09:56:00Z')));
+        self::assertFalse($vcal->VEVENT->VALARM->isInTimeRange(new \DateTimeImmutable('2027-01-05T09:46:00Z'), new \DateTimeImmutable('2027-01-05T09:55:00Z')));
+
+        $vcal->VEVENT->VALARM->REPEAT = 2000000000;
+        $vcal->VEVENT->VALARM->DURATION = 'PT1S';
+        $vcal->VEVENT->DTSTART = '20270105T100000Z';
+        $t = microtime(true);
+        self::assertFalse($vcal->VEVENT->VALARM->isInTimeRange($start, $end));
+        self::assertLessThan(1, microtime(true) - $t);
+    }
+
+    public function testInTimeRangeRepeatBounds(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:e1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Europe/Paris:20260320T100000\r\nBEGIN:VALARM\r\nTRIGGER:PT0S\r\n"
+            ."ACTION:DISPLAY\r\nDESCRIPTION:x\r\nREPEAT:20\r\nDURATION:P1D\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $alarm = $vcal->VEVENT->VALARM;
+        // Repetitions are at 10:00 local time, after the DST change of 29 March too.
+        self::assertTrue($alarm->isInTimeRange(new \DateTimeImmutable('2026-04-09T08:00:00Z'), new \DateTimeImmutable('2026-04-09T08:00:01Z')));
+        self::assertFalse($alarm->isInTimeRange(new \DateTimeImmutable('2026-04-09T08:00:01Z'), new \DateTimeImmutable('2026-04-10T07:59:59Z')));
+        // The last one (repetition 20) is on 9 April, there is none on 10 April.
+        self::assertFalse($alarm->isInTimeRange(new \DateTimeImmutable('2026-04-10T00:00:00Z'), new \DateTimeImmutable('2026-04-11T00:00:00Z')));
+
+        $alarm->REPEAT = 0;
+        self::assertFalse($alarm->isInTimeRange(new \DateTimeImmutable('2026-03-21T00:00:00Z'), new \DateTimeImmutable('2026-03-22T00:00:00Z')));
+        self::assertTrue($alarm->isInTimeRange(new \DateTimeImmutable('2026-03-20T00:00:00Z'), new \DateTimeImmutable('2026-03-21T00:00:00Z')));
+    }
 }

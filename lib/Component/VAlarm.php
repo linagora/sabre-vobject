@@ -82,23 +82,51 @@ class VAlarm extends VObject\Component
 
         if (isset($this->DURATION)) {
             $duration = VObject\DateTimeParser::parseDuration($this->DURATION);
-            $repeat = (string) $this->REPEAT;
-            if (!$repeat) {
-                $repeat = 1;
-            }
+            $repeat = isset($this->REPEAT) ? max(0, (int) (string) $this->REPEAT) : 1;
+            $step = $effectiveTrigger->add($duration)->getTimestamp() - $effectiveTrigger->getTimestamp();
 
-            $period = new \DatePeriod($effectiveTrigger, $duration, (int) $repeat);
-
-            foreach ($period as $occurrence) {
-                if ($start <= $occurrence && $end > $occurrence) {
-                    return true;
+            if ($repeat > 0 && $step > 0) {
+                // Jump to the first repetition at or after $start instead of
+                // walking through all of them: REPEAT may be huge.
+                $index = 0;
+                if ($start > $effectiveTrigger) {
+                    $index = (int) ceil(($start->getTimestamp() - $effectiveTrigger->getTimestamp()) / $step);
                 }
-            }
+                $occurrence = $this->getRepetition($effectiveTrigger, $duration, $index);
+                // The estimate is only off when a duration in days spans a
+                // change of UTC offset.
+                while ($index > 0 && ($previous = $this->getRepetition($effectiveTrigger, $duration, $index - 1)) >= $start) {
+                    --$index;
+                    $occurrence = $previous;
+                }
+                while ($occurrence < $start) {
+                    ++$index;
+                    $occurrence = $this->getRepetition($effectiveTrigger, $duration, $index);
+                }
 
-            return false;
+                return $index <= $repeat && $end > $occurrence;
+            }
         }
 
         return $start <= $effectiveTrigger && $end > $effectiveTrigger;
+    }
+
+    /**
+     * Returns the trigger time of the repetition number $index (0 being the
+     * first trigger).
+     */
+    private function getRepetition(\DateTimeImmutable $trigger, \DateInterval $duration, int $index): \DateTimeImmutable
+    {
+        $interval = new \DateInterval('PT0S');
+        $interval->y = $duration->y * $index;
+        $interval->m = $duration->m * $index;
+        $interval->d = $duration->d * $index;
+        $interval->h = $duration->h * $index;
+        $interval->i = $duration->i * $index;
+        $interval->s = $duration->s * $index;
+        $interval->invert = $duration->invert;
+
+        return $trigger->add($interval);
     }
 
     /**
