@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCard;
 
@@ -612,5 +613,28 @@ VCF;
             $output,
             $vcard
         );
+    }
+
+    #[DataProvider('malformedDataUris')]
+    public function testMalformedDataUriIsNotEmptied(string $uri): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO:$uri\r\nEND:VCARD\r\n");
+        $v3 = $v4->convert(Document::VCARD30);
+        self::assertSame($uri, (string) $v3->LOGO->getValue());
+        self::assertStringContainsString("\r\nLOGO;VALUE=URI:", $v3->serialize());
+
+        /** @var VCard $v3 */
+        $v3 = Reader::read($v3->serialize());
+        $back = $v3->convert(Document::VCARD40);
+        self::assertSame($uri, (string) $back->LOGO);
+    }
+
+    /**
+     * @return list<array{string}>
+     */
+    public static function malformedDataUris(): array
+    {
+        return [['data:image/jpeg;base64,@@@'], ['data:image/jpeg;base64AAAA'], ['data:image?jpeUAA=']];
     }
 }

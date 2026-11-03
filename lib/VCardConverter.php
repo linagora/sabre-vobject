@@ -314,8 +314,20 @@ class VCardConverter
         $value = $newProperty->getValue();
 
         // Only converting data: uris
-        if (!str_starts_with((string) $value, 'data:')) {
+        $comma = strpos((string) $value, ',');
+        if (!str_starts_with((string) $value, 'data:') || false === $comma) {
             return $newProperty;
+        }
+
+        $mimeType = substr((string) $value, 5, $comma - 5);
+        $data = substr((string) $value, $comma + 1);
+        if (strpos($mimeType, ';')) {
+            $mimeType = substr($mimeType, 0, strpos($mimeType, ';'));
+            $data = base64_decode($data, true);
+            if (false === $data) {
+                // Not valid base64: keep the uri rather than an empty value.
+                return $newProperty;
+            }
         }
 
         /** @var Binary $newProperty */
@@ -326,13 +338,7 @@ class VCardConverter
             'BINARY'
         );
 
-        $mimeType = substr((string) $value, 5, strpos((string) $value, ',') - 5);
-        if (strpos($mimeType, ';')) {
-            $mimeType = substr($mimeType, 0, strpos($mimeType, ';'));
-            $newProperty->setValue(base64_decode(substr((string) $value, strpos((string) $value, ',') + 1), true));
-        } else {
-            $newProperty->setValue(substr((string) $value, strpos((string) $value, ',') + 1));
-        }
+        $newProperty->setValue($data);
         unset($value);
 
         $newProperty['ENCODING'] = 'b';
