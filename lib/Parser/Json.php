@@ -163,6 +163,10 @@ class Json extends Parser
 
         $parameters = (array) $parameters;
         foreach ($parameters as $parameterName => $parameterValue) {
+            // The name is written as-is when serializing to MimeDir as well.
+            if (!preg_match('/^[A-Z0-9-]+\z/i', (string) $parameterName)) {
+                throw new ParseException('Invalid parameter name for property '.$propertyName);
+            }
             if (!self::isScalarOrList($parameterValue)) {
                 throw new ParseException('Invalid value for parameter '.$parameterName.' of property '.$propertyName);
             }
