@@ -1083,6 +1083,33 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testYearlyByMonthWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=06;COUNT=2',
+            '2026-01-15 09:00:00',
+            ['2026-06-15 09:00:00', '2027-06-15 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthWithLeadingZeroAndByMonthDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=+6,011;BYMONTHDAY=3;COUNT=3',
+            '2026-01-15 09:00:00',
+            ['2026-06-03 09:00:00', '2026-11-03 09:00:00', '2027-06-03 09:00:00']
+        );
+    }
+
+    public function testDailyByMonthWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYMONTH=02;BYHOUR=09;COUNT=3',
+            '2026-01-31 09:00:00',
+            ['2026-01-31 09:00:00', '2026-02-01 09:00:00', '2026-02-02 09:00:00']
+        );
+    }
+
     public function testYearlyByMonthInvalidValue1(): void
     {
         $this->expectException(InvalidDataException::class);
@@ -1148,6 +1175,17 @@ class RRuleIteratorTest extends TestCase
             'multi-valued WKST' => ['FREQ=WEEKLY;COUNT=2;WKST=MO,SU'],
             'unknown WKST' => ['FREQ=WEEKLY;COUNT=2;BYDAY=MO;WKST=XX'],
             'nested array BYSETPOS' => [['FREQ' => 'MONTHLY', 'BYDAY' => 'MO', 'BYSETPOS' => [['1']]]],
+            'non-integer BYMONTH' => ['FREQ=YEARLY;BYMONTH=2.3;COUNT=2'],
+            'BYMONTH with a trailing dot' => ['FREQ=YEARLY;BYMONTH=1.;COUNT=2'],
+            'BYMONTH with a space' => ['FREQ=YEARLY;BYMONTH= 3;COUNT=2'],
+            'BYMONTH with a vertical tab' => ["FREQ=YEARLY;BYMONTH=3\v;COUNT=2"],
+            'BYMONTH with a trailing LF' => [['FREQ' => 'YEARLY', 'BYMONTH' => "3\n", 'COUNT' => 2]],
+            'negative BYMONTH' => ['FREQ=YEARLY;BYMONTH=-6;COUNT=2'],
+            'BYMONTH in exponent form' => ['FREQ=DAILY;BYMONTH=1e1;COUNT=2'],
+            'non-integer BYHOUR' => ['FREQ=DAILY;BYHOUR=9.5;COUNT=2'],
+            'non-integer BYWEEKNO' => ['FREQ=YEARLY;BYWEEKNO=1.5;COUNT=2'],
+            'non-integer BYYEARDAY' => ['FREQ=YEARLY;BYYEARDAY=1.5;COUNT=2'],
+            'BYMONTHDAY with a trailing LF' => [['FREQ' => 'MONTHLY', 'BYMONTHDAY' => "5\n", 'COUNT' => 2]],
         ];
     }
 
