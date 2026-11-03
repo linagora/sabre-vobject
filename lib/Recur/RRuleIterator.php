@@ -106,8 +106,10 @@ class RRuleIterator implements \Iterator
         if (null === $this->currentDate) {
             return false;
         }
-        if (!is_null($this->count)) {
-            return $this->counter < $this->count;
+        // RFC 5545 forbids COUNT with UNTIL; when a rule has both, it ends
+        // with whichever comes first.
+        if (!is_null($this->count) && $this->counter >= $this->count) {
+            return false;
         }
 
         return is_null($this->until) || $this->currentDate <= $this->until;
