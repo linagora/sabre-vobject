@@ -154,7 +154,8 @@ class Recur extends Property
         $values = [];
         foreach ($this->getParts() as $k => $v) {
             if (0 === strcmp((string) $k, 'UNTIL')) {
-                $date = new DateTime($this->root, null, $v);
+                // UNTIL has the value type of DTSTART: DATE or DATE-TIME.
+                $date = new DateTime($this->root, null, $v, str_contains((string) $v, 'T') ? [] : ['VALUE' => 'DATE']);
                 $values[strtolower((string) $k)] = $date->getJsonValue()[0];
             } elseif (0 === strcmp((string) $k, 'COUNT')) {
                 $values[strtolower((string) $k)] = intval($v);

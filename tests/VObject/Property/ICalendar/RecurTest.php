@@ -471,4 +471,16 @@ END:VCALENDAR
         self::assertEquals(3, $result[0]['level']);
         self::assertEquals('FREQ=YEARLY;COUNT=6;BYYEARDAY=380;BYDAY=WE', $property->getValue());
     }
+
+    public function testDateUntilJsonSerializeKeepsDate(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTART;VALUE=DATE:20260105\r\n"
+            ."RRULE:FREQ=WEEKLY;UNTIL=20261231\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $rrule = $vcal->VEVENT->RRULE;
+        self::assertSame('2026-12-31', $rrule->getJsonValue()[0]['until']);
+
+        $copy = clone $rrule;
+        $copy->setJsonValue($rrule->getJsonValue());
+        self::assertSame('20261231', $copy->getParts()['UNTIL']);
+    }
 }
