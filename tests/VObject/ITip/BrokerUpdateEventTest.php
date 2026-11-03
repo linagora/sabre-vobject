@@ -1223,4 +1223,27 @@ ICS,
         self::assertSame(2, $cancels[0]->sequence);
         self::assertSame(2, $cancels[0]->message->VEVENT->SEQUENCE->getValue());
     }
+
+    public static function equivalentRRuleProvider(): array
+    {
+        return [
+            ['FREQ=WEEKLY;BYDAY=MO,TU', 'FREQ=WEEKLY;BYDAY=TU,MO', false],
+            ['FREQ=YEARLY;BYMONTH=5,2', 'FREQ=YEARLY;BYMONTH=2,5', false],
+            ['FREQ=YEARLY;BYMONTH=6,5,6,3', 'FREQ=YEARLY;BYMONTH=3,5,6', false],
+            ['FREQ=WEEKLY;BYDAY=MO,TU', 'FREQ=WEEKLY;BYDAY=MO,WE', true],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('equivalentRRuleProvider')]
+    public function testRRuleListOrderIsNotSignificant(string $old, string $new, bool $significant): void
+    {
+        $ics = fn (string $rrule) => \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:r\r\n"
+            ."DTSTART:20260105T100000Z\r\nRRULE:$rrule\r\nORGANIZER:mailto:o@example.com\r\n"
+            ."ATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $messages = (new Broker())->parseEvent($ics($new), 'mailto:o@example.com', $ics($old));
+
+        self::assertCount(1, $messages);
+        self::assertSame($significant, $messages[0]->significantChange);
+    }
 }
