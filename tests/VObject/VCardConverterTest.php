@@ -693,4 +693,40 @@ VCF;
         self::assertSame('_$!<Work>!$_', (string) $v3->{'ITEM1.X-ABLABEL'});
         self::assertSame('_$!<Anniversary>!$_', (string) $v3->{'ITEM2.X-ABLABEL'});
     }
+
+    #[DataProvider('datesWithoutYearAndMonth')]
+    public function testBdayWithoutYearAndMonthTo30(string $value): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nBDAY:$value\r\nEND:VCARD\r\n");
+        $v3 = $v4->convert(Document::VCARD30);
+        self::assertSame($value, (string) $v3->BDAY);
+        self::assertFalse(isset($v3->BDAY['X-APPLE-OMIT-YEAR']));
+        $v3 = Reader::read($v3->serialize());
+        foreach ($v3->validate() as $message) {
+            self::assertLessThan(3, $message['level'], $message['message']);
+        }
+    }
+
+    /**
+     * @return list<array{string}>
+     */
+    public static function datesWithoutYearAndMonth(): array
+    {
+        return [['T1022'], ['T102200'], ['---15'], ['--02']];
+    }
+
+    public function testBdayWithoutYearKeepsTime(): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nBDAY:--0203T102200Z\r\nEND:VCARD\r\n");
+        $v3 = $v4->convert(Document::VCARD30);
+        self::assertSame('16040203T102200Z', (string) $v3->BDAY);
+        self::assertSame('1604', (string) $v3->BDAY['X-APPLE-OMIT-YEAR']);
+        self::assertSame([], Reader::read($v3->serialize())->validate());
+
+        /** @var VCard $v3 */
+        $v3 = Reader::read($v3->serialize());
+        self::assertSame('--0203T102200Z', (string) $v3->convert(Document::VCARD40)->BDAY);
+    }
 }
