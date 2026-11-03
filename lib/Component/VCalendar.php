@@ -69,6 +69,27 @@ class VCalendar extends VObject\Document
     ];
 
     /**
+     * Value types RFC 5545 allows (section 3.8) for the properties that the
+     * read paths (expansion, time-range queries, free-busy) interpret.
+     */
+    public static array $allowedPropertyClasses = [
+        'COMPLETED' => [Property\ICalendar\DateTime::class],
+        'CREATED' => [Property\ICalendar\DateTime::class],
+        'DTEND' => [Property\ICalendar\DateTime::class],
+        'DTSTAMP' => [Property\ICalendar\DateTime::class],
+        'DTSTART' => [Property\ICalendar\DateTime::class],
+        'DUE' => [Property\ICalendar\DateTime::class],
+        'DURATION' => [Property\ICalendar\Duration::class],
+        'EXDATE' => [Property\ICalendar\DateTime::class],
+        'EXRULE' => [Property\ICalendar\Recur::class],
+        'LAST-MODIFIED' => [Property\ICalendar\DateTime::class],
+        'RDATE' => [Property\ICalendar\DateTime::class, Property\ICalendar\Period::class],
+        'RECURRENCE-ID' => [Property\ICalendar\DateTime::class],
+        'RRULE' => [Property\ICalendar\Recur::class],
+        'TRIGGER' => [Property\ICalendar\Duration::class, Property\ICalendar\DateTime::class],
+    ];
+
+    /**
      * List of properties, and which classes they map to.
      */
     public static array $propertyMap = [

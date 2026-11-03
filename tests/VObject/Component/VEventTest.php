@@ -146,4 +146,36 @@ class VEventTest extends TestCase
         self::assertCount(1, $vcal->VEVENT->select('DTSTAMP'));
         self::assertSame([], $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR));
     }
+
+    #[DataProvider('nonDateValueTypes')]
+    public function testValidateReportsNonDateValueType(string $line): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260301T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n$line\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([3], array_column($vcal->validate(VObject\Node::PROFILE_CALDAV), 'level'));
+        self::assertSame([3], array_column($vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR), 'level'));
+    }
+
+    public static function nonDateValueTypes(): array
+    {
+        return [['EXDATE;VALUE=TEXT:20260302T100000Z'], ['DTEND;VALUE=PERIOD:20260301T100000Z/PT1H'],
+            ['RECURRENCE-ID;VALUE=TEXT:20260302T100000Z'], ['DURATION;VALUE=TEXT:PT1H'],
+            ['RDATE;VALUE=TEXT:20260310T100000Z'], ['EXRULE;VALUE=TEXT:FREQ=DAILY'], ['CREATED;VALUE=DURATION:P1D']];
+    }
+
+    #[DataProvider('allowedValueTypes')]
+    public function testValidateAcceptsAllowedValueType(string $line): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260301T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n$line\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([], $vcal->validate(VObject\Node::PROFILE_CALDAV));
+    }
+
+    public static function allowedValueTypes(): array
+    {
+        return [['EXDATE;VALUE=DATE-TIME:20260302T100000Z'], ['RDATE;VALUE=PERIOD:20260310T100000Z/PT1H'],
+            ['RDATE;VALUE=DATE:20260310'], ['DURATION:PT1H']];
+    }
 }

@@ -547,6 +547,22 @@ abstract class Property extends Node implements \Stringable
             }
         }
 
+        // Checking that the VALUE parameter did not give the property a value
+        // type it does not allow.
+        if ($this->root instanceof Document && isset($this->root::$allowedPropertyClasses[$this->name])) {
+            $allowed = false;
+            foreach ($this->root::$allowedPropertyClasses[$this->name] as $class) {
+                $allowed = $allowed || $this instanceof $class;
+            }
+            if (!$allowed) {
+                $warnings[] = [
+                    'level' => 3,
+                    'message' => 'The value type '.$this->getValueType().' is not allowed for '.$this->name,
+                    'node' => $this,
+                ];
+            }
+        }
+
         if ($encoding = $this->offsetGet('ENCODING')) {
             if (Document::VCARD40 === $this->root->getDocumentType()) {
                 $warnings[] = [
