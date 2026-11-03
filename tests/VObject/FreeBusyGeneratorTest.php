@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class FreeBusyGeneratorTest extends TestCase
@@ -823,5 +824,42 @@ ICS;
             '20260109T080000Z/20260109T083000Z',
             '20260112T100000Z/20260112T110000Z',
         ], array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY')));
+    }
+
+    public static function malformedVFreeBusyData(): array
+    {
+        return [
+            'no FREEBUSY' => [''],
+            'empty value' => ["FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:\r\n"],
+            'no slash' => ["FREEBUSY:20260310T120000Z\r\n"],
+            'invalid start' => ["FREEBUSY:20260310T10Z/20260310T130000Z\r\n"],
+            'invalid end' => ["FREEBUSY:20260310T120000Z/20201611T100000Z\r\n"],
+            'invalid duration' => ["FREEBUSY:20260310T120000Z/PXT\r\n"],
+        ];
+    }
+
+    #[DataProvider('malformedVFreeBusyData')]
+    public function testMalformedVFreeBusyIsIgnored(string $freebusy): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260310T100000Z\r\nDURATION:PT1H\r\nEND:VEVENT\r\n"
+            ."BEGIN:VFREEBUSY\r\nUID:fb\r\nDTSTAMP:20260101T000000Z\r\n{$freebusy}"
+            ."FREEBUSY:20260311T100000Z/PT1H\r\nEND:VFREEBUSY\r\nEND:VCALENDAR\r\n");
+        if ('' === $freebusy) {
+            $vcal->VFREEBUSY->remove('FREEBUSY');
+        }
+        set_error_handler(fn (int $no, string $str, string $file, int $line) => throw new \ErrorException($str, 0, $no, $file, $line));
+        try {
+            $generator = new FreeBusyGenerator(
+                new \DateTimeImmutable('2026-03-01T00:00:00Z'), new \DateTimeImmutable('2026-04-01T00:00:00Z'), $vcal
+            );
+            $result = $generator->getResult();
+        } finally {
+            restore_error_handler();
+        }
+        self::assertSame(
+            '' === $freebusy ? ['20260310T100000Z/20260310T110000Z'] : ['20260310T100000Z/20260310T110000Z', '20260311T100000Z/20260311T110000Z'],
+            array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY'))
+        );
     }
 }
