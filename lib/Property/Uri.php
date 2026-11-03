@@ -61,6 +61,11 @@ class Uri extends Text
      */
     public function setRawMimeDirValue(string $val): void
     {
+        // CR and LF are not allowed in a URI (RFC 3986), and a MIME-dir
+        // value has no escape for them: getRawMimeDirValue() drops them,
+        // so they are dropped here as well.
+        $val = str_replace(["\r", "\n"], '', $val);
+
         // Normally we don't need to do any type of unescaping for these
         // properties, however, we've noticed that Google Contacts
         // specifically escapes the colon (:) with a backslash. While I have
@@ -96,6 +101,6 @@ class Uri extends Text
             $value = $this->value;
         }
 
-        return strtr($value, [',' => '\,']);
+        return strtr($value, [',' => '\,', "\r" => '', "\n" => '']);
     }
 }

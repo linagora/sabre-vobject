@@ -483,11 +483,14 @@ class MimeDir extends Parser
         }
 
         if (isset($propObj['ENCODING']) && 'QUOTED-PRINTABLE' === strtoupper($propObj['ENCODING'])) {
-            if ($propObj instanceof Property\Text) {
+            $documentType = $this->root->getDocumentType();
+            if ($propObj instanceof Property\Text && (Document::VCARD21 === $documentType || Document::UNKNOWN === $documentType)) {
                 $propObj->setQuotedPrintableValue($this->extractQuotedPrintableValue());
             } else {
-                // Only text values are written back quoted-printable: the
-                // others keep their decoded value, without the encoding.
+                // Only vCard 2.1 text values are written back
+                // quoted-printable: the others keep their decoded value,
+                // without the encoding, so that serialize() escapes it as
+                // any other value.
                 unset($propObj['ENCODING']);
                 $propObj->setRawMimeDirValue(quoted_printable_decode($this->extractQuotedPrintableValue()));
             }

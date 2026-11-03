@@ -86,6 +86,32 @@ VCF;
         ], $result->ADR->getParts());
     }
 
+    public function testQuotedPrintableValuesSurviveARoundTrip(): void
+    {
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."URL;ENCODING=QUOTED-PRINTABLE:https://a.example/=0D=0AEND:VEVENT=0D=0ABEGIN:VEVENT=0D=0AUID:b\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n";
+        $vcal = Reader::read($ics);
+        self::assertCount(1, $vcal->select('VEVENT'));
+        $reread = Reader::read($vcal->serialize());
+        self::assertCount(1, $reread->select('VEVENT'));
+        self::assertSame($vcal->VEVENT->URL->getValue(), $reread->VEVENT->URL->getValue());
+        self::assertStringNotContainsString('QUOTED-PRINTABLE', $vcal->serialize());
+
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=3D41\r\nEND:VCARD\r\n");
+        self::assertSame('a=41', (string) $vcard->NOTE);
+        self::assertSame('a=41', (string) Reader::read($vcard->serialize())->NOTE);
+
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a;b=0Ac\r\nTEL;VALUE=uri;ENCODING=QUOTED-PRINTABLE:a\\, b;c\r\nX-FOO;VALUE=uri;ENCODING=QUOTED-PRINTABLE:x=0A\r\nEND:VCARD\r\n");
+        self::assertSame("a;b\nc", $vcard->NOTE->getValue());
+        self::assertSame('a, b;c', $vcard->TEL->getValue());
+        self::assertSame('x', $vcard->{'X-FOO'}->getValue());
+        $reread = Reader::read($vcard->serialize());
+        self::assertSame($vcard->serialize(), $reread->serialize());
+        self::assertSame("a;b\nc", $reread->NOTE->getValue());
+        self::assertSame('a, b;c', $reread->TEL->getValue());
+    }
+
     private function getPropertyValue(Property $property): string
     {
         return (string) $property;
