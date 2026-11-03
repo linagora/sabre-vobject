@@ -115,9 +115,14 @@ class VCardConverter
                 // support this, will just use a random birth year. We're
                 // choosing 1604 for the birth year, because that's what apple
                 // uses.
+                // This only applies to a month and a day (--MMDD), any other
+                // value without a year (a time, a day, a month) is kept.
                 $parts = DateTimeParser::parseVCardDateTime($property->getValue());
-                if (is_null($parts['year'])) {
-                    $newValue = '1604-'.$parts['month'].'-'.$parts['date'];
+                if (is_null($parts['year']) && !is_null($parts['month']) && !is_null($parts['date'])) {
+                    $time = $this->getTimePart($property->getValue());
+                    $newValue = '' === $time
+                        ? '1604-'.$parts['month'].'-'.$parts['date']
+                        : '1604'.$parts['month'].$parts['date'].$time;
                     $newProperty->setValue($newValue);
                     $newProperty['X-APPLE-OMIT-YEAR'] = '1604';
                 }
@@ -179,7 +184,10 @@ class VCardConverter
                 // then we're stripping the year from the vcard 4 value.
                 $parts = DateTimeParser::parseVCardDateTime($property->getValue());
                 if ($parts['year'] === $property['X-APPLE-OMIT-YEAR']->getValue()) {
-                    $newValue = '--'.$parts['month'].'-'.$parts['date'];
+                    $time = $this->getTimePart($property->getValue());
+                    $newValue = '' === $time
+                        ? '--'.$parts['month'].'-'.$parts['date']
+                        : '--'.$parts['month'].$parts['date'].$time;
                     $newProperty->setValue($newValue);
                 }
 
@@ -265,6 +273,17 @@ class VCardConverter
         foreach ($extraProperties as $extraProperty) {
             $output->add($extraProperty);
         }
+    }
+
+    /**
+     * Returns the time part of a date and/or time value ("T102200Z"), or an
+     * empty string.
+     */
+    private function getTimePart(string $value): string
+    {
+        $time = strstr($value, 'T');
+
+        return false === $time ? '' : $time;
     }
 
     /**
