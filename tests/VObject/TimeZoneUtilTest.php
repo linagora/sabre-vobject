@@ -143,9 +143,10 @@ END:VEVENT
 END:VCALENDAR
 HI;
 
+        // The unknown TZID follows the rules of its VTIMEZONE (CET / CEST).
         $tz = TimeZoneUtil::getTimeZone('foo', Reader::read($vobj));
-        $ex = new \DateTimeZone(date_default_timezone_get());
-        self::assertEquals($ex->getName(), $tz->getName());
+        self::assertSame(3600, $tz->getOffset(new \DateTimeImmutable('2012-01-18T10:00:00Z')));
+        self::assertSame(7200, $tz->getOffset(new \DateTimeImmutable('2012-04-18T10:00:00Z')));
     }
 
     public function testEmptyTimeZone(): void
@@ -260,9 +261,10 @@ END:VEVENT
 END:VCALENDAR
 HI;
 
+        // The unknown TZID follows the rules of its VTIMEZONE (CET / CEST).
         $tz = TimeZoneUtil::getTimeZone('foo', Reader::read($vobj));
-        $ex = new \DateTimeZone(date_default_timezone_get());
-        self::assertEquals($ex->getName(), $tz->getName());
+        self::assertSame(3600, $tz->getOffset(new \DateTimeImmutable('2012-01-18T10:00:00Z')));
+        self::assertSame(7200, $tz->getOffset(new \DateTimeImmutable('2012-04-18T10:00:00Z')));
     }
 
     public function testLjubljanaBug(): void
@@ -406,5 +408,65 @@ HI;
     {
         self::assertSame('+01:00', TimeZoneUtil::getTimeZone('+01:00', null, true)->getName());
         self::assertSame('-05:30', TimeZoneUtil::getTimeZone('-05:30', null, true)->getName());
+    }
+
+    private static function customVTimeZone(string $observances, string $extra = ''): Component\VCalendar
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nTZID:Custom\r\n".$extra.$observances."END:VTIMEZONE\r\nEND:VCALENDAR\r\n");
+        self::assertInstanceOf(Component\VCalendar::class, $vcal);
+
+        return $vcal;
+    }
+
+    private const CET_OBSERVANCES = "BEGIN:STANDARD\r\nDTSTART:19701025T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\n"
+        ."RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU\r\nEND:STANDARD\r\n"
+        ."BEGIN:DAYLIGHT\r\nDTSTART:19700329T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200\r\n"
+        ."RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU\r\nEND:DAYLIGHT\r\n";
+
+    public function testUnknownTzidUsesTheVTimezoneRules(): void
+    {
+        $year = (int) gmdate('Y');
+        $tz = TimeZoneUtil::getTimeZone('Custom', self::customVTimeZone(self::CET_OBSERVANCES), true);
+        self::assertSame(3600, $tz->getOffset(new \DateTimeImmutable($year.'-01-15T12:00:00Z')));
+        self::assertSame(7200, $tz->getOffset(new \DateTimeImmutable($year.'-07-15T12:00:00Z')));
+        $paris = new \DateTimeZone('Europe/Paris');
+        foreach ($tz->getTransitions(gmmktime(0, 0, 0, 1, 1, $year), gmmktime(0, 0, 0, 1, 1, $year + 1)) as $transition) {
+            self::assertSame($paris->getOffset(new \DateTimeImmutable('@'.$transition['ts'])), $transition['offset']);
+        }
+    }
+
+    public function testUnknownLicLocationFallsThroughToTheObservances(): void
+    {
+        $vcal = self::customVTimeZone(self::CET_OBSERVANCES, "X-LIC-LOCATION:Nowhere/Custom\r\n");
+        $tz = TimeZoneUtil::getTimeZone('Custom', $vcal);
+        self::assertSame(3600, $tz->getOffset(new \DateTimeImmutable(gmdate('Y').'-01-15T12:00:00Z')));
+    }
+
+    public function testUnknownTzidWithoutDstIsAFixedOffset(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n");
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal, true)->getName());
+    }
+
+    public function testUnknownTzidWithUnmatchedRulesUsesTheStandardOffset(): void
+    {
+        // DST on the first Sunday of February: no PHP zone does that.
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19701025T030000\r\nTZOFFSETFROM:+0400\r\nTZOFFSETTO:+0300\r\n"
+            ."RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU\r\nEND:STANDARD\r\n"
+            ."BEGIN:DAYLIGHT\r\nDTSTART:19700201T020000\r\nTZOFFSETFROM:+0300\r\nTZOFFSETTO:+0400\r\n"
+            ."RRULE:FREQ=YEARLY;BYMONTH=2;BYDAY=1SU\r\nEND:DAYLIGHT\r\n");
+        self::assertSame('+03:00', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+
+        $this->expectException(\InvalidArgumentException::class);
+        TimeZoneUtil::getTimeZone('Custom', $vcal, true);
+    }
+
+    public function testUnknownTzidWithUnsupportedRuleUsesTheStandardOffset(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19701025T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\n"
+            ."RRULE:FREQ=SECONDLY\r\nEND:STANDARD\r\n"
+            ."BEGIN:DAYLIGHT\r\nDTSTART:19700329T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200\r\n"
+            ."RRULE:FREQ=YEARLY;BYMONTH=1.;BYDAY=-1SU\r\nEND:DAYLIGHT\r\n");
+        self::assertSame('+01:00', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
     }
 }
