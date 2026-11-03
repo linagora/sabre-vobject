@@ -2,6 +2,8 @@
 
 namespace Sabre\VObject\ITip;
 
+use Sabre\VObject\Reader;
+
 class BrokerProcessMessageTest extends BrokerTester
 {
     public function testRequestNew(): void
@@ -97,6 +99,65 @@ END:VCALENDAR
 ICS;
 
         $this->process($itip, $old, $expected);
+    }
+
+    /**
+     * The CANCEL that the organizer sends to a removed attendee of an event
+     * without SEQUENCE has no sequence: the cancelled copy of the attendee
+     * gets the default sequence 0, and can be serialized.
+     */
+    public function testCancelWithoutSequence(): void
+    {
+        $organizerOld = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:strunk@example.org
+ATTENDEE:mailto:one@example.org
+ATTENDEE:mailto:two@example.org
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $organizerNew = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:strunk@example.org
+ATTENDEE:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $attendeeCopy = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:strunk@example.org
+ATTENDEE:mailto:one@example.org
+ATTENDEE:mailto:two@example.org
+END:VEVENT
+END:VCALENDAR
+ICS);
+
+        $broker = new Broker();
+        $cancels = array_values(array_filter(
+            $broker->parseEvent($organizerNew, 'mailto:strunk@example.org', $organizerOld),
+            fn (Message $message) => 'CANCEL' === $message->method
+        ));
+        self::assertCount(1, $cancels);
+        self::assertSame('mailto:two@example.org', $cancels[0]->recipient);
+        self::assertNull($cancels[0]->sequence);
+
+        $result = $broker->processMessage($cancels[0], $attendeeCopy);
+
+        self::assertSame('CANCELLED', (string) $result->VEVENT->STATUS);
+        self::assertSame(0, $result->VEVENT->SEQUENCE->getValue());
+        self::assertStringContainsString("SEQUENCE:0\r\n", $result->serialize());
     }
 
     public function testCancelNoExistingEvent(): void
