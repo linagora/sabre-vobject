@@ -902,7 +902,13 @@ class Broker
                     $event->add('SUMMARY', $summary);
                 }
             }
-            if ('master' !== $instance['id']) {
+            if ('master' !== $instance['id'] && isset($eventInfo['instances'][$instance['id']]->{'RECURRENCE-ID'})) {
+                // The override's own RECURRENCE-ID: its raw value may be in
+                // another time zone than the master (or floating).
+                $event->add(clone $eventInfo['instances'][$instance['id']]->{'RECURRENCE-ID'});
+            } elseif ('master' !== $instance['id']) {
+                // An instance removed through EXDATE: its id is a raw EXDATE
+                // value, in the time zone of the master.
                 $dt = DateTimeParser::parse($instance['id'], $eventInfo['timezone']);
                 // Treat is as a DATE field
                 if (strlen((string) $instance['id']) <= 8) {
