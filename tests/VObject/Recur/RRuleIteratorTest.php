@@ -545,6 +545,20 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testWeeklyByHourWithoutByDay(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;BYHOUR=9,14;COUNT=4',
+            '2026-01-05 09:00:00', // a Monday
+            [
+                '2026-01-05 09:00:00',
+                '2026-01-05 14:00:00',
+                '2026-01-12 09:00:00',
+                '2026-01-12 14:00:00',
+            ]
+        );
+    }
+
     public function testByHourOutOfRange(): void
     {
         $this->expectException(InvalidDataException::class);
