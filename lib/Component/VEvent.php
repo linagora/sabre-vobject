@@ -61,6 +61,14 @@ class VEvent extends VObject\Component
             return $it->getDTStart() < $end && $it->getDTEnd() > $start;
         }
 
+        // The class of these properties follows their VALUE parameter.
+        if (!$this->DTSTART instanceof VObject\Property\ICalendar\DateTime) {
+            throw new VObject\InvalidDataException('DTSTART must be a date or date-time value');
+        }
+        if (isset($this->DTEND) && !$this->DTEND instanceof VObject\Property\ICalendar\DateTime) {
+            throw new VObject\InvalidDataException('DTEND must be a date or date-time value');
+        }
+
         $effectiveStart = $this->DTSTART->getDateTime($start->getTimezone());
         if (isset($this->DTEND)) {
             // The DTEND property is considered non-inclusive. So for a 3-day
