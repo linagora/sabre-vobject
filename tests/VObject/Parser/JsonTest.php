@@ -444,6 +444,10 @@ VCF;
             // Parameters
             'parameter is an object' => '["vcalendar",[["summary",{"x-a":{"b":1}},"text","a"]]]',
             'parameter is a list of objects' => '["vcalendar",[["summary",{"x-a":[{"b":1}]},"text","a"]]]',
+            'line break in a parameter name' => '["vcalendar",[],[["vevent",[["uid",{},"text","a"],["summary",{"x-a=1:b\\r\\nATTENDEE;X-B":"1"},"text","c"]]]]]',
+            'trailing line feed in a parameter name' => '["vcard",[["tel",{"fr\\n":"1"},"text","1"]]]',
+            'colon in a parameter name' => '["vcard",[["email",{"g|o:":"item1"},"text","a@example.com"]]]',
+            'empty parameter name' => '["vcard",[["version",{},"text","4.0"],["tel",{"":["a","b"]},"text","1"]]]',
             'parameter is a nested list' => '["vcalendar",[["summary",{"x-a":[["b"]]},"text","a"]]]',
             // Values
             'text is an object' => '["vcalendar",[["summary",{},"text",{"a":"b"}]]]',
