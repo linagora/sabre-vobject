@@ -207,7 +207,13 @@ class VCardConverter
                     }
                     break;
                 case 'X-ADDRESSBOOKSERVER-MEMBER':
-                    $newProperty = $output->createProperty('MEMBER', $property->getValue());
+                    // The source is a TEXT value, and a line break it holds
+                    // (an escaped \n) cannot appear raw in a URI value: it is
+                    // written back as \n.
+                    $newProperty = $output->createProperty(
+                        'MEMBER',
+                        str_replace(["\r\n", "\r", "\n"], '\n', (string) $property->getValue())
+                    );
                     break;
                 case 'X-ANNIVERSARY':
                     $newProperty->name = 'ANNIVERSARY';
