@@ -862,4 +862,25 @@ ICS;
             array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY'))
         );
     }
+
+    public function testAvailableRruleIsBounded(): void
+    {
+        $availability = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n"
+            ."BEGIN:VAVAILABILITY\r\nUID:av\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."BEGIN:AVAILABLE\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART:20200101T090000Z\r\nDTEND:20200101T090001Z\r\nRRULE:FREQ=SECONDLY\r\n"
+            ."END:AVAILABLE\r\nEND:VAVAILABILITY\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-05T00:00:00Z'), new \DateTimeImmutable('2026-01-17T00:00:00Z')
+        );
+        $generator->setVAvailability($availability);
+
+        $start = microtime(true);
+        try {
+            $generator->getResult();
+            self::fail('Expected MaxInstancesExceededException');
+        } catch (Recur\MaxInstancesExceededException) {
+        }
+        self::assertLessThan(2, microtime(true) - $start);
+    }
 }
