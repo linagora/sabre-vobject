@@ -75,6 +75,7 @@ class VCardConverter
 
         $parameters = $property->parameters();
         $valueType = null;
+        $extraProperties = [];
         if (isset($parameters['VALUE'])) {
             $valueType = (string) $parameters['VALUE']->getValue();
             if ('' !== $valueType && null === $output->getClassNameForPropertyValue($valueType)) {
@@ -128,13 +129,19 @@ class VCardConverter
                     // We also need to add a new apple property for the same
                     // purpose. This apple property needs a 'label' in the same
                     // group, so we first need to find a groupname that doesn't
-                    // exist yet.
+                    // exist yet, neither in the output nor in the source card
+                    // (where only the anniversary itself may use it).
                     $x = 1;
-                    while ($output->select('ITEM'.$x.'.')) {
+                    while ($output->select('ITEM'.$x.'.') || array_filter(
+                        $input->select('ITEM'.$x.'.'),
+                        fn ($other) => $other !== $property
+                    )) {
                         ++$x;
                     }
-                    $output->add('ITEM'.$x.'.X-ABDATE', $newProperty->getValue(), ['VALUE' => 'DATE-AND-OR-TIME']);
-                    $output->add('ITEM'.$x.'.X-ABLABEL', '_$!<Anniversary>!$_');
+                    // They are added after X-ANNIVERSARY, so that converting
+                    // back to vCard 4.0 keeps that one (and its group).
+                    $extraProperties[] = $output->createProperty('ITEM'.$x.'.X-ABDATE', $newProperty->getValue(), ['VALUE' => 'DATE-AND-OR-TIME']);
+                    $extraProperties[] = $output->createProperty('ITEM'.$x.'.X-ABLABEL', '_$!<Anniversary>!$_');
                 }
             } elseif ('KIND' === $property->name) {
                 switch (strtolower((string) $property->getValue())) {
@@ -255,6 +262,9 @@ class VCardConverter
         }
 
         $output->add($newProperty);
+        foreach ($extraProperties as $extraProperty) {
+            $output->add($extraProperty);
+        }
     }
 
     /**
