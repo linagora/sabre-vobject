@@ -73,6 +73,13 @@ abstract class Document extends Component
     public static array $valueMap = [];
 
     /**
+     * List of properties whose value type is restricted, and the classes
+     * (value types) they may have. A VALUE parameter selecting another
+     * class is reported by Property::validate().
+     */
+    public static array $allowedPropertyClasses = [];
+
+    /**
      * Creates a new document.
      *
      * We're changing the default behavior slightly here. First, we don't want
