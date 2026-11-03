@@ -227,21 +227,27 @@ class DateTimeParser
             'second',
         ];
 
-        $newDur = '';
+        // A bare "P" matches no group, so the key may be absent.
+        $negative = '-' === ($matches['plusminus'] ?? '');
 
+        $units = [];
         foreach ($parts as $part) {
             if (isset($matches[$part]) && $matches[$part]) {
-                $newDur .= ' '.$matches[$part].' '.$part.'s';
+                $units[] = $matches[$part].' '.$part.'s';
             }
         }
 
-        $newDur = ('-' === $matches['plusminus'] ? '-' : '+').trim($newDur);
-
-        if ('+' === $newDur) {
-            $newDur = '+0 seconds';
+        if (!$units) {
+            return '+0 seconds';
         }
 
-        return $newDur;
+        // strtotime() applies a sign to a single unit, so each unit of a
+        // negative duration carries its own.
+        if ($negative) {
+            return '-'.implode(' -', $units);
+        }
+
+        return '+'.implode(' ', $units);
     }
 
     /**
