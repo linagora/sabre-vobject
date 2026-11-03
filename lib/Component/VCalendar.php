@@ -277,6 +277,8 @@ class VCalendar extends VObject\Document
     {
         $newChildren = [];
         $recurringEvents = [];
+        $series = [];
+        $seriesWithMaster = [];
 
         if (!$timeZone) {
             $timeZone = new \DateTimeZone('UTC');
@@ -324,11 +326,22 @@ class VCalendar extends VObject\Document
                     if (!$uid) {
                         throw new InvalidDataException('Every VEVENT object must have a UID property');
                     }
-                    if (isset($recurringEvents[$uid])) {
-                        $recurringEvents[$uid][] = clone $child;
-                    } else {
-                        $recurringEvents[$uid] = [clone $child];
+                    // A second master for a UID (two objects merged, as an
+                    // ICS export does) starts a new series, which gets the
+                    // overrides that follow it, rather than replacing the
+                    // first master.
+                    if (!isset($child->{'RECURRENCE-ID'})) {
+                        if (isset($seriesWithMaster[$uid])) {
+                            $recurringEvents[] = [];
+                            $series[$uid] = array_key_last($recurringEvents);
+                        }
+                        $seriesWithMaster[$uid] = true;
                     }
+                    if (!isset($series[$uid])) {
+                        $recurringEvents[] = [];
+                        $series[$uid] = array_key_last($recurringEvents);
+                    }
+                    $recurringEvents[$series[$uid]][] = clone $child;
                 } elseif ('VEVENT' === $child->name && $child->isInTimeRange($start, $end)) {
                     $newChildren[] = $stripTimezones(clone $child);
                 }
