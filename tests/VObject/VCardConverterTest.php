@@ -443,9 +443,9 @@ OUT;
         $output = <<<'OUT'
 BEGIN:VCARD
 VERSION:3.0
+ITEM1.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20081210
 ITEM1.X-ABDATE;VALUE=DATE-AND-OR-TIME:20081210
 ITEM1.X-ABLABEL:_$!<Anniversary>!$_
-ITEM1.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20081210
 END:VCARD
 
 OUT;
@@ -496,15 +496,15 @@ OUT;
         $output = <<<'OUT'
 BEGIN:VCARD
 VERSION:3.0
+ITEM1.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20081210
 ITEM1.X-ABDATE;VALUE=DATE-AND-OR-TIME:20081210
 ITEM1.X-ABLABEL:_$!<Anniversary>!$_
-ITEM1.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20081210
+ITEM2.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20091210
 ITEM2.X-ABDATE;VALUE=DATE-AND-OR-TIME:20091210
 ITEM2.X-ABLABEL:_$!<Anniversary>!$_
-ITEM2.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20091210
+ITEM3.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20101210
 ITEM3.X-ABDATE;VALUE=DATE-AND-OR-TIME:20101210
 ITEM3.X-ABLABEL:_$!<Anniversary>!$_
-ITEM3.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20101210
 END:VCARD
 
 OUT;
@@ -663,5 +663,34 @@ VCF;
         $back = $v3->convert(Document::VCARD40);
         self::assertSame('X-FOO', (string) $back->TEL['VALUE']);
         self::assertSame('+1234', (string) $back->TEL);
+    }
+
+    public function testAnniversaryGroupDoesNotReuseCardGroup(): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nANNIVERSARY:20100601\r\n"
+            ."ITEM1.X-ABDATE:20200101\r\nITEM1.X-ABLABEL:Wedding\r\nEND:VCARD\r\n");
+        $v3 = $v4->convert(Document::VCARD30);
+        self::assertCount(1, $v3->select('ITEM1.X-ABLABEL'));
+        self::assertCount(1, $v3->select('ITEM2.X-ABLABEL'));
+
+        /** @var VCard $v3 */
+        $v3 = Reader::read($v3->serialize());
+        $back = $v3->convert(Document::VCARD40);
+        self::assertCount(1, $back->select('ANNIVERSARY'));
+        self::assertSame('20100601', (string) $back->ANNIVERSARY);
+        self::assertNull($back->ANNIVERSARY->group);
+        self::assertSame('20200101', (string) $back->{'ITEM1.X-ABDATE'});
+    }
+
+    public function testAnniversaryGroupDoesNotReuseLabelledGroup(): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nANNIVERSARY:20100601\r\n"
+            ."ITEM1.EMAIL:a@example.com\r\nITEM1.X-ABLABEL:".'_$!<Work>!$_'."\r\nEND:VCARD\r\n");
+        $v3 = $v4->convert(Document::VCARD30);
+        self::assertCount(1, $v3->select('ITEM1.X-ABLABEL'));
+        self::assertSame('_$!<Work>!$_', (string) $v3->{'ITEM1.X-ABLABEL'});
+        self::assertSame('_$!<Anniversary>!$_', (string) $v3->{'ITEM2.X-ABLABEL'});
     }
 }
