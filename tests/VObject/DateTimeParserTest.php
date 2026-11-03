@@ -59,6 +59,28 @@ class DateTimeParserTest extends TestCase
         return [['-P1DT1H'], ['-P1W2DT3M5S'], ['-P'], ['-PT15M'], ['P'], ['+P1DT2H'], ['-PT0S']];
     }
 
+    #[DataProvider('nonexistentDates')]
+    public function testNonexistentDateIsRejected(string $value): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parse($value);
+    }
+
+    /**
+     * @return list<array{string}>
+     */
+    public static function nonexistentDates(): array
+    {
+        return [['20260231T100000Z'], ['20261200T100000Z'], ['20260631'], ['20261100'], ['20260229'], ['20260001']];
+    }
+
+    public function testExistingEdgeDates(): void
+    {
+        self::assertEquals(new \DateTimeImmutable('2024-02-29', new \DateTimeZone('UTC')), DateTimeParser::parseDate('20240229'));
+        self::assertEquals(new \DateTimeImmutable('2026-12-31 23:59:59', new \DateTimeZone('UTC')), DateTimeParser::parseDateTime('20261231T235959Z'));
+        self::assertEquals(new \DateTimeImmutable('0000-02-29', new \DateTimeZone('UTC')), DateTimeParser::parseDate('00000229'));
+    }
+
     public function testParseDurationZero(): void
     {
         $expected = new \DateInterval('PT0S');

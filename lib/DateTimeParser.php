@@ -32,7 +32,7 @@ class DateTimeParser
         // Format is YYYYMMDD + "T" + hhmmss
         $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([0-2][0-9])([0-5][0-9])([0-5][0-9])([Z]?)$/', $dt, $matches);
 
-        if (!$result) {
+        if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
         }
 
@@ -47,6 +47,17 @@ class DateTimeParser
         }
 
         return self::firstOccurrenceOfLocalTime($date);
+    }
+
+    /**
+     * Tells if a day exists in the calendar (RFC 5545 section 3.3.4): no
+     * day 00, no February 30, no June 31... DateTimeImmutable would move
+     * such a day to the next month.
+     */
+    private static function isExistingDate(string $year, string $month, string $day): bool
+    {
+        // checkdate() refuses year 0, a leap year like 2000.
+        return checkdate((int) $month, (int) $day, 0 === (int) $year ? 2000 : (int) $year);
     }
 
     /**
@@ -96,7 +107,7 @@ class DateTimeParser
         // Format is YYYYMMDD
         $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])$/', $date, $matches);
 
-        if (!$result) {
+        if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
         }
 
