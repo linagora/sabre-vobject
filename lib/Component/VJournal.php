@@ -28,7 +28,9 @@ class VJournal extends VObject\Component
      */
     public function isInTimeRange(\DateTimeInterface $start, \DateTimeInterface $end): bool
     {
-        $dtstart = isset($this->DTSTART) ? $this->DTSTART->getDateTime() : null;
+        // The class of DTSTART follows its VALUE parameter: one that is not
+        // a date is ignored, like a missing one.
+        $dtstart = $this->DTSTART instanceof VObject\Property\ICalendar\DateTime ? $this->DTSTART->getDateTime() : null;
         if ($dtstart) {
             $effectiveEnd = $dtstart;
             if (!$this->DTSTART->hasTime()) {

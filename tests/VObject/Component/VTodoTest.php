@@ -221,6 +221,23 @@ HI;
         self::assertIsArray($vcal->validate(\Sabre\VObject\Node::PROFILE_CALDAV | \Sabre\VObject\Node::REPAIR));
     }
 
+    #[DataProvider('nonDateTimeTodoProperties')]
+    public function testInTimeRangeIgnoresNonDateTimeProperty(string $line): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTODO\r\nUID:t1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$line\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+        // A VTODO without a usable date matches every range (RFC 4791 9.9).
+        self::assertTrue($vcal->VTODO->isInTimeRange(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-01-05T18:00:00Z')
+        ));
+    }
+
+    public static function nonDateTimeTodoProperties(): array
+    {
+        return [['DUE;VALUE=TEXT:tomorrow'], ['DTSTART;VALUE=PERIOD:20300101T000000Z/PT1H'],
+            ['COMPLETED;VALUE=TEXT:x'], ['CREATED;VALUE=TEXT:x']];
+    }
+
     public function testValidateDuplicatePercentComplete(): void
     {
         $input = <<<HI
