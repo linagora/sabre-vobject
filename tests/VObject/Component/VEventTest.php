@@ -178,4 +178,25 @@ class VEventTest extends TestCase
         return [['EXDATE;VALUE=DATE-TIME:20260302T100000Z'], ['RDATE;VALUE=PERIOD:20260310T100000Z/PT1H'],
             ['RDATE;VALUE=DATE:20260310'], ['DURATION:PT1H']];
     }
+
+    #[DataProvider('nonDateTimeRangeEvents')]
+    public function testInTimeRangeWithNonDateDtstartOrDtend(string $lines, string $message): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$lines\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $this->expectException(VObject\InvalidDataException::class);
+        $this->expectExceptionMessage($message);
+        $vcal->VEVENT->isInTimeRange(new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2027-01-01T00:00:00Z'));
+    }
+
+    public static function nonDateTimeRangeEvents(): array
+    {
+        return [
+            ['DTSTART;VALUE=PERIOD:20260301T100000Z/PT2H', 'DTSTART must be a date or date-time value'],
+            ['DTSTART;VALUE=TEXT:today', 'DTSTART must be a date or date-time value'],
+            ['DTSTART;VALUE=DURATION:P1D', 'DTSTART must be a date or date-time value'],
+            ['SUMMARY:no DTSTART', 'DTSTART must be a date or date-time value'],
+            ["DTSTART:20260301T100000Z\r\nDTEND;VALUE=TEXT:later", 'DTEND must be a date or date-time value'],
+        ];
+    }
 }
