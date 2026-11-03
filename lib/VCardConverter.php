@@ -76,8 +76,14 @@ class VCardConverter
         $parameters = $property->parameters();
         $valueType = null;
         if (isset($parameters['VALUE'])) {
-            $valueType = $parameters['VALUE']->getValue();
-            unset($parameters['VALUE']);
+            $valueType = (string) $parameters['VALUE']->getValue();
+            if ('' !== $valueType && null === $output->getClassNameForPropertyValue($valueType)) {
+                // An unknown value type: the property keeps the class of the
+                // source, and the parameter is kept as is.
+                $valueType = null;
+            } else {
+                unset($parameters['VALUE']);
+            }
         }
         if (!$valueType) {
             $valueType = $property->getValueType();
@@ -93,9 +99,13 @@ class VCardConverter
         );
 
         if (Document::VCARD30 === $targetVersion) {
-            if ($property instanceof Uri && in_array($property->name, ['PHOTO', 'LOGO', 'SOUND'], true)) {
-                /** @var Uri $newProperty */
-                $newProperty = $this->convertUriToBinary($output, $newProperty);
+            if ($newProperty instanceof Uri && in_array($property->name, ['PHOTO', 'LOGO', 'SOUND'], true)) {
+                $binaryProperty = $this->convertUriToBinary($output, $newProperty);
+                if ($binaryProperty !== $newProperty) {
+                    // The value is no longer of the unknown type, if any.
+                    unset($parameters['VALUE']);
+                }
+                $newProperty = $binaryProperty;
             } elseif ($property instanceof Property\VCard\DateAndOrTime) {
                 // In vCard 4, the birth year may be optional. This is not the
                 // case for vCard 3. Apple has a workaround for this that
@@ -153,8 +163,9 @@ class VCardConverter
                 return;
             }
 
-            if ($property instanceof Binary) {
-                /** @var Binary $newProperty */
+            if ($newProperty instanceof Binary) {
+                // The value is no longer of the unknown type, if any.
+                unset($parameters['VALUE']);
                 $newProperty = $this->convertBinaryToUri($output, $newProperty, $parameters);
             } elseif ($property instanceof Property\VCard\DateAndOrTime && isset($parameters['X-APPLE-OMIT-YEAR'])) {
                 // If a property such as BDAY contained 'X-APPLE-OMIT-YEAR',
