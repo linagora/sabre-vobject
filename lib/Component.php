@@ -568,9 +568,26 @@ class Component extends Node
                 case '1':
                     if (!isset($propertyCounters[$propName]) || 1 !== $propertyCounters[$propName]) {
                         $repaired = false;
-                        if ($options & self::REPAIR && isset($defaults[$propName])) {
-                            $this->add($propName, $defaults[$propName]);
-                            $repaired = true;
+                        if ($options & self::REPAIR) {
+                            if (!isset($propertyCounters[$propName])) {
+                                // A missing property gets its default.
+                                if (isset($defaults[$propName])) {
+                                    $this->add($propName, $defaults[$propName]);
+                                    $repaired = true;
+                                }
+                            } else {
+                                // Duplicates are only merged when they are
+                                // all the same; adding a default would just
+                                // add one more copy.
+                                $properties = $this->select($propName);
+                                $serialized = array_map(fn (Node $property) => $property->serialize(), $properties);
+                                if (1 === count(array_unique($serialized))) {
+                                    foreach (array_slice($properties, 1) as $property) {
+                                        $this->remove($property);
+                                    }
+                                    $repaired = true;
+                                }
+                            }
                         }
                         $messages[] = [
                             'level' => $repaired ? 1 : 3,
