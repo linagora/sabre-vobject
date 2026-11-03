@@ -111,6 +111,31 @@ class VCardTest extends TestCase
         return $tests;
     }
 
+    #[DataProvider('cardsWithoutVersion')]
+    public function testRepairMissingVersionLeavesAValidCard(string $lines, string $expectedVersion): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nFN:Jane Doe\r\nUID:a\r\n$lines\r\nEND:VCARD\r\n");
+        $messages = array_column($card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR), 'level');
+        self::assertSame($expectedVersion, (string) $card->VERSION);
+        self::assertNotContains(3, $messages);
+
+        $stored = VObject\Reader::read($card->serialize());
+        $strict = array_column($stored->validate(VObject\Node::PROFILE_CARDDAV), 'level');
+        self::assertNotContains(3, $strict);
+        foreach ($card->children() as $property) {
+            self::assertSame($property::class, $stored->select($property->name)[0]::class);
+        }
+    }
+
+    public static function cardsWithoutVersion(): array
+    {
+        return [
+            ['LOGO;ENCODING=b;TYPE=PNG:iVBORw0KGgo=', '3.0'],
+            ['PHOTO:', '3.0'],
+            ['EMAIL:a@example.com', '4.0'],
+        ];
+    }
+
     public function testGetDocumentType(): void
     {
         $vcard = new VCard([], false);

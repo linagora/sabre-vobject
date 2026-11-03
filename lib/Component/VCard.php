@@ -215,6 +215,26 @@ class VCard extends VObject\Document
         ];
 
         $version = $this->select('VERSION');
+        if (0 === count($version) && ($options & self::REPAIR)) {
+            // Repairing the missing VERSION before the properties are
+            // validated, so they are validated against the version that will
+            // be stored. Without VERSION the card was read with vCard 3
+            // semantics (BINARY values, ENCODING parameters): keep 3.0 when
+            // it relies on them.
+            $missingVersion = $this->getDefaults()['VERSION'];
+            foreach ($this->children() as $child) {
+                if ($child instanceof VObject\Property\Binary || ($child instanceof VObject\Property && isset($child['ENCODING']))) {
+                    $missingVersion = '3.0';
+                    break;
+                }
+            }
+            $this->add('VERSION', $missingVersion);
+            $warnings[] = [
+                'level' => 1,
+                'message' => 'VERSION MUST appear exactly once in a VCARD component',
+                'node' => $this,
+            ];
+        }
         if (1 === count($version)) {
             $version = (string) $this->VERSION;
             if ('2.1' !== $version && '3.0' !== $version && '4.0' !== $version) {
