@@ -260,4 +260,22 @@ class JCardTest extends TestCase
         self::assertSame(['a,b', 'c'], $again->{'X-A'}->getParts());
         self::assertSame(['X', '', '', '', ''], $again->N->getParts());
     }
+
+    public function testNestedComponentDoesNotBreakJCard(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nUID:u\r\nBEGIN:VEVENT\r\nUID:a\r\nEND:VEVENT\r\nEND:VCARD\r\n");
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+        self::assertInstanceOf(Component\VCard::class, $again);
+        self::assertSame('u', (string) $again->UID);
+
+        $messages = $card->validate(Node::PROFILE_CARDDAV);
+        self::assertCount(1, $messages);
+        self::assertSame(3, $messages[0]['level']);
+
+        $messages = $card->validate(Node::PROFILE_CARDDAV | Node::REPAIR);
+        self::assertCount(1, $messages);
+        self::assertSame(1, $messages[0]['level']);
+        self::assertSame([], $card->getComponents());
+        self::assertSame([], $card->validate(Node::PROFILE_CARDDAV));
+    }
 }
