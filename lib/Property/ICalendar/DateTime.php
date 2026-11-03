@@ -263,18 +263,22 @@ class DateTime extends Property
         $hasTime = $this->hasTime();
         // Only a value written in UTC gets a Z: a value with a TZID is a
         // local time, even when the TZID could not be resolved (and was
-        // replaced by the default time zone).
-        $isUtc = str_ends_with(strtoupper((string) ($this->getParts()[0] ?? '')), 'Z');
+        // replaced by the default time zone). This is decided for each
+        // value, as a multi-valued property may mix both forms.
+        $parts = array_values($this->getParts());
 
         return array_map(
-            function (\DateTimeInterface $dt) use ($hasTime, $isUtc) {
+            function (\DateTimeInterface $dt, int $i) use ($hasTime, $parts) {
                 if ($hasTime) {
+                    $isUtc = str_ends_with(strtoupper((string) ($parts[$i] ?? '')), 'Z');
+
                     return $dt->format('Y-m-d\\TH:i:s').($isUtc ? 'Z' : '');
                 }
 
                 return $dt->format('Y-m-d');
             },
-            $dts
+            $dts,
+            array_keys($dts)
         );
     }
 
