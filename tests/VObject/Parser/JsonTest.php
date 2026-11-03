@@ -514,4 +514,24 @@ VCF;
         self::assertSame("N;X-A=b,c:Doe;John,J;;;\r\n", $vcard->N->serialize());
         self::assertSame('51.96668;7.61876', (string) $vcard->GEO);
     }
+
+    public function testValueTypeOfARegisteredClass(): void
+    {
+        $uriClass = new class(new VObject\Component\VCalendar(), 'URL') extends VObject\Property\Uri {};
+        $valueMap = VObject\Component\VCalendar::$valueMap;
+        VObject\Component\VCalendar::$valueMap['URI'] = $uriClass::class;
+        try {
+            $cal = (new Json())->parse('["vcalendar",[],[["vevent",[["uid",{},"text","a"],'
+                .'["url",{},"uri","https://e.com/a"],["conference",{},"uri","https://e.com/b"],'
+                .'["dtstart",{},"date","2026-01-01"]]]]]');
+        } finally {
+            VObject\Component\VCalendar::$valueMap = $valueMap;
+        }
+
+        // URI is the default type of URL, not of CONFERENCE.
+        self::assertInstanceOf($uriClass::class, $cal->VEVENT->URL);
+        self::assertFalse(isset($cal->VEVENT->URL['VALUE']));
+        self::assertSame('URI', (string) $cal->VEVENT->CONFERENCE['VALUE']);
+        self::assertSame('DATE', (string) $cal->VEVENT->DTSTART['VALUE']);
+    }
 }
