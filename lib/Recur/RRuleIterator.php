@@ -609,8 +609,10 @@ class RRuleIterator implements \Iterator
 
         // No sub-rules, so we just advance by year
         if (!$this->byMonth) {
-            // Unless it was a leap day!
-            if (2 === (int) $currentMonth && 29 === (int) $currentDayOfMonth) {
+            // Unless it was a leap day! (BYWEEKNO and BYYEARDAY, below,
+            // do not take the day of the month from the current instance.)
+            if (2 === (int) $currentMonth && 29 === (int) $currentDayOfMonth
+                && null === $this->byWeekNo && null === $this->byYearDay) {
                 $counter = 0;
                 do {
                     ++$counter;
