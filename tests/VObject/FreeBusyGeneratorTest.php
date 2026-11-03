@@ -777,4 +777,34 @@ ICS;
             $vavail
         );
     }
+
+    /**
+     * An AVAILABLE without DTSTART is ignored: it makes no time free.
+     */
+    public function testVAvailabilityAvailableWithoutDtstart(): void
+    {
+        $vavail = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VAVAILABILITY
+DTSTART:20110101T000000Z
+DTEND:20120101T000000Z
+BEGIN:AVAILABLE
+DTEND:20110102T000000Z
+END:AVAILABLE
+BEGIN:AVAILABLE
+DTSTART:20110102T000000Z
+DTEND:20110102T010000Z
+END:AVAILABLE
+END:VAVAILABILITY
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport(
+            "FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110101T110000Z/20110102T000000Z\n".
+            'FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110102T010000Z/20110103T110000Z',
+            [],
+            null,
+            $vavail
+        );
+    }
 }
