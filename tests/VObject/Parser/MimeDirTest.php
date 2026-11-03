@@ -6,6 +6,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\ParseException;
+use Sabre\VObject\Property;
+use Sabre\VObject\Reader;
 
 /**
  * Note that most MimeDir related tests can actually be found in the ReaderTest
@@ -290,6 +292,31 @@ EOF;
         $vcard = $mimeDir->parse($vcard);
 
         echo $vcard->serialize();
+    }
+
+    public function testNamelessValueParameterSelectsTheClass(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nX-FOO;URL:x\r\nNOTE;ENCODING=QUOTED-PRINTABLE;QUOTED-PRINTABLE:a=3Db\r\nEND:VCARD\r\n");
+        self::assertInstanceOf(Property\Uri::class, $card->{'X-FOO'});
+        self::assertSame('a=b', $card->NOTE->getValue());
+        $reread = Reader::read($card->serialize());
+        self::assertSame($card->{'X-FOO'}::class, $reread->{'X-FOO'}::class);
+        self::assertSame($card->serialize(), $reread->serialize());
+
+        $this->expectException(ParseException::class);
+        Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nX-FOO;VALUE=TEXT;URL:x\r\nEND:VCARD\r\n");
+    }
+
+    public function testNamelessParametersKeepTheirVCard21Form(): void
+    {
+        $input = "BEGIN:VCARD\r\nVERSION:2.1\r\nTEL;HOME;VOICE:1\r\nTEL;TYPE=HOME;HOME;WORK:2\r\nEND:VCARD\r\n";
+        $card = Reader::read($input);
+        self::assertSame(['HOME', 'VOICE'], $card->TEL['TYPE']->getParts());
+        self::assertSame(['HOME', 'WORK'], $card->select('TEL')[1]['TYPE']->getParts());
+        self::assertSame(
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nTEL;HOME;VOICE:1\r\nTEL;TYPE=HOME,WORK:2\r\nEND:VCARD\r\n",
+            $card->serialize()
+        );
     }
 
     public function testEmptyPropertyNameAfterGroupIsRejected(): void
