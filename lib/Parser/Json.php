@@ -95,7 +95,7 @@ class Json extends Parser
         }
         self::assertComponentShape($jComp);
         // The name is written as-is when serializing to MimeDir.
-        if (!is_string($jComp[0] ?? null) || !preg_match('/^[A-Z0-9-]+$/i', $jComp[0])) {
+        if (!is_string($jComp[0] ?? null) || !preg_match('/^[A-Z0-9-]+\z/i', $jComp[0])) {
             throw new ParseException('Invalid component name');
         }
         if (strtoupper($jComp[0]) === $this->root->name) {
@@ -153,7 +153,7 @@ class Json extends Parser
 
         // The name is written as-is when serializing to MimeDir: it must not
         // be able to produce a component boundary or another line.
-        if (!preg_match('/^[A-Z0-9-]+$/', $propertyName) || 'BEGIN' === $propertyName || 'END' === $propertyName) {
+        if (!preg_match('/^[A-Z0-9-]+\z/', $propertyName) || 'BEGIN' === $propertyName || 'END' === $propertyName) {
             throw new ParseException('Invalid property name: '.$propertyName);
         }
 
@@ -173,7 +173,7 @@ class Json extends Parser
         $valueType = strtoupper($valueType);
 
         if (isset($parameters['group'])) {
-            if (!is_string($parameters['group']) || !preg_match('/^[A-Z0-9-]+$/i', $parameters['group'])) {
+            if (!is_string($parameters['group']) || !preg_match('/^[A-Z0-9-]+\z/i', $parameters['group'])) {
                 throw new ParseException('Invalid group name for property '.$propertyName);
             }
             $propertyName = $parameters['group'].'.'.$propertyName;
