@@ -308,4 +308,33 @@ class FreeBusyDataTest extends TestCase
             $fb->getData()
         );
     }
+
+    public function testInvertedAndEmptyIntervalsAreIgnored(): void
+    {
+        $fb = new FreeBusyData(10, 66);
+        $fb->add(58, 30, 'BUSY-TENTATIVE');
+        $fb->add(40, 40, 'FREE');
+        $fb->add(20, 58, 'BUSY-TENTATIVE');
+        $fb->add(66, 80, 'BUSY');
+        $fb->add(0, 10, 'BUSY');
+        self::assertEquals([
+            ['start' => 10, 'end' => 20, 'type' => 'FREE'],
+            ['start' => 20, 'end' => 58, 'type' => 'BUSY-TENTATIVE'],
+            ['start' => 58, 'end' => 66, 'type' => 'FREE'],
+        ], $fb->getData());
+    }
+
+    public function testEmptyIntervalDoesNotSplitBusyTime(): void
+    {
+        $fb = new FreeBusyData(10, 70);
+        $fb->add(20, 21, 'BUSY');
+        $fb->add(30, 80, 'BUSY');
+        $fb->add(40, 40, 'FREE');
+        self::assertEquals([
+            ['start' => 10, 'end' => 20, 'type' => 'FREE'],
+            ['start' => 20, 'end' => 21, 'type' => 'BUSY'],
+            ['start' => 21, 'end' => 30, 'type' => 'FREE'],
+            ['start' => 30, 'end' => 70, 'type' => 'BUSY'],
+        ], $fb->getData());
+    }
 }

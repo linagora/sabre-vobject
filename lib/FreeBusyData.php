@@ -40,8 +40,8 @@ class FreeBusyData
      */
     public function add(int $start, int $end, string $type): void
     {
-        if ($start > $this->end || $end < $this->start) {
-            // This new data is outside our time range.
+        if ($start >= $this->end || $end <= $this->start || $start >= $end) {
+            // This new data is outside our time range, or empty, or inverted.
             return;
         }
 

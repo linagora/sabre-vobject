@@ -405,6 +405,11 @@ class FreeBusyGenerator
                                 // The event had no duration (0 seconds)
                                 break;
                             }
+                            if ($endTime <= $startTime) {
+                                // A DTEND or DURATION before DTSTART: the
+                                // event lasts 0 seconds, so it is never busy.
+                                break;
+                            }
 
                             $times[] = [$startTime, $endTime];
                         }
