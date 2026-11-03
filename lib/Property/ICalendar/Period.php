@@ -91,7 +91,10 @@ class Period extends Property
     {
         $return = [];
         foreach ($this->getParts() as $item) {
-            [$start, $end] = explode('/', (string) $item, 2);
+            [$start, $end] = explode('/', (string) $item, 2) + [1 => ''];
+            if ('' === $end) {
+                throw new InvalidDataException('A period must have a start and an end or a duration: '.$item);
+            }
 
             $startDt = DateTimeParser::parseDateTime($start)->format('Y-m-d\\TH:i:s').$this->appendUtc($start);
 
@@ -141,8 +144,20 @@ class Period extends Property
                     'message' => 'The supplied value ('.$value.') is not a correct PERIOD',
                     'node' => $this,
                 ];
-                break;
+
+                return $messages;
             }
+        }
+
+        // getJsonValue() must be able to format any value accepted here.
+        try {
+            $this->getJsonValue();
+        } catch (InvalidDataException) {
+            $messages[] = [
+                'level' => 3,
+                'message' => 'The supplied value ('.$this->getRawMimeDirValue().') is not a correct PERIOD',
+                'node' => $this,
+            ];
         }
 
         return $messages;

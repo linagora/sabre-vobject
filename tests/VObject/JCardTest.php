@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class JCardTest extends TestCase
@@ -190,5 +191,31 @@ class JCardTest extends TestCase
         ];
 
         self::assertEquals($expected, $card->jsonSerialize());
+    }
+
+    #[DataProvider('valuesJsonSerializeCannotFormat')]
+    public function testValidateReportsValuesJsonSerializeCannotFormat(string $property): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\n$property\r\nEND:VCARD\r\n");
+
+        $errors = array_filter($card->validate(Node::REPAIR), fn ($m) => 3 === $m['level']);
+        self::assertCount(1, $errors);
+    }
+
+    public static function valuesJsonSerializeCannotFormat(): array
+    {
+        return [
+            'timestamp' => ['REV:2009-08-08T14::11'],
+            'time' => ['X-A;VALUE=TIME:--02-03'],
+        ];
+    }
+
+    public function testValidTimestampAndTimeAreNotReported(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nREV:20090808T141100Z\r\n"
+            ."X-A;VALUE=TIME:141100\r\nEND:VCARD\r\n");
+
+        self::assertSame([], $card->validate());
+        self::assertIsString(json_encode($card->jsonSerialize(), JSON_THROW_ON_ERROR));
     }
 }
