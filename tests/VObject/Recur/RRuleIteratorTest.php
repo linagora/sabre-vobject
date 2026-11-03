@@ -1712,6 +1712,15 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testByWeekNoWithoutByDayKeepsStartWeekday(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=20;COUNT=3',
+            '2026-05-14 09:00:00', // Thursday of week 20
+            ['2026-05-14 09:00:00', '2027-05-20 09:00:00', '2028-05-18 09:00:00']
+        );
+    }
+
     public function testInvalidByWeekNo(): void
     {
         $this->expectException(InvalidDataException::class);
