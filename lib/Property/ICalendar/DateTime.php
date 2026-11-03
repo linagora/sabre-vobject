@@ -155,7 +155,9 @@ class DateTime extends Property
         /** @var Property\FlatText $tzid */
         $tzid = $this['TZID'];
 
-        if ($tzid) {
+        // TZID only applies to DATE-TIME values (RFC 5545 section 3.2.19): a
+        // DATE is floating and uses the reference time zone.
+        if ($tzid && $this->hasTime()) {
             $timeZone = TimeZoneUtil::getTimeZone((string) $tzid, $this->root);
         }
 
