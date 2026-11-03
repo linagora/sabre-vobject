@@ -39,11 +39,13 @@ class VTodo extends VObject\Component
      */
     public function isInTimeRange(\DateTimeInterface $start, \DateTimeInterface $end): bool
     {
-        $dtstart = isset($this->DTSTART) ? $this->DTSTART->getDateTime() : null;
+        // The class of these properties follows their VALUE parameter: one
+        // that is not a date is ignored, like a missing one.
+        $dtstart = $this->DTSTART instanceof VObject\Property\ICalendar\DateTime ? $this->DTSTART->getDateTime() : null;
         $duration = isset($this->DURATION) ? VObject\DateTimeParser::parseDuration($this->DURATION) : null;
-        $due = isset($this->DUE) ? $this->DUE->getDateTime() : null;
-        $completed = isset($this->COMPLETED) ? $this->COMPLETED->getDateTime() : null;
-        $created = isset($this->CREATED) ? $this->CREATED->getDateTime() : null;
+        $due = $this->DUE instanceof VObject\Property\ICalendar\DateTime ? $this->DUE->getDateTime() : null;
+        $completed = $this->COMPLETED instanceof VObject\Property\ICalendar\DateTime ? $this->COMPLETED->getDateTime() : null;
+        $created = $this->CREATED instanceof VObject\Property\ICalendar\DateTime ? $this->CREATED->getDateTime() : null;
 
         if ($dtstart) {
             if ($duration) {

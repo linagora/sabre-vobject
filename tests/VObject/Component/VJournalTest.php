@@ -8,6 +8,15 @@ use Sabre\VObject\Reader;
 
 class VJournalTest extends TestCase
 {
+    public function testInTimeRangeIgnoresNonDateTimeDtstart(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VJOURNAL\r\nUID:j1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART;VALUE=TEXT:today\r\nEND:VJOURNAL\r\nEND:VCALENDAR\r\n");
+        self::assertFalse($vcal->VJOURNAL->isInTimeRange(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-01-05T18:00:00Z')
+        ));
+    }
+
     #[DataProvider('timeRangeTestData')]
     public function testInTimeRange(VJournal $vtodo, \DateTime $start, \DateTime $end, bool $outcome): void
     {
