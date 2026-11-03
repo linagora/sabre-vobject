@@ -219,4 +219,38 @@ BLA;
         self::assertFalse($alarm->isInTimeRange(new \DateTimeImmutable('2026-03-21T00:00:00Z'), new \DateTimeImmutable('2026-03-22T00:00:00Z')));
         self::assertTrue($alarm->isInTimeRange(new \DateTimeImmutable('2026-03-20T00:00:00Z'), new \DateTimeImmutable('2026-03-21T00:00:00Z')));
     }
+
+    public static function unanchoredAlarmData(): array
+    {
+        $alarm = "BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:x\r\n";
+
+        return [
+            'VTODO without DTSTART' => ["BEGIN:VTODO\r\nUID:t1\r\nDTSTAMP:20260101T000000Z\r\n{$alarm}TRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VTODO\r\n"],
+            'related to the end, no DUE nor DTSTART' => ["BEGIN:VTODO\r\nUID:t1\r\nDTSTAMP:20260101T000000Z\r\n{$alarm}TRIGGER;RELATED=END:PT0S\r\nEND:VALARM\r\nEND:VTODO\r\n"],
+            'related to the end, DURATION without DTSTART' => ["BEGIN:VTODO\r\nUID:t1\r\nDTSTAMP:20260101T000000Z\r\nDURATION:PT1H\r\n{$alarm}TRIGGER;RELATED=END:PT0S\r\nEND:VALARM\r\nEND:VTODO\r\n"],
+            'VEVENT without DTSTART' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\n{$alarm}TRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\n"],
+            'DTSTART of type TEXT' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;VALUE=TEXT:x\r\n{$alarm}TRIGGER:-PT15M\r\nEND:VALARM\r\nEND:VEVENT\r\n"],
+            'TRIGGER of type TEXT' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260105T100000Z\r\n{$alarm}TRIGGER;VALUE=TEXT:x\r\nEND:VALARM\r\nEND:VEVENT\r\n"],
+            'no TRIGGER' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260105T100000Z\r\n{$alarm}END:VALARM\r\nEND:VEVENT\r\n"],
+        ];
+    }
+
+    #[DataProvider('unanchoredAlarmData')]
+    public function testInTimeRangeUnanchoredAlarm(string $component): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n{$component}END:VCALENDAR\r\n");
+        $alarm = $vcal->getBaseComponent()->VALARM;
+
+        $this->expectException(InvalidDataException::class);
+        $alarm->isInTimeRange(new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2027-01-01T00:00:00Z'));
+    }
+
+    public function testInTimeRangeTriggerWithEmptyValueParameter(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:e1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260105T100000Z\r\nBEGIN:VALARM\r\nTRIGGER;VALUE=:-PT15M\r\n"
+            ."ACTION:DISPLAY\r\nDESCRIPTION:x\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        self::assertEquals(new \DateTimeImmutable('2026-01-05T09:45:00Z'), $vcal->VEVENT->VALARM->getEffectiveTriggerTime());
+    }
 }
