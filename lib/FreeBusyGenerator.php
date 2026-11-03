@@ -178,6 +178,8 @@ class FreeBusyGenerator
     /**
      * This method takes a VAVAILABILITY component and figures out all the
      * available times.
+     *
+     * @throws InvalidDataException|Recur\MaxInstancesExceededException
      */
     protected function calculateAvailability(FreeBusyData $fbData, VCalendar $vavailability): void
     {
@@ -298,12 +300,22 @@ class FreeBusyGenerator
                             $available->RRULE->getValue(),
                             $availStart
                         );
-                        $rruleIterator->fastForward($vavailStart);
-
                         $startEndDiff = $availStart->diff($availEnd);
+                        $instances = 0;
 
                         while ($rruleIterator->valid()) {
+                            // Bounded like the instances of an event, the
+                            // ones before the VAVAILABILITY start included.
+                            if (-1 !== Settings::$maxRecurrences && ++$instances > Settings::$maxRecurrences) {
+                                throw new Recur\MaxInstancesExceededException('Recurring AVAILABLE components are only allowed to generate '.Settings::$maxRecurrences.' instances');
+                            }
+
                             $recurStart = $rruleIterator->current();
+                            if ($recurStart < $vavailStart) {
+                                // Fast-forwarding to the VAVAILABILITY start.
+                                $rruleIterator->next();
+                                continue;
+                            }
                             $recurEnd = $recurStart->add($startEndDiff);
 
                             if ($recurStart > $vavailEnd) {
