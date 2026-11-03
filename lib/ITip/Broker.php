@@ -385,7 +385,8 @@ class Broker
 
                 if ($cancelWholeEvent) {
                     $vevent->STATUS = 'CANCELLED';
-                    $vevent->SEQUENCE = $itipMessage->sequence;
+                    // A CANCEL without SEQUENCE has the default sequence 0.
+                    $vevent->SEQUENCE = $itipMessage->sequence ?? 0;
                 } elseif (isset($instancesToCancel[$recurIdTimestamp])) {
                     $existingObject->remove($vevent);
                 }
