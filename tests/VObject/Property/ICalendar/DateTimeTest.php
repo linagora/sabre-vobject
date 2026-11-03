@@ -417,4 +417,25 @@ class DateTimeTest extends TestCase
         $this->expectException(InvalidDataException::class);
         $vcal->jsonSerialize();
     }
+
+    public function testSetDateTimeOffsetZoneKeepsInstant(): void
+    {
+        $vevent = $this->vcal->add('VEVENT', ['DTSTART' => '20261103T090000']);
+        $vevent->DTSTART['TZID'] = 'GMT+0100';
+        $dt = $vevent->DTSTART->getDateTime();
+        self::assertSame('2026-11-03T08:00:00+00:00', $dt->setTimezone(new \DateTimeZone('UTC'))->format('c'));
+        $vevent->DTSTART->setDateTime($dt);
+        self::assertSame($dt->getTimestamp(), $vevent->DTSTART->getDateTime()->getTimestamp());
+    }
+
+    public function testExpandOffsetTzid(): void
+    {
+        $vcal = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;TZID=GMT-0100:20260111T153000\r\nDTEND;TZID=GMT-0100:20260111T163000\r\nRRULE:FREQ=DAILY;COUNT=2\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-02-01T00:00:00Z'));
+        self::assertSame('20260111T163000Z', (string) $expanded->VEVENT[0]->DTSTART);
+        self::assertSame('20260111T173000Z', (string) $expanded->VEVENT[0]->DTEND);
+        self::assertSame('20260111T163000Z', (string) $expanded->VEVENT[0]->{'RECURRENCE-ID'});
+    }
 }

@@ -401,4 +401,10 @@ HI;
         self::assertSame('-05:30', $finder->find('GMT-0530')?->getName());
         self::assertNull($finder->find("GMT+0100\n"));
     }
+
+    public function testOffsetZoneNameResolves(): void
+    {
+        self::assertSame('+01:00', TimeZoneUtil::getTimeZone('+01:00', null, true)->getName());
+        self::assertSame('-05:30', TimeZoneUtil::getTimeZone('-05:30', null, true)->getName());
+    }
 }
