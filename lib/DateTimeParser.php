@@ -258,7 +258,7 @@ class DateTimeParser
         if ('' === $date) {
             throw new InvalidDataException('An empty string is not a valid date, date-time or duration');
         }
-        if ('P' === $date[0] || ('-' === $date[0] && 'P' === ($date[1] ?? ''))) {
+        if ('P' === $date[0] || (('-' === $date[0] || '+' === $date[0]) && 'P' === ($date[1] ?? ''))) {
             return self::parseDuration($date);
         } elseif (8 === strlen($date)) {
             return self::parseDate($date, $referenceTz);

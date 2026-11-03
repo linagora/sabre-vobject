@@ -35,6 +35,12 @@ class DateTimeParserTest extends TestCase
         self::assertEquals($expected, DateTimeParser::parseDuration('-PT3M'));
     }
 
+    public function testParsePlusSignDuration(): void
+    {
+        self::assertEquals(new \DateInterval('PT1H'), DateTimeParser::parse('+PT1H'));
+        self::assertEquals(new \DateInterval('P1D'), DateTimeParser::parse('+P1D'));
+    }
+
     public function testParseDurationZero(): void
     {
         $expected = new \DateInterval('PT0S');
