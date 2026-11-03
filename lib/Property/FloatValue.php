@@ -109,4 +109,27 @@ class FloatValue extends Property
             parent::xmlSerializeValue($writer);
         }
     }
+
+    /**
+     * Validates the node for correctness.
+     *
+     * A value too large for a float (1e999) becomes INF, which neither JSON
+     * nor iCalendar / vCard can represent.
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+        foreach ($this->getParts() as $part) {
+            if (!is_finite((float) $part)) {
+                $messages[] = [
+                    'level' => 3,
+                    'message' => 'The value of '.$this->name.' is not a finite FLOAT',
+                    'node' => $this,
+                ];
+                break;
+            }
+        }
+
+        return $messages;
+    }
 }
