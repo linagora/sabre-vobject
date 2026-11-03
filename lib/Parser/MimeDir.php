@@ -8,6 +8,7 @@ use Sabre\VObject\Document;
 use Sabre\VObject\EofException;
 use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Node;
+use Sabre\VObject\Parameter;
 use Sabre\VObject\ParseException;
 use Sabre\VObject\Property;
 
@@ -478,14 +479,38 @@ class MimeDir extends Parser
             }
         }
 
+        // Their name is guessed before the property is created, as a
+        // nameless VALUE (";URL") selects the class and a nameless ENCODING
+        // the decoding. They are merged with a named parameter of the same
+        // name, a value it already has being skipped.
+        $guessedNames = [];
+        $valuelessParameters = [];
+        foreach ($namelessParameters as $namelessParameter) {
+            $name = Parameter::guessParameterNameByValue($namelessParameter);
+            if ('' === $name) {
+                // Not a known value: a parameter without a value.
+                $valuelessParameters[] = $namelessParameter;
+                continue;
+            }
+            $guessedNames[$name] ??= !isset($namedParameters[$name]);
+            if (!isset($namedParameters[$name])) {
+                $namedParameters[$name] = $namelessParameter;
+            } elseif (!in_array($namelessParameter, (array) $namedParameters[$name], true)) {
+                $namedParameters[$name] = array_merge((array) $namedParameters[$name], [$namelessParameter]);
+            }
+        }
+
         if (isset($namedParameters['VALUE']) && !is_string($namedParameters['VALUE'])) {
             throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': the VALUE parameter must have a single value');
         }
 
         $propObj = $this->root->createProperty($property['name'], null, $namedParameters, null, $this->startLine, $line);
 
-        foreach ($namelessParameters as $namelessParameter) {
-            $propObj->add(null, $namelessParameter);
+        foreach ($guessedNames as $name => $noName) {
+            $propObj->parameters[$name]->noName = $noName;
+        }
+        foreach ($valuelessParameters as $valuelessParameter) {
+            $propObj->add(null, $valuelessParameter);
         }
 
         if (isset($propObj['ENCODING']) && 'QUOTED-PRINTABLE' === strtoupper($propObj['ENCODING'])) {
