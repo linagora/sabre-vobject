@@ -229,6 +229,37 @@ class Parameter extends Node implements \Stringable
     }
 
     /**
+     * Validates the node for correctness.
+     *
+     * A value that is not UTF-8 is reported (and converted with REPAIR), as
+     * it would make the jCal / jCard of the document impossible to encode.
+     */
+    public function validate(int $options = 0): array
+    {
+        $parts = $this->getParts();
+        $invalid = array_filter($parts, fn ($part) => is_string($part) && !mb_check_encoding($part, 'UTF-8'));
+        if ([] === $invalid) {
+            return [];
+        }
+
+        $repair = (bool) ($options & self::REPAIR);
+        if ($repair) {
+            $parts = array_map(fn ($part) => is_string($part) ? StringUtil::convertToUTF8($part) : $part, $parts);
+            if (is_array($this->value)) {
+                $this->setParts($parts);
+            } else {
+                $this->setValue($parts[0]);
+            }
+        }
+
+        return [[
+            'level' => $repair ? 1 : 3,
+            'message' => 'The value of parameter '.$this->name.' is not valid UTF-8',
+            'node' => $this,
+        ]];
+    }
+
+    /**
      * This method returns an array, with the representation as it should be
      * encoded in JSON. This is used to create jCard or jCal documents.
      *

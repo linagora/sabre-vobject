@@ -141,4 +141,22 @@ class ParameterTest extends TestCase
         self::assertSame($card->EMAIL['FOO']->getParts(), $reread->EMAIL['FOO']->getParts());
         self::assertSame($card->serialize(), $reread->serialize());
     }
+
+    public function testValidateReportsNonUtf8Value(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nSUMMARY;X-P=\xFF;X-Q=a,b\xE9:a\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $messages = $vcal->validate();
+        self::assertCount(2, $messages);
+        self::assertSame(3, $messages[0]['level']);
+
+        $messages = $vcal->validate(Node::REPAIR);
+        self::assertCount(2, $messages);
+        self::assertSame(1, $messages[0]['level']);
+        self::assertSame("\u{FF}", (string) $vcal->VEVENT->SUMMARY['X-P']);
+        self::assertSame(['a', "b\u{E9}"], $vcal->VEVENT->SUMMARY['X-Q']->getParts());
+        self::assertSame([], $vcal->validate());
+        self::assertIsString(json_encode($vcal->jsonSerialize(), JSON_THROW_ON_ERROR));
+    }
 }
