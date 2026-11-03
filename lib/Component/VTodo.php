@@ -162,12 +162,18 @@ class VTodo extends VObject\Component
                     'message' => 'The value type (DATE or DATE-TIME) must be identical for DUE and DTSTART',
                     'node' => $due,
                 ];
-            } elseif ($due->getDateTime() < $dtStart->getDateTime()) {
-                $result[] = [
-                    'level' => 3,
-                    'message' => 'DUE must occur after DTSTART',
-                    'node' => $due,
-                ];
+            } elseif ($due instanceof VObject\Property\ICalendar\DateTime && $dtStart instanceof VObject\Property\ICalendar\DateTime) {
+                try {
+                    if ($due->getDateTime() < $dtStart->getDateTime()) {
+                        $result[] = [
+                            'level' => 3,
+                            'message' => 'DUE must occur after DTSTART',
+                            'node' => $due,
+                        ];
+                    }
+                } catch (VObject\InvalidDataException) {
+                    // The invalid value is reported by the property itself.
+                }
             }
         }
 
