@@ -524,4 +524,26 @@ class DateTimeTest extends TestCase
         self::assertSame('20261103T100000', $again->VEVENT->DTSTART->getValue());
         self::assertSame('20261103T100000Z', $again->VEVENT->DTSTAMP->getValue());
     }
+
+    #[DataProvider('mixedUtcValues')]
+    public function testJsonValueMixedUtcKeepsInstants(array $values, array $parameters, array $json): void
+    {
+        $vcal = new VCalendar();
+        $prop = $vcal->add('VEVENT')->add('EXDATE', $values, $parameters);
+        $before = array_map(fn ($d) => $d->getTimestamp(), $prop->getDateTimes());
+        self::assertSame($json, $prop->getJsonValue());
+
+        $copy = clone $prop;
+        $copy->setJsonValue($prop->getJsonValue());
+        self::assertSame($before, array_map(fn ($d) => $d->getTimestamp(), $copy->getDateTimes()));
+    }
+
+    public static function mixedUtcValues(): array
+    {
+        return [
+            'tzid then utc' => [['20261020T090000', '20261021T100000Z'], ['TZID' => 'Europe/Paris'], ['2026-10-20T09:00:00', '2026-10-21T10:00:00Z']],
+            'utc then tzid' => [['20261021T100000Z', '20261020T090000'], ['TZID' => 'Europe/Paris'], ['2026-10-21T10:00:00Z', '2026-10-20T09:00:00']],
+            'floating then utc' => [['20261026T023000', '20261026T022000Z'], [], ['2026-10-26T02:30:00', '2026-10-26T02:20:00Z']],
+        ];
+    }
 }
