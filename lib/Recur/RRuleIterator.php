@@ -638,8 +638,10 @@ class RRuleIterator implements \Iterator
                     // 3.3.10 forbids it with BYWEEKNO): getDays() drops it.
                     // ISO days run from 1 (Monday) to 7 (Sunday).
                     $dayOffsets = array_map(static fn (int $day): int => 0 === $day ? 7 : $day, $this->getDays());
-                } else {   // default is Monday
-                    $dayOffsets[] = 1;
+                } else {
+                    // Without BYDAY, the weekday comes from DTSTART
+                    // (RFC 5545 section 3.3.10).
+                    $dayOffsets[] = (int) $this->startDate->format('N');
                 }
 
                 $currentYear = $this->currentDate->format('Y');
