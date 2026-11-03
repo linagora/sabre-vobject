@@ -27,6 +27,12 @@ class GuessFromLicEntry implements TimezoneGuesser
             $lic = substr($lic, 8);
         }
 
-        return TimeZoneUtil::getTimeZone($lic, null, $failIfUncertain);
+        // An unknown name gives null, so that the next guessers can still
+        // read the VTIMEZONE.
+        try {
+            return TimeZoneUtil::getTimeZone($lic, null, true);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
     }
 }
