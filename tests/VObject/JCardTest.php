@@ -218,4 +218,20 @@ class JCardTest extends TestCase
         self::assertSame([], $card->validate());
         self::assertIsString(json_encode($card->jsonSerialize(), JSON_THROW_ON_ERROR));
     }
+
+    public function testGroupParameterIsRejected(): void
+    {
+        $this->expectException(ParseException::class);
+        Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],'
+            .'["email",{"GROUP":"item1"},"text","a@example.com"]]]');
+    }
+
+    public function testGroupParameterIsNotTheGroup(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nEMAIL;GROUP=item|1:a@example.com\r\n"
+            ."item2.TEL;GROUP=item1:1\r\nEND:VCARD\r\n");
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+        self::assertNull($again->EMAIL->group);
+        self::assertSame('ITEM2', strtoupper((string) $again->TEL->group));
+    }
 }
