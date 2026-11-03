@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VCard;
@@ -284,6 +285,62 @@ class PropertyTest extends TestCase
 
         self::assertEquals('The property name: X_*&PROP* contains invalid characters. Only A-Z, 0-9 and - are allowed', $result[0]['message']);
         self::assertEquals('X-PROP', $property->name);
+    }
+
+    private const REPAIR_NAME_HEAD = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+        ."DTSTAMP:20261103T100000Z\r\n";
+
+    public function testRepairEmptyNameIsNotReportedAsRepaired(): void
+    {
+        $vcal = Reader::read(self::REPAIR_NAME_HEAD."DTSTART:20261103T100000Z\r\nX.:y\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+        self::assertContains(3, array_column($messages, 'level'));
+    }
+
+    public function testRepairedNameGetsTheClassOfTheNewName(): void
+    {
+        $vcal = Reader::read(self::REPAIR_NAME_HEAD."X..DTSTART:x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+        self::assertContains(3, array_column($messages, 'level'));
+        self::assertInstanceOf(DateTime::class, $vcal->VEVENT->DTSTART);
+    }
+
+    public function testRepairedNameIsValidAndStable(): void
+    {
+        $vcal = Reader::read(self::REPAIR_NAME_HEAD."X..DTSTART:20261103T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([1], array_column($vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR), 'level'));
+        self::assertInstanceOf(DateTime::class, $vcal->VEVENT->DTSTART);
+        self::assertSame('X', $vcal->VEVENT->DTSTART->group);
+        self::assertSame([], $vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR));
+        self::assertSame([], Reader::read($vcal->serialize())->validate(Node::PROFILE_CALDAV));
+    }
+
+    #[DataProvider('boundaryNames')]
+    public function testRepairNeverProducesAComponentBoundary(string $line): void
+    {
+        $vcal = Reader::read(self::REPAIR_NAME_HEAD."DTSTART:20260105T100000Z\r\n$line\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+        self::assertContains(3, array_column($messages, 'level'));
+    }
+
+    public static function boundaryNames(): array
+    {
+        return [['X..END:VEVENT'], ['X..BEGIN:VEVENT'], ['..END:VEVENT'], ['..BEGIN:VTODO']];
+    }
+
+    public function testRepairedNameIsFiledUnderTheNewName(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:x\r\nX..UID:x\r\nEND:VCARD\r\n");
+        // Two UIDs (one of them grouped) cannot be merged: the cardinality
+        // rule sees both of them.
+        self::assertSame([1, 3], array_column($card->validate(Node::PROFILE_CARDDAV | Node::REPAIR), 'level'));
+        self::assertCount(2, $card->select('UID'));
+        self::assertSame([3], array_column(Reader::read($card->serialize())->validate(Node::PROFILE_CARDDAV), 'level'));
+
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:x\r\nX..EMAIL:x@example.com\r\nEND:VCARD\r\n");
+        self::assertSame([1], array_column($card->validate(Node::PROFILE_CARDDAV | Node::REPAIR), 'level'));
+        self::assertCount(1, $card->select('EMAIL'));
+        self::assertSame([], $card->validate(Node::PROFILE_CARDDAV | Node::REPAIR));
     }
 
     /**
