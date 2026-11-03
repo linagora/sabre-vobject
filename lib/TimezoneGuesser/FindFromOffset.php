@@ -17,7 +17,13 @@ class FindFromOffset implements TimezoneFinder
         // The offset zone is built from the offset itself: the Etc/GMT±h
         // zones use the POSIX sign convention (Etc/GMT+1 is UTC-1), only
         // cover whole hours and only go from -14 to +12.
-        if (preg_match('/^GMT([+-][0-9]{4})\z/', $tzid, $matches)) {
+        //
+        // "+01:00" is the name PHP gives an offset zone: setDateTime() writes
+        // it as the TZID of a date in such a zone, so it must resolve back.
+        if (
+            preg_match('/^GMT([+-][0-9]{4})\z/', $tzid, $matches)
+            || preg_match('/^([+-][0-9]{2}:[0-9]{2})\z/', $tzid, $matches)
+        ) {
             try {
                 return new \DateTimeZone($matches[1]);
             } catch (\Exception) {
