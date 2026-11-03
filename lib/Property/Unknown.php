@@ -25,6 +25,35 @@ class Unknown extends Text
     }
 
     /**
+     * Sets the json value, as it would appear in a jCard or jCal object.
+     *
+     * The value of an unknown type is the unprocessed iCalendar / vCard
+     * value text (RFC 7265 section 5, RFC 7095 section 5), as
+     * getJsonValue() returns it, so it is parsed as such.
+     */
+    public function setJsonValue(array $value): void
+    {
+        if (!self::isScalarList($value)) {
+            parent::setJsonValue($value);
+
+            return;
+        }
+
+        $this->setRawMimeDirValue(implode(',', array_map(fn ($item) => (string) $item, $value)));
+    }
+
+    private static function isScalarList(array $value): bool
+    {
+        foreach ($value as $item) {
+            if (!is_null($item) && !is_scalar($item)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Returns the type of value.
      *
      * This corresponds to the VALUE= parameter. Every property also has a

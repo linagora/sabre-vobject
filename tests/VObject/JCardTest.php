@@ -234,4 +234,30 @@ class JCardTest extends TestCase
         self::assertNull($again->EMAIL->group);
         self::assertSame('ITEM2', strtoupper((string) $again->TEL->group));
     }
+
+    #[DataProvider('unknownValues')]
+    public function testUnknownValueRoundTrip(string $value): void
+    {
+        $json = '["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],["x-a",{},"unknown",'.json_encode($value).']]]';
+        $card = Reader::readJson($json);
+        self::assertSame([$value], $card->{'X-A'}->getJsonValue());
+        self::assertSame("X-A:$value\r\n", $card->{'X-A'}->serialize());
+
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+        self::assertSame([$value], $again->{'X-A'}->getJsonValue());
+    }
+
+    public static function unknownValues(): array
+    {
+        return [['b,c'], ['b\\,c'], ['b\\;c'], ['a\\nb']];
+    }
+
+    public function testUnknownValueMimeDirRoundTripThroughJCal(): void
+    {
+        $cal = Reader::read("BEGIN:VCALENDAR\r\nX-A:a\\,b,c\r\nN:X;;;;\r\nEND:VCALENDAR\r\n");
+        $again = Reader::readJson(json_encode($cal->jsonSerialize()));
+        self::assertSame($cal->serialize(), $again->serialize());
+        self::assertSame(['a,b', 'c'], $again->{'X-A'}->getParts());
+        self::assertSame(['X', '', '', '', ''], $again->N->getParts());
+    }
 }
