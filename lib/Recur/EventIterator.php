@@ -389,9 +389,20 @@ class EventIterator implements \Iterator
         );
         // @codeCoverageIgnoreEnd
 
-        $event->DTSTART->setDateTime($this->getDtStart(), $event->DTSTART->isFloating());
+        // A floating time is written as the wall-clock time in the reference
+        // time zone: an RDATE instance keeps the time zone of its RDATE, a
+        // TZID or UTC, which must not be written as floating time.
+        $dtStart = $this->getDtStart();
+        if ($event->DTSTART->hasTime() && $event->DTSTART->isFloating()) {
+            $dtStart = $dtStart->setTimezone($this->timeZone);
+        }
+        $event->DTSTART->setDateTime($dtStart, $event->DTSTART->isFloating());
         if (isset($event->DTEND)) {
-            $event->DTEND->setDateTime($this->getDtEnd(), $event->DTEND->isFloating());
+            $dtEnd = $this->getDtEnd();
+            if ($event->DTEND->hasTime() && $event->DTEND->isFloating()) {
+                $dtEnd = $dtEnd->setTimezone($this->timeZone);
+            }
+            $event->DTEND->setDateTime($dtEnd, $event->DTEND->isFloating());
         }
         $recurid = clone $event->DTSTART;
         $recurid->name = 'RECURRENCE-ID';
