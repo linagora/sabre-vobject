@@ -23,4 +23,14 @@ ICS;
         $output = Reader::read($input)->serialize();
         self::assertStringContainsString('URL;VALUE=URI:http://example.org/', $output);
     }
+
+    public function testUrlWithCommaRoundTrips(): void
+    {
+        $input = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nURL:https://example.org/?q=48.8,2.3\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $once = Reader::read($input);
+        $twice = Reader::read($once->serialize());
+        self::assertSame('https://example.org/?q=48.8,2.3', $once->VEVENT->URL->getValue());
+        self::assertSame('https://example.org/?q=48.8,2.3', $twice->VEVENT->URL->getValue());
+        self::assertSame($once->serialize(), $twice->serialize());
+    }
 }
