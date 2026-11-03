@@ -37,8 +37,12 @@ class Available extends VObject\Component
         $effectiveStart = $this->DTSTART->getDateTime();
         if (isset($this->DTEND)) {
             $effectiveEnd = $this->DTEND->getDateTime();
-        } else {
+        } elseif (isset($this->DURATION)) {
             $effectiveEnd = $effectiveStart->add(VObject\DateTimeParser::parseDuration($this->DURATION));
+        } else {
+            // Neither DTEND nor DURATION: an instant, as for a VEVENT with a
+            // DATE-TIME DTSTART (RFC 5545 section 3.6.1). No time is free.
+            $effectiveEnd = $effectiveStart;
         }
 
         return [$effectiveStart, $effectiveEnd];

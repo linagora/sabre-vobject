@@ -752,4 +752,29 @@ ICS;
             array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY'))
         );
     }
+
+    /**
+     * An AVAILABLE with neither DTEND nor DURATION makes no time free.
+     */
+    public function testVAvailabilityAvailableWithoutEnd(): void
+    {
+        $vavail = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VAVAILABILITY
+DTSTART:20110101T000000Z
+DTEND:20120101T000000Z
+BEGIN:AVAILABLE
+DTSTART:20110102T000000Z
+END:AVAILABLE
+END:VAVAILABILITY
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport(
+            'FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110101T110000Z/20110103T110000Z',
+            [],
+            null,
+            $vavail
+        );
+    }
 }
