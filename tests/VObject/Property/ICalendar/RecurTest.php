@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject\Property\ICalendar;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\InvalidDataException;
@@ -311,6 +312,40 @@ END:VCALENDAR
         // There should be 0 warnings and the value should be unchanged
         self::assertEmpty($result);
         self::assertEquals('FREQ=DAILY;BYHOUR=10;BYMINUTE=30;BYSECOND=0;UNTIL=20150616T153000Z', $property->getValue());
+    }
+
+    #[DataProvider('rulesRRuleIteratorRejects')]
+    public function testValidateRejectsWhatRRuleIteratorRejects(string $rule): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260301T100000Z\r\nRRULE:$rule\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([3], array_column($vcal->validate(Node::PROFILE_CALDAV), 'level'));
+        self::assertSame([3], array_column($vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR), 'level'));
+    }
+
+    public static function rulesRRuleIteratorRejects(): array
+    {
+        return [['FREQ=WEEKLY;INTERVAL=0'], ['FREQ=DAILY;COUNT=0'], ['FREQ=FORTNIGHTLY'],
+            ['FREQ=MONTHLY;BYMONTHDAY=40'], ['FREQ=MONTHLY;BYDAY=XX'], ['FREQ=MONTHLY;BYMONTHDAYBYSETPOS=-1'],
+            ['FREQ=DAILY;UNTIL=6'], ['FREQ=WEEKLY;WKST=0'], ['FREQ=DAILY;BYHOUR=24'], ['FREQ=DAILY,WEEKLY'],
+            ['FREQ=DAILY;COUNT=3?'], ['FREQ=MONTHLY;BYSETPOS=400;BYDAY=MO']];
+    }
+
+    public function testValidateReportsIteratorProblemOnceWithoutRepair(): void
+    {
+        $calendar = new VCalendar();
+        $property = $calendar->createProperty('RRULE', 'FREQ=YEARLY;BYMONTH=13;INTERVAL=0');
+        self::assertSame([3], array_column($property->validate(), 'level'));
+    }
+
+    public function testValidateChecksTheRepairedRule(): void
+    {
+        $calendar = new VCalendar();
+        $property = $calendar->createProperty('RRULE', 'FREQ=YEARLY;BYMONTH=13;COUNT=3');
+        self::assertSame([1], array_column($property->validate(Node::REPAIR), 'level'));
+
+        $property = $calendar->createProperty('RRULE', 'FREQ=YEARLY;BYMONTH=13;INTERVAL=0');
+        self::assertSame([1, 3], array_column($property->validate(Node::REPAIR), 'level'));
     }
 
     public function testValidateValidByWeekNoWithRepair(): void

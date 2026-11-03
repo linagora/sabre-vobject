@@ -5,6 +5,7 @@ namespace Sabre\VObject\Property\ICalendar;
 use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Node;
 use Sabre\VObject\Property;
+use Sabre\VObject\Recur\RRuleIterator;
 use Sabre\Xml;
 
 /**
@@ -325,6 +326,54 @@ class Recur extends Property
             $this->setValue($values);
         }
 
+        if (isset($values['FREQ']) && ($repair || [] === $warnings)) {
+            $warnings = array_merge($warnings, $this->validateAsIterated($values));
+        }
+
         return $warnings;
+    }
+
+    /**
+     * Reports what the recurrence iterator would refuse: the read paths
+     * (expand, time-range queries, free-busy) must accept what validate()
+     * accepts. These problems are not repaired, as dropping a part would
+     * change the meaning of the rule.
+     */
+    private function validateAsIterated(array $values): array
+    {
+        $message = null;
+        foreach (['COUNT', 'INTERVAL'] as $key) {
+            // RFC 5545 3.3.10: 1*DIGIT; the iterator casts the value.
+            if (isset($values[$key]) && is_string($values[$key]) && !preg_match('/^[0-9]+$/', $values[$key])) {
+                $message = $key.' in '.$this->name.' must be a positive integer!';
+            }
+        }
+
+        if (null === $message) {
+            try {
+                new class($values) extends RRuleIterator {
+                    // Only parse the rule: iterating is not needed to
+                    // validate it, and the parent constructor iterates.
+                    // @phpstan-ignore constructor.missingParentCall
+                    public function __construct(array $values)
+                    {
+                        $this->startDate = new \DateTimeImmutable('2000-01-01', new \DateTimeZone('UTC'));
+                        $this->parseRRule($values);
+                    }
+                };
+            } catch (\Exception $e) {
+                $message = 'Invalid '.$this->name.': '.$e->getMessage();
+            }
+        }
+
+        if (null === $message) {
+            return [];
+        }
+
+        return [[
+            'level' => 3,
+            'message' => $message,
+            'node' => $this,
+        ]];
     }
 }
