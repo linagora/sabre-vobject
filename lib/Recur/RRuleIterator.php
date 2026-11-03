@@ -76,6 +76,7 @@ class RRuleIterator implements \Iterator
             if (!in_array($currentMonth, $validMonths, true)) {
                 // DTSTART month is not in BYMONTH, advance to first valid occurrence
                 $this->nextYearly();
+                $this->useFirstOccurrenceOfLocalTime($this->startDate);
             } elseif ($this->byMonthDay || $this->byDay) {
                 // Month is valid, but check if day is valid
                 $currentDay = (int) $this->currentDate->format('j');
@@ -83,6 +84,7 @@ class RRuleIterator implements \Iterator
                 if (!in_array($currentDay, $validDays, true)) {
                     // Day is not valid, advance to first valid occurrence
                     $this->nextYearly();
+                    $this->useFirstOccurrenceOfLocalTime($this->startDate);
                 }
             }
         }
@@ -150,6 +152,8 @@ class RRuleIterator implements \Iterator
         if (null === $this->currentDate) {
             return;
         }
+        // A clone: a \DateTime start makes currentDate mutable.
+        $previous = clone $this->currentDate;
 
         // Otherwise, we find the next event in the normal RRULE
         // sequence.
@@ -187,6 +191,7 @@ class RRuleIterator implements \Iterator
         if (null !== $this->currentDate && $this->isPastUpperLimit()) {
             $this->currentDate = null;
         }
+        $this->useFirstOccurrenceOfLocalTime($previous);
         ++$this->counter;
     }
 
@@ -376,6 +381,36 @@ class RRuleIterator implements \Iterator
     protected function advanceTheDate(string $interval): void
     {
         $this->currentDate = $this->currentDate->modify($interval.' '.$this->startTime());
+    }
+
+    /**
+     * Moves currentDate to the first occurrence of its local time when that
+     * time occurs twice (when summer time ends), as RFC 5545 section 3.3.5
+     * requires: PHP resolves such a local time to its second occurrence, or
+     * keeps the UTC offset of the date a relative modify() started from.
+     *
+     * Only the DAILY to YEARLY frequencies work on the local time, and the
+     * first occurrence is only used if it still comes after the previous
+     * instance (a BYHOUR rule walking hour by hour reaches the second
+     * occurrence from the first one).
+     */
+    private function useFirstOccurrenceOfLocalTime(\DateTimeInterface $previous): void
+    {
+        if (null === $this->currentDate || !in_array($this->frequency, ['daily', 'weekly', 'monthly', 'yearly'], true)) {
+            return;
+        }
+        // If the clocks went back during the last day, the same local time
+        // may also exist that much earlier.
+        $timestamp = $this->currentDate->getTimestamp();
+        $shift = $this->currentDate->getTimezone()->getOffset(new \DateTimeImmutable('@'.($timestamp - 86400)))
+            - $this->currentDate->getOffset();
+        if ($shift <= 0) {
+            return;
+        }
+        $first = \DateTimeImmutable::createFromInterface($this->currentDate)->setTimestamp($timestamp - $shift);
+        if ($first->format('Y-m-d H:i:s') === $this->currentDate->format('Y-m-d H:i:s') && $first > $previous) {
+            $this->currentDate = $this->currentDate->setTimestamp($timestamp - $shift);
+        }
     }
 
     /**
