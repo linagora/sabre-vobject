@@ -126,17 +126,21 @@ class EventIterator implements \Iterator
             }
         }
 
+        $masterless = false;
         if (!$this->masterEvent) {
             // No base event was found. CalDAV does allow cases where only
             // overridden instances are stored.
             //
-            // In this particular case, we're just going to grab the first
-            // event and use that instead. This may not always give the
-            // desired result.
+            // In this particular case, the overridden instances are the only
+            // instances. The first one is used as the master for the values
+            // that apply to the whole event, but it generates no instance of
+            // its own: it is yielded as an overridden instance, like the
+            // others.
             if (!count($this->overriddenEvents)) {
                 throw new \InvalidArgumentException('This VCALENDAR did not have an event with UID: '.$uid);
             }
-            $this->masterEvent = array_shift($this->overriddenEvents);
+            $this->masterEvent = $this->overriddenEvents[0];
+            $masterless = true;
         }
 
         if (isset($this->masterEvent->DURATION) && !$this->masterEvent->DURATION instanceof Property\ICalendar\Duration) {
@@ -173,7 +177,13 @@ class EventIterator implements \Iterator
             $this->eventDuration = 0;
         }
 
-        if (isset($this->masterEvent->RDATE)) {
+        if ($masterless) {
+            // The single instance of the default rule below is the start of
+            // the first overridden instance, which is yielded as such.
+            $this->exceptions[$this->startDate->getTimestamp()] = true;
+        }
+
+        if (!$masterless && isset($this->masterEvent->RDATE)) {
             $rdateValues = [];
             foreach ($this->masterEvent->RDATE as $rdate) {
                 $rdateValues = array_merge($rdateValues, $this->rdateStarts($rdate));
@@ -190,7 +200,7 @@ class EventIterator implements \Iterator
                     $this->recurIterator
                 );
             }
-        } elseif (isset($this->masterEvent->RRULE)) {
+        } elseif (!$masterless && isset($this->masterEvent->RRULE)) {
             $this->recurIterator = new RRuleIterator(
                 $this->masterEvent->RRULE->getParts(),
                 $this->startDate

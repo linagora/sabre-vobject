@@ -822,4 +822,14 @@ ICS;
             self::assertEquals($expectedLevel, $input[0]['level']);
         }
     }
+
+    public function testExpandSingleOverrideWithoutMaster(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:u\r\n"
+            ."RECURRENCE-ID:20261110T090000Z\r\nDTSTART:20261110T090000Z\r\nDTEND:20261110T100000Z\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-11-01T00:00:00Z'), new \DateTimeImmutable('2026-12-01T00:00:00Z'));
+        self::assertCount(1, $expanded->select('VEVENT'));
+        self::assertSame('20261110T090000Z', (string) $expanded->VEVENT->{'RECURRENCE-ID'});
+    }
 }
