@@ -853,4 +853,47 @@ ICS;
             'other 20260327T100000Z ',
         ], $events);
     }
+
+    public function testExpandKeepsEveryMasterOfAUid(): void
+    {
+        $vcal = VObject\Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:shared
+DTSTAMP:20260101T000000Z
+DTSTART:20260105T100000Z
+DURATION:PT1H
+RRULE:FREQ=DAILY;COUNT=3
+END:VEVENT
+BEGIN:VEVENT
+UID:shared
+DTSTAMP:20260101T000000Z
+RECURRENCE-ID:20260106T100000Z
+DTSTART:20260106T120000Z
+DURATION:PT1H
+END:VEVENT
+BEGIN:VEVENT
+UID:shared
+DTSTAMP:20260101T000000Z
+DTSTART:20260120T100000Z
+DURATION:PT1H
+RRULE:FREQ=DAILY;COUNT=2
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $expanded = $vcal->expand(new \DateTime('2026-01-01'), new \DateTime('2026-02-11'));
+        $starts = [];
+        foreach ($expanded->select('VEVENT') as $event) {
+            $starts[] = (string) $event->DTSTART;
+        }
+        self::assertSame([
+            '20260105T100000Z',
+            '20260106T120000Z',
+            '20260107T100000Z',
+            '20260120T100000Z',
+            '20260121T100000Z',
+        ], $starts);
+    }
 }
