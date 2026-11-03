@@ -915,4 +915,33 @@ ICS);
         // The stored override is unchanged.
         self::assertTrue(isset($vcal->VEVENT[1]->RRULE));
     }
+
+    public function testDtEndBeforeDtStartIsFoundAtItsStart(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:neg\r\nDTSTAMP:20261103T100000Z\r\n"
+            ."DTSTART:20260330T010000Z\r\nDTEND:20260130T020000Z\r\nRRULE:FREQ=DAILY;COUNT=1\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:single\r\nDTSTAMP:20261103T100000Z\r\n"
+            ."DTSTART:20260330T010000Z\r\nDTEND:20260130T020000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:override\r\nDTSTAMP:20261103T100000Z\r\n"
+            ."DTSTART:20260301T010000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:override\r\nDTSTAMP:20261103T100000Z\r\nRECURRENCE-ID:20260302T010000Z\r\n"
+            ."DTSTART:20260330T010000Z\r\nDTEND:20260130T020000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $week = [new \DateTimeImmutable('2026-03-29T00:00:00Z'), new \DateTimeImmutable('2026-04-05T00:00:00Z')];
+        $february = [new \DateTimeImmutable('2026-01-11T17:00:00Z'), new \DateTimeImmutable('2026-02-13T14:04:56Z')];
+
+        foreach ($vcal->VEVENT as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                self::assertSame('override' !== (string) $vevent->UID, $vevent->isInTimeRange(...$week), (string) $vevent->UID);
+                self::assertFalse($vevent->isInTimeRange(...$february), (string) $vevent->UID);
+            }
+        }
+
+        $uids = [];
+        foreach ($vcal->expand(...$week)->VEVENT as $vevent) {
+            $uids[] = (string) $vevent->UID;
+        }
+        self::assertSame(['single', 'neg', 'override'], $uids);
+        self::assertCount(0, $vcal->expand(...$february)->select('VEVENT'));
+    }
 }

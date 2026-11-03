@@ -176,6 +176,10 @@ class EventIterator implements \Iterator
         } else {
             $this->eventDuration = 0;
         }
+        // A DTEND before DTSTART is invalid (RFC 5545 section 3.8.2.2): such
+        // an event is taken as lasting zero seconds, so that it is found at
+        // its start rather than in ranges reaching back to its DTEND.
+        $this->eventDuration = max(0, $this->eventDuration);
 
         if ($masterless) {
             // The single instance of the default rule below is the start of
@@ -322,15 +326,17 @@ class EventIterator implements \Iterator
             // from its DTEND or DURATION, else it lasts zero seconds, or one
             // day for a DATE start (RFC 5545 section 3.6.1).
             $override = $this->currentOverriddenEvent;
+            // An end before the start (invalid, RFC 5545 section 3.8.2.2)
+            // is taken as the start.
             if (isset($override->DTEND)) {
-                return $override->DTEND->getDateTime($this->timeZone);
+                return max($override->DTEND->getDateTime($this->timeZone), $this->currentDate);
             }
             if (isset($override->DURATION)) {
                 if (!$override->DURATION instanceof Property\ICalendar\Duration) {
                     throw new InvalidDataException('DURATION must be a duration value');
                 }
 
-                return $this->currentDate->add($override->DURATION->getDateInterval());
+                return max($this->currentDate->add($override->DURATION->getDateInterval()), $this->currentDate);
             }
 
             return $override->DTSTART->hasTime() ? clone $this->currentDate : $this->currentDate->modify('+1 day');
