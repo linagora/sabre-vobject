@@ -49,4 +49,29 @@ ICS;
         self::assertEquals('2021-05-20 09:00:00', $eventIterator->current()->format('Y-m-d H:i:s'), 'recur event start time');
         self::assertEquals('2021-05-20 10:00:00', $eventIterator->getDtEnd()->format('Y-m-d H:i:s'), 'recur event end time');
     }
+
+    public function testOverrideEndFromItsOwnDurationOrStart(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260105T090000Z\r\n"
+            ."DTEND:20260105T100000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID:20260107T090000Z\r\n"
+            ."DTSTART:20260107T140000Z\r\nDURATION:PT2H\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID:20260108T090000Z\r\n"
+            ."DTSTART:20260108T140000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID:20260109T090000Z\r\n"
+            ."DTSTART;VALUE=DATE:20260109\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $it = new EventIterator($vcal, 'a');
+        $ends = [];
+        foreach ($it as $start) {
+            $ends[] = $start->format('Ymd\THis').'/'.$it->getDtEnd()->format('Ymd\THis');
+        }
+        self::assertSame([
+            '20260105T090000/20260105T100000',
+            '20260106T090000/20260106T100000',
+            '20260107T140000/20260107T160000',
+            '20260108T140000/20260108T140000',
+            '20260109T000000/20260110T000000',
+        ], $ends);
+    }
 }

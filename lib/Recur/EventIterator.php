@@ -317,8 +317,23 @@ class EventIterator implements \Iterator
         if (!$this->valid()) {
             return null;
         }
-        if ($this->currentOverriddenEvent && $this->currentOverriddenEvent->DTEND) {
-            return $this->currentOverriddenEvent->DTEND->getDateTime($this->timeZone);
+        if ($this->currentOverriddenEvent) {
+            // An overridden instance is a VEVENT of its own: its end comes
+            // from its DTEND or DURATION, else it lasts zero seconds, or one
+            // day for a DATE start (RFC 5545 section 3.6.1).
+            $override = $this->currentOverriddenEvent;
+            if (isset($override->DTEND)) {
+                return $override->DTEND->getDateTime($this->timeZone);
+            }
+            if (isset($override->DURATION)) {
+                if (!$override->DURATION instanceof Property\ICalendar\Duration) {
+                    throw new InvalidDataException('DURATION must be a duration value');
+                }
+
+                return $this->currentDate->add($override->DURATION->getDateInterval());
+            }
+
+            return $override->DTSTART->hasTime() ? clone $this->currentDate : $this->currentDate->modify('+1 day');
         }
         if ($this->allDay) {
             // All-day events last a number of whole days: add them to the
