@@ -1465,4 +1465,66 @@ class MainTest extends TestCase
 
         new EventIterator($vcal, 'broken');
     }
+
+    /**
+     * Without a master, every overridden instance is an instance, the first
+     * one included, and keeps its own RECURRENCE-ID.
+     */
+    public function testNoMasterEveryOverrideIsYielded(): void
+    {
+        $vcal = \Sabre\VObject\Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:u
+RECURRENCE-ID:20261110T090000Z
+DTSTART:20261110T090000Z
+DTEND:20261110T100000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:u
+RECURRENCE-ID:20261117T090000Z
+DTSTART:20261118T090000Z
+DTEND:20261118T100000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:u
+RECURRENCE-ID:20261124T090000Z
+DTSTART:20261117T090000Z
+DTEND:20261117T100000Z
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $it = new EventIterator($vcal, 'u');
+        $instances = [];
+        foreach ($it as $start) {
+            $instances[] = $start->format('Ymd\THis\Z').'/'.$it->getEventObject()->{'RECURRENCE-ID'};
+        }
+        self::assertSame([
+            '20261110T090000Z/20261110T090000Z',
+            '20261117T090000Z/20261124T090000Z',
+            '20261118T090000Z/20261117T090000Z',
+        ], $instances);
+    }
+
+    public function testNoMasterSingleOverride(): void
+    {
+        $vcal = \Sabre\VObject\Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:u
+RECURRENCE-ID:20261110T090000Z
+DTSTART:20261110T140000Z
+DTEND:20261110T150000Z
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $it = new EventIterator($vcal, 'u');
+        self::assertEquals(new \DateTimeImmutable('2026-11-10T14:00:00Z'), $it->getDtStart());
+        self::assertEquals(new \DateTimeImmutable('2026-11-10T15:00:00Z'), $it->getDtEnd());
+        self::assertSame('20261110T090000Z', (string) $it->getEventObject()->{'RECURRENCE-ID'});
+        $it->next();
+        self::assertFalse($it->valid());
+    }
 }
