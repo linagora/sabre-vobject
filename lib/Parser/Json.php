@@ -253,6 +253,35 @@ class Json extends Parser
                 throw new ParseException('Invalid value for property '.$prop->name);
             }
         }
+
+        // Only TEXT values are escaped when serialized to MimeDir: a line
+        // break (or another control character) in a value of another type
+        // would be written as-is and start a new line.
+        if ((!$prop instanceof Text || $prop instanceof Property\Uri) && !$prop instanceof Property\Binary
+            && self::containsMatch($values, '/[\x00-\x08\x0A-\x1F\x7F]/')) {
+            throw new ParseException('Invalid character in the value of property '.$prop->name);
+        }
+        // The parts of a recurrence rule are joined with ; and =.
+        if ($prop instanceof Property\ICalendar\Recur && !is_string($values[0] ?? null)) {
+            foreach ((array) ($values[0] ?? []) as $key => $part) {
+                if (!preg_match('/^[A-Z0-9-]+\z/i', (string) $key) || self::containsMatch($part, '/[;=]/')) {
+                    throw new ParseException('Invalid recurrence rule part for property '.$prop->name);
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns true if a string in $value (which may be a nested list or
+     * object) matches $regex.
+     */
+    private static function containsMatch(mixed $value, string $regex): bool
+    {
+        if (is_array($value) || $value instanceof \stdClass) {
+            return !self::all((array) $value, fn ($item) => !self::containsMatch($item, $regex));
+        }
+
+        return is_string($value) && 1 === preg_match($regex, $value);
     }
 
     /**
