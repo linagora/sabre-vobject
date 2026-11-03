@@ -94,6 +94,38 @@ ICS;
         self::assertSame($dtStart, $dtStart['TZID']->parent);
     }
 
+    public function testComponentAddedToAnotherDocumentResolvesTzidThroughItsNewRoot(): void
+    {
+        $vtimezone = fn (string $offset) => "BEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\n"
+            ."TZOFFSETFROM:$offset\r\nTZOFFSETTO:$offset\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n";
+        $source = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n".$vtimezone('+0300')
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Custom:20260301T100000\r\nEND:VEVENT\r\n"
+            ."END:VCALENDAR\r\n");
+        $target = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n".$vtimezone('+0500')."END:VCALENDAR\r\n");
+
+        $moved = $target->add(clone $source->VEVENT);
+        $source->destroy();
+
+        foreach ($this->collectNodes($moved) as $node) {
+            self::assertSame($target, $this->getRoot($node), $node->name.' should belong to the target document');
+        }
+        self::assertSame('2026-03-01T05:00:00+00:00', $moved->DTSTART->getDateTime()->setTimezone(new \DateTimeZone('UTC'))->format('c'));
+    }
+
+    public function testPropertyAddedToAnotherDocumentTakesItsRoot(): void
+    {
+        $source = Reader::read(self::ICS);
+        $target = new Component\VCalendar();
+        $event = $target->add('VEVENT');
+
+        $dtStart = $event->add(clone $source->VEVENT->DTSTART);
+
+        self::assertSame($target, $this->getRoot($dtStart));
+        foreach ($dtStart->parameters() as $parameter) {
+            self::assertSame($target, $this->getRoot($parameter));
+        }
+    }
+
     /**
      * @return Node[]
      */

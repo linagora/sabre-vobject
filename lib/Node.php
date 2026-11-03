@@ -96,6 +96,16 @@ abstract class Node implements \IteratorAggregate, \ArrayAccess, \Countable, \Js
         $this->root = null;
     }
 
+    /**
+     * Makes $root the root document of this node and of every node under it.
+     *
+     * Used when a node is added to a component of another document.
+     */
+    protected function setRoot(?Component $root): void
+    {
+        $this->root = $root;
+    }
+
     /* {{{ IteratorAggregator interface */
 
     /**

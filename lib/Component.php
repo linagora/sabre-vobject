@@ -106,6 +106,11 @@ class Component extends Node
                 throw new \InvalidArgumentException('The second argument must not be specified, when passing a VObject Node');
             }
             $arguments[0]->parent = $this;
+            // The node now belongs to this document (it may come from
+            // another one, e.g. a clone of one of its components).
+            if (!$arguments[0] instanceof Document && $arguments[0]->root !== $this->root) {
+                $arguments[0]->setRoot($this->root);
+            }
             $newNode = $arguments[0];
         } elseif (is_string($arguments[0])) {
             $newNode = call_user_func_array([$this->root, 'create'], $arguments);
@@ -470,6 +475,16 @@ class Component extends Node
     }
 
     /* }}} */
+
+    protected function setRoot(?Component $root): void
+    {
+        parent::setRoot($root);
+        foreach ($this->children as $childGroup) {
+            foreach ($childGroup as $child) {
+                $child->setRoot($root);
+            }
+        }
+    }
 
     /**
      * This method is automatically called when the object is cloned.
