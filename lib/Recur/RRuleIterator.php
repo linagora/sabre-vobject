@@ -922,6 +922,10 @@ class RRuleIterator implements \Iterator
                     throw new InvalidDataException('Not supported: '.strtoupper($key));
             }
         }
+
+        if (!isset($this->frequency)) {
+            throw new InvalidDataException('FREQ is required in RRULE');
+        }
     }
 
     /**
