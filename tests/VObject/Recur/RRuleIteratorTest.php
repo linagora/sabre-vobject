@@ -1200,6 +1200,22 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    #[DataProvider('withoutInstanceEastOfUtcProvider')]
+    public function testWithoutInstanceEastOfUtcStopsBeforeYear10000(string $rule, string $start): void
+    {
+        $it = new RRuleIterator($rule, new \DateTimeImmutable($start, new \DateTimeZone('Asia/Tokyo')));
+        $it->next();
+        self::assertFalse($it->valid());
+    }
+
+    public static function withoutInstanceEastOfUtcProvider(): array
+    {
+        return [
+            ['FREQ=MONTHLY;BYMONTHDAY=31;BYSETPOS=2', '2026-01-31 08:00:00'],
+            ['FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=31;BYSETPOS=2', '2026-01-31 08:00:00'],
+        ];
+    }
+
     public function testYearlyByMonthWithLeadingZero(): void
     {
         $this->parse(

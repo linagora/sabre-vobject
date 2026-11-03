@@ -146,6 +146,11 @@ class RRuleIterator implements \Iterator
     #[\ReturnTypeWillChange]
     public function next(): void
     {
+        // The iteration already ended (past 9999-12-31).
+        if (null === $this->currentDate) {
+            return;
+        }
+
         // Otherwise, we find the next event in the normal RRULE
         // sequence.
         switch ($this->frequency) {
@@ -179,7 +184,7 @@ class RRuleIterator implements \Iterator
         }
 
         // Not every advance checks the upper limit itself.
-        if (null !== $this->currentDate && $this->currentDate->getTimestamp() > self::dateUpperLimit) {
+        if (null !== $this->currentDate && $this->isPastUpperLimit()) {
             $this->currentDate = null;
         }
         ++$this->counter;
@@ -338,6 +343,18 @@ class RRuleIterator implements \Iterator
     /* Functions that advance the iterator {{{ */
 
     /**
+     * Returns true once currentDate is past 9999-12-31, in UTC or in its own
+     * time zone: east of UTC, the local date reaches year 10000 before the
+     * timestamp passes dateUpperLimit, and a 5-digit year cannot be written
+     * (nor parsed back by the 'Y-m-1' round trips below).
+     */
+    private function isPastUpperLimit(): bool
+    {
+        return $this->currentDate->getTimestamp() > self::dateUpperLimit
+            || (int) $this->currentDate->format('Y') > 9999;
+    }
+
+    /**
      * Gets the original start time of the RRULE.
      *
      * The value is formatted as a string with 24-hour:minute:second
@@ -464,7 +481,7 @@ class RRuleIterator implements \Iterator
             // Current hour of the day
             $currentHour = (int) $this->currentDate->format('G');
 
-            if ($this->currentDate->getTimestamp() > self::dateUpperLimit) {
+            if ($this->isPastUpperLimit()) {
                 $this->currentDate = null;
 
                 return;
@@ -526,7 +543,7 @@ class RRuleIterator implements \Iterator
                 }
             }
 
-            if ($this->currentDate->getTimestamp() > self::dateUpperLimit) {
+            if ($this->isPastUpperLimit()) {
                 $this->currentDate = null;
 
                 return;
@@ -603,7 +620,7 @@ class RRuleIterator implements \Iterator
 
             // To prevent running this forever (better: until we hit the max date of DateTimeImmutable) we simply
             // stop at 9999-12-31. Looks like the year 10000 problem is not solved in php ....
-            if ($this->currentDate->getTimestamp() > self::dateUpperLimit) {
+            if ($this->isPastUpperLimit()) {
                 $this->currentDate = null;
 
                 return;
@@ -808,7 +825,7 @@ class RRuleIterator implements \Iterator
 
                 // To prevent running this forever (better: until we hit the max date of DateTimeImmutable) we simply
                 // stop at 9999-12-31. Looks like the year 10000 problem is not solved in php ....
-                if ($this->currentDate->getTimestamp() > self::dateUpperLimit) {
+                if ($this->isPastUpperLimit()) {
                     $this->currentDate = null;
 
                     return;
