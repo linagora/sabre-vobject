@@ -365,4 +365,40 @@ HI;
         $ex = new \DateTimeZone('America/New_York');
         self::assertEquals($ex->getName(), $tz->getName());
     }
+
+    public function testGmtOffsetWithTrailingNewlineDoesNotThrow(): void
+    {
+        $tz = TimeZoneUtil::getTimeZone("GMT+2000\n");
+        self::assertInstanceOf(\DateTimeZone::class, $tz);
+    }
+
+    public function testGmtOffsetWithTrailingNewlineKeepsTheSign(): void
+    {
+        $tz = TimeZoneUtil::getTimeZone("GMT+0100\n");
+        // Either the default zone (an unknown TZID) or UTC+1, but never UTC-1.
+        self::assertNotSame(-3600, $tz->getOffset(new \DateTimeImmutable('2026-01-15T12:00:00Z')));
+    }
+
+    public function testGmtOffsetWithTrailingNewlineIsUncertain(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        TimeZoneUtil::getTimeZone("GMT+0100\n", null, true);
+    }
+
+    public function testDtStartWithEscapedNewlineInTzid(): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\n"
+            ."DTSTART;TZID=GMT+2000^n:20260115T100000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        self::assertInstanceOf(\DateTimeImmutable::class, $vcal->VEVENT->DTSTART->getDateTime());
+    }
+
+    public function testOffsetFinderKeepsSignAndMinutes(): void
+    {
+        $finder = new TimezoneGuesser\FindFromOffset();
+        self::assertSame('+01:00', $finder->find('GMT+0100')?->getName());
+        self::assertSame('-05:30', $finder->find('GMT-0530')?->getName());
+        self::assertNull($finder->find("GMT+0100\n"));
+    }
 }
