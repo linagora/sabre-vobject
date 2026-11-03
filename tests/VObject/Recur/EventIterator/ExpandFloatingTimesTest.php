@@ -116,4 +116,33 @@ END:VCALENDAR
 ICS;
         self::assertVObjectEqualsVObject($output, $vcal);
     }
+
+    public function testZonedRDateOfAFloatingMasterKeepsItsInstant(): void
+    {
+        $vcal = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:u
+DTSTART:20261020T100000
+DTEND:20261020T110000
+RDATE;TZID=Europe/Paris:20261023T133000
+RDATE:20261024T133000Z
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-10-01T00:00:00Z'), new \DateTimeImmutable('2026-11-01T00:00:00Z'));
+        $instances = [];
+        foreach ($expanded->VEVENT as $vevent) {
+            $instances[] = $vevent->DTSTART.' '.$vevent->DTEND.' '.$vevent->{'RECURRENCE-ID'};
+        }
+        self::assertSame([
+            '20261020T100000Z 20261020T110000Z 20261020T100000Z',
+            '20261023T113000Z 20261023T123000Z 20261023T113000Z',
+            '20261024T133000Z 20261024T143000Z 20261024T133000Z',
+        ], $instances);
+
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-10-01T00:00:00Z'), new \DateTimeImmutable('2026-11-01T00:00:00Z'), new \DateTimeZone('Europe/Paris'));
+        self::assertSame('20261024T133000Z', (string) $expanded->VEVENT[2]->DTSTART);
+    }
 }
