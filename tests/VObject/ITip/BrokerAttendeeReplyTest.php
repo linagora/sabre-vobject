@@ -1474,4 +1474,41 @@ ICS,
         ];
         $this->parse($oldMessage, $newMessage, $expected);
     }
+
+    private static function overrideReply(string $master, string $overrideId, string $overrideStart): array
+    {
+        $override = fn (string $partstat) => "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\n"
+            .$overrideId."\r\n".$overrideStart."\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=$partstat:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        $wrap = fn (string $body) => "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n$body\r\nEND:VCALENDAR\r\n";
+        $old = \Sabre\VObject\Reader::read($wrap($master.$override('NEEDS-ACTION')));
+        $new = \Sabre\VObject\Reader::read($wrap($master.$override('ACCEPTED')));
+
+        return [(new Broker())->parseEvent($new, 'mailto:a@example.com', $old), $new];
+    }
+
+    public function testReplyKeepsTheTimeZoneOfTheOverrideRecurrenceId(): void
+    {
+        $master = "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260105T090000Z\r\nDTEND:20260105T100000Z\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        [$messages] = self::overrideReply($master, 'RECURRENCE-ID;TZID=Europe/Paris:20260108T100000', 'DTSTART;TZID=Europe/Paris:20260108T140000');
+
+        self::assertCount(1, $messages);
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-08T09:00:00Z'))->getTimestamp(),
+            $messages[0]->message->VEVENT->{'RECURRENCE-ID'}->getDateTime()->getTimestamp()
+        );
+    }
+
+    public function testReplyKeepsAFloatingOverrideRecurrenceIdFloating(): void
+    {
+        $master = "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Europe/Paris:20260105T100000\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        [$messages, $new] = self::overrideReply($master, 'RECURRENCE-ID:20260108T100000', 'DTSTART:20260108T140000');
+
+        self::assertCount(1, $messages);
+        $reply = $messages[0]->message->VEVENT->{'RECURRENCE-ID'};
+        self::assertSame("RECURRENCE-ID:20260108T100000\r\n", $reply->serialize());
+        self::assertSame($new->VEVENT[1]->{'RECURRENCE-ID'}->getDateTime()->getTimestamp(), $reply->getDateTime()->getTimestamp());
+    }
 }
