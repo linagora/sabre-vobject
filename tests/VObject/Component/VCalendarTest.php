@@ -896,4 +896,23 @@ ICS);
             '20260121T100000Z',
         ], $starts);
     }
+
+    public function testExpandStripsRecurrenceFromOverrides(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:weekly\r\nDTSTAMP:20261103T100000Z\r\nDTSTART:20260325T100000Z\r\n"
+            ."DURATION:PT1H\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:weekly\r\nDTSTAMP:20261103T100000Z\r\nRECURRENCE-ID:20260401T100000Z\r\n"
+            ."DTSTART:20260402T100000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20260403T100000Z\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-03-01T00:00:00Z'), new \DateTimeImmutable('2026-05-01T00:00:00Z'));
+        self::assertCount(4, $expanded->select('VEVENT'));
+        foreach ($expanded->select('VEVENT') as $vevent) {
+            self::assertFalse(isset($vevent->RRULE) || isset($vevent->RDATE) || isset($vevent->EXDATE) || isset($vevent->EXRULE));
+        }
+        self::assertSame('20260402T100000Z', (string) $expanded->VEVENT[1]->DTSTART);
+        self::assertSame('20260401T100000Z', (string) $expanded->VEVENT[1]->{'RECURRENCE-ID'});
+        // The stored override is unchanged.
+        self::assertTrue(isset($vcal->VEVENT[1]->RRULE));
+    }
 }
