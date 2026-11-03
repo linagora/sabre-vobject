@@ -804,18 +804,29 @@ class RRuleIterator implements \Iterator
             return;
         }
         // These are the 'byMonth' rules, if there are no byDay or
-        // byMonthDay sub-rules.
+        // byMonthDay sub-rules. The day of the month is the one of DTSTART,
+        // and a month without that day (30 February) is skipped
+        // (RFC 5545 section 3.3.10).
+        $dayOfMonth = (int) $this->startDate->format('j');
         do {
-            ++$currentMonth;
-            if ($currentMonth > 12) {
-                $currentYear += $this->interval;
-                $currentMonth = 1;
+            do {
+                ++$currentMonth;
+                if ($currentMonth > 12) {
+                    $currentYear += $this->interval;
+                    $currentMonth = 1;
+                }
+            } while (!in_array($currentMonth, $this->byMonth, true));
+
+            if ((int) $currentYear > 9999) {
+                $this->currentDate = null;
+
+                return;
             }
-        } while (!in_array($currentMonth, $this->byMonth, true));
+        } while (!checkdate($currentMonth, $dayOfMonth, (int) $currentYear));
         $this->currentDate = $this->currentDate->setDate(
             (int) $currentYear,
             $currentMonth,
-            (int) $currentDayOfMonth
+            $dayOfMonth
         )->modify($this->startTime());
     }
 
