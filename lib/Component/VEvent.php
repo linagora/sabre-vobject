@@ -77,6 +77,11 @@ class VEvent extends VObject\Component
         } else {
             $effectiveEnd = $effectiveStart;
         }
+        // An end before the start is invalid (RFC 5545 section 3.8.2.2):
+        // the event is taken as lasting zero seconds, as EventIterator does.
+        if ($effectiveEnd < $effectiveStart) {
+            $effectiveEnd = $effectiveStart;
+        }
 
         return
             ($start < $effectiveEnd) && ($end > $effectiveStart)
