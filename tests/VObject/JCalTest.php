@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class JCalTest extends TestCase
@@ -145,5 +146,36 @@ class JCalTest extends TestCase
         ];
 
         self::assertEquals($expected, $cal->jsonSerialize());
+    }
+
+    #[DataProvider('valuesJsonSerializeCannotFormat')]
+    public function testValidateReportsValuesJsonSerializeCannotFormat(string $property): void
+    {
+        $cal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\n$property\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $errors = array_filter($cal->validate(Node::REPAIR), fn ($m) => 3 === $m['level']);
+        self::assertCount(1, $errors);
+    }
+
+    public static function valuesJsonSerializeCannotFormat(): array
+    {
+        return [
+            'period start is not a date-time' => ['RDATE;VALUE=PERIOD:20261303T100000Z/PT1H'],
+            'period end is not a date-time' => ['RDATE;VALUE=PERIOD:20261103T100000Z/20261303T100000Z'],
+            'period without a slash' => ['RDATE;VALUE=PERIOD:20261103T100000Z'],
+            'until is not a date' => ['RRULE:FREQ=DAILY;UNTIL=20261232T000000Z'],
+            'until is not a date (date)' => ['RRULE:FREQ=DAILY;UNTIL=20261232'],
+        ];
+    }
+
+    public function testValidPeriodAndUntilAreNotReported(): void
+    {
+        $cal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nRRULE:FREQ=DAILY;UNTIL=20261231T000000Z\r\n"
+            ."RDATE;VALUE=PERIOD:20261103T100000Z/PT1H,20261104T100000Z/20261104T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        self::assertSame([], $cal->validate());
+        self::assertIsString(json_encode($cal->jsonSerialize(), JSON_THROW_ON_ERROR));
     }
 }

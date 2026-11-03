@@ -123,4 +123,26 @@ class Time extends Text
         );
         parent::setXmlValue($value);
     }
+
+    /**
+     * Validates the node for correctness.
+     *
+     * A value that cannot be parsed is reported, as getJsonValue() would
+     * throw on it.
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+        try {
+            $this->getJsonValue();
+        } catch (InvalidDataException) {
+            $messages[] = [
+                'level' => 3,
+                'message' => 'The supplied value ('.$this->getRawMimeDirValue().') is not a correct '.$this->getValueType(),
+                'node' => $this,
+            ];
+        }
+
+        return $messages;
+    }
 }

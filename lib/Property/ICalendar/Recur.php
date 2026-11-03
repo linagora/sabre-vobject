@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject\Property\ICalendar;
 
+use Sabre\VObject\DateTimeParser;
 use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Node;
 use Sabre\VObject\Property;
@@ -244,6 +245,20 @@ class Recur extends Property
                 if ($repair) {
                     unset($values[$key]);
                 }
+            } elseif ('UNTIL' === $key) {
+                // getJsonValue() formats UNTIL as a DATE or DATE-TIME.
+                try {
+                    if (!is_string($value)) {
+                        throw new InvalidDataException('UNTIL must have a single value');
+                    }
+                    DateTimeParser::parse($value);
+                } catch (InvalidDataException) {
+                    $warnings[] = [
+                        'level' => 3,
+                        'message' => 'UNTIL in '.$this->name.' must be a DATE or DATE-TIME value',
+                        'node' => $this,
+                    ];
+                }
             } elseif ('BYMONTH' === $key) {
                 $byMonth = (array) $value;
                 foreach ($byMonth as $i => $v) {
@@ -326,7 +341,8 @@ class Recur extends Property
             $this->setValue($values);
         }
 
-        if (isset($values['FREQ']) && ($repair || [] === $warnings)) {
+        // A problem left unrepaired (level 3) is already reported once.
+        if (isset($values['FREQ']) && !in_array(3, array_column($warnings, 'level'), true)) {
             $warnings = array_merge($warnings, $this->validateAsIterated($values));
         }
 
