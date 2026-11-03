@@ -454,6 +454,15 @@ class VCalendar extends VObject\Document
                 $componentTypes[] = $child->name;
 
                 $uid = (string) $child->UID;
+                if (isset($child->UID) && '' === $uid) {
+                    // RFC 5545 3.8.4.7: the UID is a globally unique
+                    // identifier; recurrence expansion relies on it.
+                    $warnings[] = [
+                        'level' => 3,
+                        'message' => 'The UID property of a '.$child->name.' component must not be empty',
+                        'node' => $child,
+                    ];
+                }
                 $isMaster = isset($child->{'RECURRENCE-ID'}) ? 0 : 1;
                 if (isset($uidList[$uid])) {
                     ++$uidList[$uid]['count'];

@@ -755,6 +755,14 @@ ICS;
         );
     }
 
+    public function testValidateEmptyUid(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260105T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([3], array_column($vcal->validate(VObject\Node::PROFILE_CALDAV), 'level'));
+        self::assertSame([3], array_column($vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR), 'level'));
+    }
+
     public function testNodeInValidationErrorHasLineIndexAndLineStringProps(): void
     {
         $defectiveInput = <<<ICS
