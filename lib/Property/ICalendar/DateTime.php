@@ -300,6 +300,27 @@ class DateTime extends Property
     }
 
     /**
+     * Returns the first value that is not a correct $valueType (DATE or
+     * DATE-TIME), or null if they all are.
+     */
+    private static function firstInvalidValue(array $values, string $valueType): ?string
+    {
+        foreach ($values as $value) {
+            try {
+                if ('DATE' === $valueType) {
+                    DateTimeParser::parseDate((string) $value);
+                } else {
+                    DateTimeParser::parseDateTime((string) $value);
+                }
+            } catch (InvalidDataException) {
+                return (string) $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * We need to intercept offsetSet, because it may be used to alter the
      * VALUE from DATE-TIME to DATE or vice-versa.
      *
@@ -342,25 +363,43 @@ class DateTime extends Property
         $messages = parent::validate($options);
         $valueType = $this->getValueType();
         $values = $this->getParts();
-        foreach ($values as $value) {
-            try {
-                switch ($valueType) {
-                    case 'DATE':
-                        DateTimeParser::parseDate($value);
-                        break;
-                    case 'DATE-TIME':
-                        DateTimeParser::parseDateTime($value);
-                        break;
-                }
-            } catch (InvalidDataException) {
-                $messages[] = [
-                    'level' => 3,
-                    'message' => 'The supplied value ('.$value.') is not a correct '.$valueType,
-                    'node' => $this,
-                ];
-                break;
-            }
+        $invalidValue = self::firstInvalidValue($values, $valueType);
+        if (null === $invalidValue) {
+            return $messages;
         }
+
+        // Every value has the form of the other type (DTSTART:20260320, or
+        // EXDATE;VALUE=DATE:20260101T090000): the VALUE parameter is the
+        // part that is wrong, for the properties that take both types.
+        $otherType = 'DATE' === $valueType ? 'DATE-TIME' : 'DATE';
+        if (
+            ($options & self::REPAIR)
+            && in_array(strtoupper($this->name), ['DTSTART', 'DTEND', 'DUE', 'RECURRENCE-ID', 'EXDATE', 'RDATE'], true)
+            && null === self::firstInvalidValue($values, $otherType)
+        ) {
+            // The parent methods leave the values as they are; offsetSet()
+            // of this class would re-encode them.
+            if ('DATE' === $otherType) {
+                parent::offsetSet('VALUE', 'DATE');
+                // TZID only applies to DATE-TIME values (RFC 5545 3.2.19).
+                parent::offsetUnset('TZID');
+            } else {
+                parent::offsetUnset('VALUE');
+            }
+            $messages[] = [
+                'level' => 1,
+                'message' => 'The supplied value ('.$invalidValue.') is not a correct '.$valueType.'. VALUE was set to '.$otherType,
+                'node' => $this,
+            ];
+
+            return $messages;
+        }
+
+        $messages[] = [
+            'level' => 3,
+            'message' => 'The supplied value ('.$invalidValue.') is not a correct '.$valueType,
+            'node' => $this,
+        ];
 
         return $messages;
     }
