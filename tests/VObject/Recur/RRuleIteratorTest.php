@@ -1721,6 +1721,24 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testYearlyByWeekNoOnLeapDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=9;BYDAY=MO;COUNT=3',
+            '1988-02-29 09:00:00',
+            ['1988-02-29 09:00:00', '1989-02-27 09:00:00', '1990-02-26 09:00:00']
+        );
+    }
+
+    public function testYearlyByYearDayOnLeapDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYYEARDAY=60;COUNT=3',
+            '2024-02-29 09:00:00',
+            ['2024-02-29 09:00:00', '2025-03-01 09:00:00', '2026-03-01 09:00:00']
+        );
+    }
+
     public function testInvalidByWeekNo(): void
     {
         $this->expectException(InvalidDataException::class);
