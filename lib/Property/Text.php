@@ -206,7 +206,7 @@ class Text extends Property
         }
 
         $str = $this->name;
-        if ($this->group) {
+        if (null !== $this->group) {
             $str = $this->group.'.'.$this->name;
         }
         foreach ($this->parameters as $param) {

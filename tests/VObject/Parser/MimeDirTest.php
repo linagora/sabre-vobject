@@ -292,6 +292,18 @@ EOF;
         echo $vcard->serialize();
     }
 
+    public function testEmptyPropertyNameAfterGroupIsRejected(): void
+    {
+        $this->expectException(ParseException::class);
+        (new MimeDir())->parse("BEGIN:VCARD\r\nVERSION:3.0\r\n.:x\r\nEND:VCARD\r\n");
+    }
+
+    public function testEmptyPropertyNameAfterGroupIsIgnoredAsInvalidLine(): void
+    {
+        $vcard = (new MimeDir())->parse("BEGIN:VCARD\r\nVERSION:3.0\r\nA.;X=Y:x\r\nEND:VCARD\r\n", MimeDir::OPTION_IGNORE_INVALID_LINES);
+        self::assertSame("BEGIN:VCARD\r\nVERSION:3.0\r\nEND:VCARD\r\n", $vcard->serialize());
+    }
+
     #[DataProvider('boundaryPropertyNames')]
     public function testPropertyNamedBeginOrEndIsRejected(string $line): void
     {

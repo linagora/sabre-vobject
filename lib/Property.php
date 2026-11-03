@@ -202,7 +202,7 @@ abstract class Property extends Node implements \Stringable
     public function serialize(): string
     {
         $str = $this->name;
-        if ($this->group) {
+        if (null !== $this->group) {
             $str = $this->group.'.'.$this->name;
         }
 
@@ -267,7 +267,7 @@ abstract class Property extends Node implements \Stringable
         }
         // In jCard, we need to encode the property-group as a separate 'group'
         // parameter.
-        if ($this->group) {
+        if (null !== $this->group) {
             $parameters['group'] = $this->group;
         }
 

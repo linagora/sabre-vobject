@@ -449,6 +449,12 @@ class MimeDir extends Parser
         // A property named BEGIN or END would be serialized as a component
         // boundary, changing the structure of the document.
         $nameWithoutGroup = false !== ($i = strpos($property['name'], '.')) ? \substr($property['name'], $i + 1) : $property['name'];
+        if ('' === $nameWithoutGroup) {
+            if ($this->options & self::OPTION_IGNORE_INVALID_LINES) {
+                return false;
+            }
+            throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': the property name after the group is empty');
+        }
         if ('BEGIN' === $nameWithoutGroup || 'END' === $nameWithoutGroup) {
             if ($this->options & self::OPTION_IGNORE_INVALID_LINES) {
                 return false;
