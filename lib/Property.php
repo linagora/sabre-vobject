@@ -260,7 +260,9 @@ abstract class Property extends Node implements \Stringable
         $parameters = [];
 
         foreach ($this->parameters as $parameter) {
-            if ('VALUE' === $parameter->name) {
+            // The group key holds the property group (see below): a
+            // parameter of that name cannot be represented.
+            if ('VALUE' === $parameter->name || 'GROUP' === $parameter->name) {
                 continue;
             }
             $parameters[strtolower((string) $parameter->name)] = $parameter->jsonSerialize();

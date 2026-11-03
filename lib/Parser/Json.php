@@ -167,6 +167,11 @@ class Json extends Parser
             if (!preg_match('/^[A-Z0-9-]+\z/i', (string) $parameterName)) {
                 throw new ParseException('Invalid parameter name for property '.$propertyName);
             }
+            // The key "group" holds the property group; another spelling
+            // would be a parameter that jsonSerialize() cannot tell apart.
+            if ('group' !== $parameterName && 0 === strcasecmp((string) $parameterName, 'group')) {
+                throw new ParseException('Invalid parameter name for property '.$propertyName);
+            }
             if (!self::isScalarOrList($parameterValue)) {
                 throw new ParseException('Invalid value for parameter '.$parameterName.' of property '.$propertyName);
             }
