@@ -506,18 +506,44 @@ abstract class Property extends Node implements \Stringable
 
         // Checking if the property name does not contain any invalid bytes.
         if (!preg_match('/^([A-Z0-9-]+)$/', (string) $this->name)) {
+            $newName = null;
+            if ($options & self::REPAIR) {
+                // Uppercasing and converting underscores to dashes, then
+                // removing every other invalid character.
+                $newName = \preg_replace('/([^A-Z0-9-])/u', '', strtoupper(
+                    str_replace('_', '-', (string) $this->name)
+                ));
+                // An empty name cannot be written, and BEGIN / END would be
+                // read back as a component boundary: these cannot be repaired.
+                if (in_array($newName, ['', 'BEGIN', 'END'], true)) {
+                    $newName = null;
+                }
+            }
             $warnings[] = [
-                'level' => $options & self::REPAIR ? 1 : 3,
+                'level' => null !== $newName ? 1 : 3,
                 'message' => 'The property name: '.$this->name.' contains invalid characters. Only A-Z, 0-9 and - are allowed',
                 'node' => $this,
             ];
-            if ($options & self::REPAIR) {
-                // Uppercasing and converting underscores to dashes.
-                $this->name = strtoupper(
-                    str_replace('_', '-', $this->name)
-                );
-                // Removing every other invalid character
-                $this->name = \preg_replace('/([^A-Z0-9-])/u', '', $this->name);
+            if (null !== $newName) {
+                if (!$this->parent instanceof Component) {
+                    $this->name = $newName;
+                } else {
+                    // The class of a property depends on its name: replace
+                    // this property by one created for the new name, so its
+                    // value is validated as such, and so the parent files it
+                    // under its new name.
+                    $valueType = isset($this->parameters['VALUE']) ? (string) $this->parameters['VALUE'] : null;
+                    $replacement = $this->root->createProperty($newName, null, null, $valueType, $this->lineIndex ?? null, $this->lineString ?? null);
+                    $replacement->group = $this->group;
+                    $replacement->parameters = $this->parameters;
+                    $replacement->setRawMimeDirValue($this->getRawMimeDirValue());
+
+                    $parent = $this->parent;
+                    $parent->remove($this);
+                    $parent->add($replacement);
+
+                    return array_merge($warnings, $replacement->validate($options));
+                }
             }
         }
 

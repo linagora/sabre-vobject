@@ -151,7 +151,9 @@ class Component extends Node
                 $this->remove($child);
             }
         } else {
-            foreach ($this->select($item->name) as $k => $child) {
+            // add() files a node under its exact name, which may hold
+            // characters select() would interpret (e.g. a dot).
+            foreach ($this->children[$item->name] ?? [] as $k => $child) {
                 if ($child === $item) {
                     unset($this->children[$item->name][$k]);
 
