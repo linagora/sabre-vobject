@@ -1675,6 +1675,25 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testYearlyByWeekNoWithOrdinalByDay(): void
+    {
+        // RFC 5545 forbids an ordinal here; it is ignored, as in WEEKLY rules.
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=10;BYDAY=1MO;COUNT=2',
+            '1997-05-12 09:00:00',
+            ['1997-05-12 09:00:00', '1998-03-02 09:00:00']
+        );
+    }
+
+    public function testYearlyByYearDayWithOrdinalByDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYYEARDAY=-1;BYDAY=-1FR;COUNT=2',
+            '2026-01-02 09:00:00',
+            ['2026-01-02 09:00:00', '2027-12-31 09:00:00']
+        );
+    }
+
     public function testInvalidByWeekNo(): void
     {
         $this->expectException(InvalidDataException::class);

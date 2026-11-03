@@ -634,9 +634,9 @@ class RRuleIterator implements \Iterator
             if (null !== $this->byWeekNo) { // byWeekNo is an array with values from -53 to -1, or 1 to 53
                 $dayOffsets = [];
                 if ($this->byDay) {
-                    foreach ($this->byDay as $byDay) {
-                        $dayOffsets[] = $this->dayMap[$byDay];
-                    }
+                    // An ordinal makes no sense here (RFC 5545 section
+                    // 3.3.10 forbids it with BYWEEKNO): getDays() drops it.
+                    $dayOffsets = $this->getDays();
                 } else {   // default is Monday
                     $dayOffsets[] = 1;
                 }
@@ -679,9 +679,9 @@ class RRuleIterator implements \Iterator
             if (null !== $this->byYearDay) { // byYearDay is an array with values from -366 to -1, or 1 to 366
                 $dayOffsets = [];
                 if ($this->byDay) {
-                    foreach ($this->byDay as $byDay) {
-                        $dayOffsets[] = $this->dayMap[$byDay];
-                    }
+                    // An ordinal makes no sense here (RFC 5545 section
+                    // 3.3.10 forbids it with BYWEEKNO): getDays() drops it.
+                    $dayOffsets = $this->getDays();
                 } else {   // default is Monday-Sunday
                     $dayOffsets = [1, 2, 3, 4, 5, 6, 7];
                 }
