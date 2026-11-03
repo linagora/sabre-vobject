@@ -228,6 +228,11 @@ class Json extends Parser
      */
     private static function assertValues(Property $prop, array $values): void
     {
+        // A property has one or more values (RFC 7265 section 3.4).
+        if ([] === $values) {
+            throw new ParseException('Missing value for property '.$prop->name);
+        }
+        $single = 1 === count($values);
         foreach ($values as $value) {
             $valid = match (true) {
                 // A recurrence rule is an object of (lists of) scalars.
@@ -238,14 +243,20 @@ class Json extends Parser
                 // A period is a [start, end or duration] pair.
                 $prop instanceof Property\ICalendar\Period => is_array($value) && array_is_list($value) && self::all($value, self::isScalar(...)),
                 // GEO is a [latitude, longitude] pair.
-                $prop instanceof Property\FloatValue => self::isScalarOrList($value),
+                $prop instanceof Property\FloatValue => self::isScalar($value) || ($single && self::isScalarOrList($value)),
+                // These classes hold a single value.
+                $prop instanceof Property\Binary,
+                $prop instanceof Property\Boolean,
+                $prop instanceof Property\IntegerValue => $single && self::isScalar($value),
                 $prop instanceof Property\Time,
                 $prop instanceof Property\UtcOffset,
                 $prop instanceof Property\VCard\TimeStamp => self::isScalar($value),
-                // Structured text (N, ADR, ...) has components, which may
-                // themselves have several values.
-                $prop instanceof Text => self::isScalar($value) || (
-                    is_array($value) && array_is_list($value) && self::all($value, self::isScalarOrList(...))
+                // Structured text (N, ADR, ...) is a single list of
+                // components, which may themselves have several values.
+                // Other text values are scalars, or a single list of them.
+                $prop instanceof Text => self::isScalar($value) || ($single
+                    && is_array($value) && array_is_list($value)
+                    && self::all($value, ';' === $prop->delimiter ? self::isScalarOrList(...) : self::isScalar(...))
                 ),
                 default => self::isScalar($value),
             };
