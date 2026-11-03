@@ -4,6 +4,7 @@ namespace Sabre\VObject\Component;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject;
 
 class VEventTest extends TestCase
 {
@@ -124,5 +125,25 @@ class VEventTest extends TestCase
         $tests[] = [$vevent11, new \DateTime('2014-08-01'), new \DateTime('2014-12-31'), true];
 
         return $tests;
+    }
+
+    public function testRepairDuplicateUidDoesNotAddAnother(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nUID:b\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR);
+        self::assertSame([3], array_column($messages, 'level'));
+        self::assertCount(2, $vcal->VEVENT->select('UID'));
+    }
+
+    public function testRepairMergesIdenticalDuplicates(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR);
+        self::assertSame([1, 1], array_column($messages, 'level'));
+        self::assertCount(1, $vcal->select('PRODID'));
+        self::assertCount(1, $vcal->VEVENT->select('DTSTAMP'));
+        self::assertSame([], $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR));
     }
 }
