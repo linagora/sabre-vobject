@@ -75,12 +75,13 @@ class Uri extends Text
         // Good thing backslashes are not allowed in urls. Makes it easy to
         // assume that a backslash is always intended as an escape character.
         if ('URL' === $this->name) {
-            $regex = '#  (?: (\\\\ (?: \\\\ | : ) ) ) #x';
+            $regex = '#  (?: (\\\\ (?: \\\\ | : | , ) ) ) #x';
             $matches = preg_split($regex, $val, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
             $newVal = '';
             foreach ($matches as $match) {
                 match ($match) {
                     '\:' => $newVal .= ':',
+                    '\,' => $newVal .= ',',
                     default => $newVal .= $match,
                 };
             }
