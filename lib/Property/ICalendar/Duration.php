@@ -70,4 +70,28 @@ class Duration extends Property
 
         return DateTimeParser::parseDuration($value);
     }
+
+    /**
+     * Validates the node for correctness.
+     *
+     * Every value must be a duration that the read paths can parse.
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+        foreach ($this->getParts() as $value) {
+            try {
+                DateTimeParser::parseDuration((string) $value);
+            } catch (InvalidDataException) {
+                $messages[] = [
+                    'level' => 3,
+                    'message' => 'The supplied value ('.$value.') is not a correct DURATION',
+                    'node' => $this,
+                ];
+                break;
+            }
+        }
+
+        return $messages;
+    }
 }
