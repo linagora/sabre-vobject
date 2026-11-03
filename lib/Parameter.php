@@ -173,7 +173,10 @@ class Parameter extends Node implements \Stringable
      */
     public function serialize(): string
     {
-        $value = $this->getParts();
+        // A bare carriage return cannot be encoded in a parameter value
+        // (RFC 6868 only encodes LF), and would end the line for many
+        // readers: it is dropped, as in TEXT values.
+        $value = array_map(fn ($item) => is_string($item) ? str_replace("\r", '', $item) : $item, $this->getParts());
 
         if (0 === count($value)) {
             return $this->name.'=';

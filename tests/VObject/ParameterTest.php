@@ -121,4 +121,15 @@ class ParameterTest extends TestCase
         $param = new Parameter($cal, 'name', 'va;lue');
         self::assertEquals('NAME="va;lue"', $param->serialize());
     }
+
+    public function testBareCarriageReturnInParameterValueIsNotSerialized(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE;X-A=a\rb:x\r\nEND:VCARD\r\n");
+        self::assertSame('ab', $card->NOTE['X-A']->getValue());
+
+        $card->NOTE['X-B'] = "c\rd";
+        $out = $card->serialize();
+        self::assertSame(substr_count($out, "\r"), substr_count($out, "\r\n"));
+        self::assertStringContainsString('NOTE;X-A=ab;X-B=cd:x', $out);
+    }
 }
