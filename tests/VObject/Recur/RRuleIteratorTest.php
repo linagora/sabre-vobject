@@ -1083,6 +1083,15 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testLowercaseByDayInArray(): void
+    {
+        $this->parse(
+            ['FREQ' => 'MONTHLY', 'BYDAY' => ['-1fr', '+1mo'], 'COUNT' => 3],
+            '2026-01-05 09:00:00',
+            ['2026-01-05 09:00:00', '2026-01-30 09:00:00', '2026-02-02 09:00:00']
+        );
+    }
+
     public function testYearlyByMonthWithLeadingZero(): void
     {
         $this->parse(
@@ -1178,6 +1187,10 @@ class RRuleIteratorTest extends TestCase
             'no FREQ' => ['COUNT=3'],
             'empty rule' => [''],
             'no FREQ, as an array' => [['COUNT' => '3']],
+            'BYDAY with a trailing LF' => [['FREQ' => 'MONTHLY', 'BYDAY' => "FR\n", 'COUNT' => 3]],
+            'BYDAY with a sign and no ordinal' => ['FREQ=MONTHLY;BYDAY=+FR;COUNT=3'],
+            'BYDAY with a minus sign and no ordinal' => ['FREQ=MONTHLY;BYDAY=-FR;COUNT=3'],
+            'nested array BYDAY' => [['FREQ' => 'WEEKLY', 'BYDAY' => [['MO']], 'COUNT' => 3]],
             'non-integer BYMONTH' => ['FREQ=YEARLY;BYMONTH=2.3;COUNT=2'],
             'BYMONTH with a trailing dot' => ['FREQ=YEARLY;BYMONTH=1.;COUNT=2'],
             'BYMONTH with a space' => ['FREQ=YEARLY;BYMONTH= 3;COUNT=2'],

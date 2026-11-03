@@ -881,13 +881,15 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'BYDAY':
-                    $value = (array) $value;
-                    foreach ($value as $part) {
-                        if (!preg_match('#^  (-|\+)? ([1-5])? (MO|TU|WE|TH|FR|SA|SU) $#xi', (string) $part)) {
-                            throw new InvalidDataException('Invalid part in BYDAY clause: '.$part);
+                    $this->byDay = [];
+                    foreach ((array) $value as $part) {
+                        // A sign needs an ordinal, and nothing may follow
+                        // the day name (D: no trailing line feed).
+                        if (!is_scalar($part) || !preg_match('#^(?:[+-]?[1-5])?(?:MO|TU|WE|TH|FR|SA|SU)$#Di', (string) $part)) {
+                            throw new InvalidDataException('Invalid part in BYDAY clause: '.(is_scalar($part) ? $part : gettype($part)));
                         }
+                        $this->byDay[] = strtoupper((string) $part);
                     }
-                    $this->byDay = $value;
                     break;
 
                 case 'BYMONTHDAY':
