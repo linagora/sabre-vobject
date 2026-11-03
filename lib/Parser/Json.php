@@ -198,8 +198,12 @@ class Json extends Parser
 
         // If the value type we received (e.g.: TEXT) was not the default value
         // type for the given property (e.g.: BDAY), we need to add a VALUE=
-        // parameter.
-        if ($defaultPropertyClass !== $prop::class) {
+        // parameter. A class registered for the value type that is not the
+        // default class (e.g. a subclass of Uri for URL) needs none, as long
+        // as both classes have the received value type.
+        if ($defaultPropertyClass !== $prop::class
+            && ($prop->getValueType() !== $valueType
+                || (new $defaultPropertyClass($this->root, $prop->name))->getValueType() !== $valueType)) {
             $prop['VALUE'] = $valueType;
         }
 
