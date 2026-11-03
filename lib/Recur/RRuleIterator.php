@@ -435,7 +435,7 @@ class RRuleIterator implements \Iterator
             }
 
             // Current month of the year
-            $currentMonth = $this->currentDate->format('n');
+            $currentMonth = (int) $this->currentDate->format('n');
 
             // Current day of the week
             $currentDay = $this->currentDate->format('w');
@@ -666,6 +666,13 @@ class RRuleIterator implements \Iterator
 
                     // if there is no date found, check the next year
                     $currentYear += $this->interval;
+
+                    // Stop at 9999-12-31, as the other loops do.
+                    if ($currentYear > 9999) {
+                        $this->currentDate = null;
+
+                        return;
+                    }
                 }
             }
 
@@ -708,6 +715,13 @@ class RRuleIterator implements \Iterator
 
                     // if there is no date found, check the next year
                     $currentYear += $this->interval;
+
+                    // Stop at 9999-12-31, as the other loops do.
+                    if ($currentYear > 9999) {
+                        $this->currentDate = null;
+
+                        return;
+                    }
                 }
             }
 
@@ -738,7 +752,7 @@ class RRuleIterator implements \Iterator
                     if ($occurrence > $currentDayOfMonth || $advancedToNewMonth) {
                         // only consider byMonth matches,
                         // otherwise, we don't follow RRule correctly
-                        if (in_array((string) $currentMonth, $this->byMonth, true)) {
+                        if (in_array((int) $currentMonth, $this->byMonth, true)) {
                             $selectedOccurrence = $occurrence;
                             break 2;
                         }
@@ -755,7 +769,7 @@ class RRuleIterator implements \Iterator
                         $currentYear += $this->interval;
                         $currentMonth = 1;
                     }
-                } while (!in_array((string) $currentMonth, $this->byMonth, true));
+                } while (!in_array($currentMonth, $this->byMonth, true));
 
                 $this->currentDate = $this->currentDate->setDate(
                     (int) $currentYear,
@@ -789,7 +803,7 @@ class RRuleIterator implements \Iterator
                 $currentYear += $this->interval;
                 $currentMonth = 1;
             }
-        } while (!in_array((string) $currentMonth, $this->byMonth, true));
+        } while (!in_array($currentMonth, $this->byMonth, true));
         $this->currentDate = $this->currentDate->setDate(
             (int) $currentYear,
             $currentMonth,
@@ -863,12 +877,7 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'BYHOUR':
-                    $this->byHour = (array) $value;
-                    foreach ($this->byHour as $byHour) {
-                        if (!is_numeric($byHour) || (int) $byHour < 0 || (int) $byHour > 23) {
-                            throw new InvalidDataException('BYHOUR in RRULE must have value(s) between 0 and 23!');
-                        }
-                    }
+                    $this->byHour = self::unsignedParts($value, 0, 23, 'BYHOUR in RRULE must have value(s) between 0 and 23!');
                     break;
 
                 case 'BYDAY':
@@ -886,30 +895,15 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'BYYEARDAY':
-                    $this->byYearDay = (array) $value;
-                    foreach ($this->byYearDay as $byYearDay) {
-                        if (!is_numeric($byYearDay) || (int) $byYearDay < -366 || 0 === (int) $byYearDay || (int) $byYearDay > 366) {
-                            throw new InvalidDataException('BYYEARDAY in RRULE must have value(s) from 1 to 366, or -366 to -1!');
-                        }
-                    }
+                    $this->byYearDay = self::integerParts($key, $value, 366);
                     break;
 
                 case 'BYWEEKNO':
-                    $this->byWeekNo = (array) $value;
-                    foreach ($this->byWeekNo as $byWeekNo) {
-                        if (!is_numeric($byWeekNo) || (int) $byWeekNo < -53 || 0 === (int) $byWeekNo || (int) $byWeekNo > 53) {
-                            throw new InvalidDataException('BYWEEKNO in RRULE must have value(s) from 1 to 53, or -53 to -1!');
-                        }
-                    }
+                    $this->byWeekNo = self::integerParts($key, $value, 53);
                     break;
 
                 case 'BYMONTH':
-                    $this->byMonth = (array) $value;
-                    foreach ($this->byMonth as $byMonth) {
-                        if (!is_numeric($byMonth) || (int) $byMonth < 1 || (int) $byMonth > 12) {
-                            throw new InvalidDataException('BYMONTH in RRULE must have value(s) between 1 and 12!');
-                        }
-                    }
+                    $this->byMonth = self::unsignedParts($value, 1, 12, 'BYMONTH in RRULE must have value(s) between 1 and 12!');
                     break;
 
                 case 'BYSETPOS':
@@ -1083,9 +1077,34 @@ class RRuleIterator implements \Iterator
     {
         $result = [];
         foreach ((array) $value as $part) {
-            if (!is_scalar($part) || !preg_match('/^[+-]?[0-9]+$/', (string) $part)
+            if (!is_scalar($part) || !preg_match('/^[+-]?[0-9]+$/D', (string) $part)
                 || 0 === (int) $part || abs((int) $part) > $max) {
                 throw new InvalidDataException($key.' in RRULE must have value(s) from 1 to '.$max.', or -'.$max.' to -1!');
+            }
+            $result[] = (int) $part;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Returns the values of an RRULE part that takes a list of integers from
+     * $min to $max, without a minus sign.
+     *
+     * Only digits (and a leading "+") are accepted: is_numeric() would let
+     * "2.3", "1e1" or " 3" through, and these are not integers.
+     *
+     * @return int[]
+     *
+     * @throws InvalidDataException
+     */
+    private static function unsignedParts(mixed $value, int $min, int $max, string $message): array
+    {
+        $result = [];
+        foreach ((array) $value as $part) {
+            if (!is_scalar($part) || !preg_match('/^\+?[0-9]+$/D', (string) $part)
+                || (int) $part < $min || (int) $part > $max) {
+                throw new InvalidDataException($message);
             }
             $result[] = (int) $part;
         }
