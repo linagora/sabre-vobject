@@ -1106,6 +1106,36 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testYearlyByMonthOnLeapDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=2;COUNT=3',
+            '2024-02-29 09:00:00',
+            ['2024-02-29 09:00:00', '2028-02-29 09:00:00', '2032-02-29 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthSkipsMonthsWithoutTheDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=1,4,5;COUNT=4',
+            '2026-01-31 09:00:00',
+            ['2026-01-31 09:00:00', '2026-05-31 09:00:00', '2027-01-31 09:00:00', '2027-05-31 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthWithoutTheDayEnds(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=2,4',
+            '2026-01-31 09:00:00',
+            [],
+            null,
+            'UTC',
+            true
+        );
+    }
+
     public function testYearlyByMonthWithLeadingZero(): void
     {
         $this->parse(
