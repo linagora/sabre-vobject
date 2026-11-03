@@ -486,12 +486,12 @@ class MimeDir extends Parser
         // the decoding. They are merged with a named parameter of the same
         // name, a value it already has being skipped.
         $guessedNames = [];
-        $valuelessParameters = [];
         foreach ($namelessParameters as $namelessParameter) {
             $name = Parameter::guessParameterNameByValue($namelessParameter);
             if ('' === $name) {
-                // Not a known value: a parameter without a value.
-                $valuelessParameters[] = $namelessParameter;
+                // Not a known value: a parameter with an empty value, as
+                // serialize() writes it (NAME=) and as it is read back.
+                $namedParameters[$namelessParameter] = '';
                 continue;
             }
             $guessedNames[$name] ??= !isset($namedParameters[$name]);
@@ -510,9 +510,6 @@ class MimeDir extends Parser
 
         foreach ($guessedNames as $name => $noName) {
             $propObj->parameters[$name]->noName = $noName;
-        }
-        foreach ($valuelessParameters as $valuelessParameter) {
-            $propObj->add(null, $valuelessParameter);
         }
 
         if (isset($propObj['ENCODING']) && 'QUOTED-PRINTABLE' === strtoupper($propObj['ENCODING'])) {

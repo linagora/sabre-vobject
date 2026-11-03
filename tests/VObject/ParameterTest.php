@@ -132,4 +132,13 @@ class ParameterTest extends TestCase
         self::assertSame(substr_count($out, "\r"), substr_count($out, "\r\n"));
         self::assertStringContainsString('NOTE;X-A=ab;X-B=cd:x', $out);
     }
+
+    public function testValuelessParameterRoundTrip(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nEMAIL;FOO:a@example.com\r\nEND:VCARD\r\n");
+        self::assertSame([''], $card->EMAIL['FOO']->getParts());
+        $reread = Reader::read($card->serialize());
+        self::assertSame($card->EMAIL['FOO']->getParts(), $reread->EMAIL['FOO']->getParts());
+        self::assertSame($card->serialize(), $reread->serialize());
+    }
 }
