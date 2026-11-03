@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Component;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Reader;
 
 /**
@@ -86,5 +87,20 @@ class AvailableTest extends TestCase
             ],
             $document->AVAILABLE->getEffectiveStartEnd()
         );
+    }
+
+    public function testGetEffectiveStartEndWithoutDtstart(): void
+    {
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:AVAILABLE
+        DTEND:20150717T172200Z
+        END:AVAILABLE
+        END:VCALENDAR
+        VCAL_WRAP;
+
+        $document = Reader::read($vcal);
+        $this->expectException(InvalidDataException::class);
+        $document->AVAILABLE->getEffectiveStartEnd();
     }
 }

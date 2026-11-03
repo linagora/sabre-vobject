@@ -279,7 +279,12 @@ class FreeBusyGenerator
             // Looping over the AVAILABLE components.
             if (isset($vavail->AVAILABLE)) {
                 foreach ($vavail->AVAILABLE as $available) {
-                    [$availStart, $availEnd] = $available->getEffectiveStartEnd();
+                    try {
+                        [$availStart, $availEnd] = $available->getEffectiveStartEnd();
+                    } catch (InvalidDataException) {
+                        // An AVAILABLE we cannot place makes no time free.
+                        continue;
+                    }
                     $fbData->add(
                         $availStart->getTimeStamp(),
                         $availEnd->getTimeStamp(),

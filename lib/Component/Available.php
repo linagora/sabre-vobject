@@ -34,6 +34,9 @@ class Available extends VObject\Component
      */
     public function getEffectiveStartEnd(): array
     {
+        if (!$this->DTSTART instanceof VObject\Property\ICalendar\DateTime) {
+            throw new VObject\InvalidDataException('An AVAILABLE component must have a DTSTART date or date-time');
+        }
         $effectiveStart = $this->DTSTART->getDateTime();
         if (isset($this->DTEND)) {
             $effectiveEnd = $this->DTEND->getDateTime();
