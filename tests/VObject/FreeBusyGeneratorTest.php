@@ -807,4 +807,21 @@ ICS;
             $vavail
         );
     }
+
+    public function testRdateOnlyEvent(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:b\r\n"
+            ."DTSTAMP:20260102T000000Z\r\nDTSTART:20260106T080000Z\r\nDURATION:PT30M\r\n"
+            ."RDATE:20260109T080000Z,20260112T080000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:b\r\nDTSTAMP:20260102T000000Z\r\nRECURRENCE-ID:20260112T080000Z\r\n"
+            ."DTSTART:20260112T100000Z\r\nDTEND:20260112T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-03-03T00:00:00Z'), $vcal
+        );
+        self::assertSame([
+            '20260106T080000Z/20260106T083000Z',
+            '20260109T080000Z/20260109T083000Z',
+            '20260112T100000Z/20260112T110000Z',
+        ], array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY')));
+    }
 }
