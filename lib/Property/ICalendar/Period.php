@@ -63,8 +63,13 @@ class Period extends Property
      */
     public function setJsonValue(array $value): void
     {
+        // Only the date-times lose their jCal separators: a duration has
+        // none, and is kept as it is.
         $value = array_map(
-            fn ($item) => strtr(implode('/', $item), [':' => '', '-' => '']),
+            fn ($item) => implode('/', array_map(
+                fn ($part) => preg_match('/^[+-]?P/', (string) $part) ? $part : strtr((string) $part, [':' => '', '-' => '']),
+                $item
+            )),
             $value
         );
         parent::setJsonValue($value);
@@ -106,6 +111,41 @@ class Period extends Property
         }
 
         return $return;
+    }
+
+    /**
+     * Validates the node for correctness.
+     *
+     * A PERIOD is date-time "/" (date-time / dur-value) (RFC 5545 section
+     * 3.3.9).
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+
+        foreach ($this->getParts() as $value) {
+            $parts = explode('/', (string) $value);
+            try {
+                if (2 !== count($parts)) {
+                    throw new InvalidDataException('A period has a start and an end');
+                }
+                DateTimeParser::parseDateTime($parts[0]);
+                if ('P' === ($parts[1][0] ?? '')) {
+                    DateTimeParser::parseDuration($parts[1]);
+                } else {
+                    DateTimeParser::parseDateTime($parts[1]);
+                }
+            } catch (InvalidDataException) {
+                $messages[] = [
+                    'level' => 3,
+                    'message' => 'The supplied value ('.$value.') is not a correct PERIOD',
+                    'node' => $this,
+                ];
+                break;
+            }
+        }
+
+        return $messages;
     }
 
     /**
