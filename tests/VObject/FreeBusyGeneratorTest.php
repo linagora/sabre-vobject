@@ -715,4 +715,41 @@ ICS;
             $vavail
         );
     }
+
+    public function testNoEmptyOrInvertedPeriods(): void
+    {
+        $objects = [];
+        foreach ([
+            "DTSTART:20251231T230000Z\r\nDTEND:20260101T000000Z", // ends at the window start
+            "DTSTART:20260105T100000Z\r\nDTEND:20260105T100000Z", // zero length
+            "DTSTART:20260106T100000Z\r\nDURATION:-PT1H",         // negative duration
+            "DTSTART:20260303T000000Z\r\nDURATION:PT1H",          // starts at the window end
+        ] as $i => $times) {
+            $objects[] = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:$i\r\n"
+                ."DTSTAMP:20260101T000000Z\r\n$times\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        }
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-03-03T00:00:00Z'), $objects
+        );
+        self::assertCount(0, $generator->getResult()->VFREEBUSY->select('FREEBUSY'));
+    }
+
+    public function testInvertedEventDoesNotHideBusyTime(): void
+    {
+        $objects = [];
+        foreach ([
+            "DTSTART:20260105T120000Z\r\nDTEND:20260105T100000Z",
+            "DTSTART:20260105T090000Z\r\nDTEND:20260105T120000Z",
+        ] as $i => $times) {
+            $objects[] = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:$i\r\n"
+                ."DTSTAMP:20260101T000000Z\r\n$times\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        }
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-03-03T00:00:00Z'), $objects
+        );
+        self::assertSame(
+            ['20260105T090000Z/20260105T120000Z'],
+            array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY'))
+        );
+    }
 }
