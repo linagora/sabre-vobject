@@ -292,7 +292,9 @@ class PropertyTest extends TestCase
 
     public function testRepairEmptyNameIsNotReportedAsRepaired(): void
     {
-        $vcal = Reader::read(self::REPAIR_NAME_HEAD."DTSTART:20261103T100000Z\r\nX.:y\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        // The parser rejects "X.:y", a property built through the API is not.
+        $vcal = Reader::read(self::REPAIR_NAME_HEAD."DTSTART:20261103T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $vcal->VEVENT->add('X.', 'y');
         $messages = $vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR);
         self::assertContains(3, array_column($messages, 'level'));
     }
@@ -462,5 +464,20 @@ class PropertyTest extends TestCase
         self::assertInstanceOf(Parameter::class, $property->parameters['VALUE']);
         self::assertEquals('VALUE', $property->parameters['VALUE']->name);
         self::assertEquals('DATETIME', $property->parameters['VALUE']->getValue());
+    }
+
+    public function testSerializeKeepsFalsyGroups(): void
+    {
+        foreach (['3.0', '2.1'] as $version) {
+            $card = Reader::read("BEGIN:VCARD\r\nVERSION:$version\r\n0.EMAIL:a@example.com\r\n..X-FOO:b\r\n.X-BAR:c\r\nEND:VCARD\r\n");
+            $reread = Reader::read($card->serialize());
+            self::assertSame('0', $reread->EMAIL->group);
+            self::assertSame(
+                array_map(fn ($p) => [$p->group, $p->name], $card->children()),
+                array_map(fn ($p) => [$p->group, $p->name], $reread->children())
+            );
+            self::assertSame($card->serialize(), $reread->serialize());
+            self::assertSame('0', $card->EMAIL->jsonSerialize()[1]->group);
+        }
     }
 }
