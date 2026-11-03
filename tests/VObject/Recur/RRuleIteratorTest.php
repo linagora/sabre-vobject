@@ -1136,6 +1136,35 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testCountAndUntilStopsAtUntil(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=3;COUNT=5;UNTIL=20280101T000000Z',
+            '2026-01-15 09:00:00',
+            ['2026-03-15 09:00:00', '2027-03-15 09:00:00']
+        );
+    }
+
+    public function testCountAndUntilStopsAtCount(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;COUNT=2;UNTIL=20280101T000000Z',
+            '2026-01-15 09:00:00',
+            ['2026-01-15 09:00:00', '2026-01-16 09:00:00']
+        );
+    }
+
+    public function testMonthlyCountAndUntilBeforeStartYieldsOnlyStart(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;BYDAY=-5FR;COUNT=2;UNTIL=20260320T000000Z',
+            '2026-09-29 00:00:00',
+            ['2026-09-29 00:00:00'],
+            null,
+            'Europe/Paris'
+        );
+    }
+
     public function testYearlyByMonthWithLeadingZero(): void
     {
         $this->parse(
