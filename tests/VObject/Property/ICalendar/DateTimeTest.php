@@ -453,4 +453,60 @@ class DateTimeTest extends TestCase
         $vevent->DTSTART->setDateTime($before);
         self::assertEquals($before->getTimestamp(), $vevent->DTSTART->getDateTime($paris)->getTimestamp());
     }
+
+    public static function valueTypeMismatchProvider(): array
+    {
+        return [
+            'date in a DATE-TIME DTSTART' => ['DTSTART', '20260320', [], "DTSTART;VALUE=DATE:20260320\r\n"],
+            'dates in a DATE-TIME EXDATE with TZID' => ['EXDATE', ['20260101', '20260301'], ['TZID' => 'Europe/Paris'], "EXDATE;VALUE=DATE:20260101,20260301\r\n"],
+            'date-times in a VALUE=DATE RDATE' => ['RDATE', ['20260101T090000', '20260301T090000Z'], ['VALUE' => 'DATE'], "RDATE:20260101T090000,20260301T090000Z\r\n"],
+            'date-time in a VALUE=DATE RECURRENCE-ID with TZID' => ['RECURRENCE-ID', '20261101T090000', ['VALUE' => 'DATE', 'TZID' => 'Europe/Paris'], "RECURRENCE-ID;TZID=Europe/Paris:20261101T090000\r\n"],
+        ];
+    }
+
+    #[DataProvider('valueTypeMismatchProvider')]
+    public function testValidateReportsAValueTypeMismatch(string $name, string|array $value, array $parameters, string $repaired): void
+    {
+        $property = $this->vcal->add('VEVENT')->add($name, $value, $parameters);
+        $before = $property->serialize();
+
+        $messages = $property->validate();
+        self::assertCount(1, $messages);
+        self::assertSame(3, $messages[0]['level']);
+        self::assertSame($before, $property->serialize());
+    }
+
+    #[DataProvider('valueTypeMismatchProvider')]
+    public function testValidateRepairsAValueTypeMismatch(string $name, string|array $value, array $parameters, string $repaired): void
+    {
+        $property = $this->vcal->add('VEVENT')->add($name, $value, $parameters);
+
+        $messages = $property->validate(\Sabre\VObject\Node::REPAIR);
+        self::assertCount(1, $messages);
+        self::assertSame(1, $messages[0]['level']);
+        self::assertSame($repaired, $property->serialize());
+        self::assertSame([], $property->validate());
+    }
+
+    public static function unrepairableValueTypeMismatchProvider(): array
+    {
+        return [
+            'mixed values in a DATE-TIME EXDATE' => ['EXDATE', ['20260101', '20260301T090000'], []],
+            'mixed values in a VALUE=DATE EXDATE' => ['EXDATE', ['20260101', '20260301T090000'], ['VALUE' => 'DATE']],
+            'date in a DTSTAMP' => ['DTSTAMP', '20260320', []],
+            'neither date nor date-time' => ['DTSTART', 'tomorrow', []],
+        ];
+    }
+
+    #[DataProvider('unrepairableValueTypeMismatchProvider')]
+    public function testValidateDoesNotRepairOtherMismatches(string $name, string|array $value, array $parameters): void
+    {
+        $property = $this->vcal->add('VEVENT')->add($name, $value, $parameters);
+        $before = $property->serialize();
+
+        $messages = $property->validate(\Sabre\VObject\Node::REPAIR);
+        self::assertCount(1, $messages);
+        self::assertSame(3, $messages[0]['level']);
+        self::assertSame($before, $property->serialize());
+    }
 }
