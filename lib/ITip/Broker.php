@@ -1043,7 +1043,11 @@ class Broker
                         if ('INTERVAL' === $key && '1' === (string) $val) {
                             continue;
                         }
+                        // The values of a list part form a set: their
+                        // order and repetitions do not change the rule.
                         if (is_array($val)) {
+                            $val = array_unique($val);
+                            sort($val);
                             $val = implode(',', $val);
                         }
                         $rrule[] = "$key=$val";
