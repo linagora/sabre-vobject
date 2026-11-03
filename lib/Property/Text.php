@@ -357,12 +357,15 @@ class Text extends Property
             $minimum = $this->minimumPropertyValues[$this->name];
             $parts = $this->getParts();
             if (\count($parts) < $minimum) {
+                // Only a structured TEXT value can be padded: other value
+                // types (e.g. VALUE=uri) serialize a single value.
+                $repair = ($options & self::REPAIR) && 'TEXT' === $this->getValueType();
                 $warnings[] = [
-                    'level' => $options & self::REPAIR ? 1 : 3,
+                    'level' => $repair ? 1 : 3,
                     'message' => 'The '.$this->name.' property must have at least '.$minimum.' values. It only has '.\count($parts),
                     'node' => $this,
                 ];
-                if ($options & self::REPAIR) {
+                if ($repair) {
                     $parts = \array_pad($parts, $minimum, '');
                     $this->setParts($parts);
                 }

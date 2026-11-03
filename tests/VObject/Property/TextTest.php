@@ -86,6 +86,17 @@ class TextTest extends TestCase
         self::assertCount(5, $vcard->N->getParts());
     }
 
+    public function testRepairOfUriAdrSurvivesSerialization(): void
+    {
+        foreach (['ADR;VALUE=uri:geo:1,2', 'N;VALUE=uri:urn:x'] as $line) {
+            $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:a\r\n$line\r\nEND:VCARD\r\n");
+            $repair = array_column($card->validate(\Sabre\VObject\Node::PROFILE_CARDDAV | \Sabre\VObject\Node::REPAIR), 'level');
+            $strict = array_column(Reader::read($card->serialize())->validate(\Sabre\VObject\Node::PROFILE_CARDDAV), 'level');
+            self::assertSame([3], $repair);
+            self::assertSame([3], $strict);
+        }
+    }
+
     public function testBareCarriageReturnRoundTrips(): void
     {
         $vcal = Reader::read(
