@@ -42,6 +42,15 @@ class Text extends Property
     ];
 
     /**
+     * Structured properties whose components may hold several values,
+     * separated by an unescaped comma (RFC 6350 sections 6.2.2 and 6.3.1).
+     */
+    protected array $listComponentValues = [
+        'N',
+        'ADR',
+    ];
+
+    /**
      * Some text components have a minimum number of components.
      *
      * N must for instance be represented as 5 components, separated by ;, even
@@ -93,6 +102,30 @@ class Text extends Property
         // parsed value equal to the one that gets serialized.
         $val = str_replace("\r", '', $val);
 
+        if (in_array($this->name, $this->listComponentValues, true)) {
+            // Split on the unescaped ";" first, then each component on the
+            // unescaped ",". A component with one value stays a string.
+            $components = [];
+            $component = '';
+            foreach (preg_split('/(\\\\.|;)/s', $val, -1, PREG_SPLIT_DELIM_CAPTURE) as $token) {
+                if (';' === $token) {
+                    $components[] = $component;
+                    $component = '';
+                } else {
+                    $component .= $token;
+                }
+            }
+            $components[] = $component;
+
+            $this->setValue(array_map(function (string $component) {
+                $values = MimeDir::unescapeValue($component, ',');
+
+                return 1 === count($values) ? $values[0] : $values;
+            }, $components));
+
+            return;
+        }
+
         $this->setValue(MimeDir::unescapeValue($val, $this->delimiter));
     }
 
@@ -125,6 +158,11 @@ class Text extends Property
             $val = \array_pad($val, $this->minimumPropertyValues[$this->name], '');
         }
 
+        // The values of a component are separated by a comma where the
+        // property allows it, and joined as one value elsewhere, as they
+        // are read back.
+        $listSeparator = ';' !== $this->delimiter || in_array($this->name, $this->listComponentValues, true) ? ',' : '\,';
+
         foreach ($val as &$item) {
             if (!is_array($item)) {
                 $item = [$item];
@@ -144,7 +182,7 @@ class Text extends Property
                     );
                 }
             }
-            $item = \implode(',', $item);
+            $item = \implode($listSeparator, $item);
         }
 
         return \implode($this->delimiter, $val);
