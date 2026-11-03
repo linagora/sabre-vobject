@@ -13,15 +13,16 @@ class FindFromOffset implements TimezoneFinder
     {
         // Maybe the author was hyper-lazy and just included an offset. We
         // support it, but we aren't happy about it.
-        if (preg_match('/^GMT(\+|-)([0-9]{4})$/', $tzid, $matches)) {
-            // Note that the path in the source will never be taken from PHP 5.5.10
-            // onwards. PHP 5.5.10 supports the "GMT+0100" style of format, so it
-            // already gets returned early in this function. Once we drop support
-            // for versions under PHP 5.5.10, this bit can be taken out of the
-            // source.
-            // @codeCoverageIgnoreStart
-            return new \DateTimeZone('Etc/GMT'.$matches[1].ltrim(substr($matches[2], 0, 2), '0'));
-            // @codeCoverageIgnoreEnd
+        //
+        // The offset zone is built from the offset itself: the Etc/GMT±h
+        // zones use the POSIX sign convention (Etc/GMT+1 is UTC-1), only
+        // cover whole hours and only go from -14 to +12.
+        if (preg_match('/^GMT([+-][0-9]{4})\z/', $tzid, $matches)) {
+            try {
+                return new \DateTimeZone($matches[1]);
+            } catch (\Exception) {
+                return null;
+            }
         }
 
         return null;
