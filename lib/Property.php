@@ -447,6 +447,14 @@ abstract class Property extends Node implements \Stringable
 
     /* }}} */
 
+    protected function setRoot(?Component $root): void
+    {
+        parent::setRoot($root);
+        foreach ($this->parameters as $parameter) {
+            $parameter->setRoot($root);
+        }
+    }
+
     /**
      * This method is automatically called when the object is cloned.
      * Specifically, this will ensure all child elements are also cloned.
