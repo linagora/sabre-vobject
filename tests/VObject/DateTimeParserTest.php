@@ -15,7 +15,7 @@ class DateTimeParserTest extends TestCase
         self::assertEquals('+1 weeks', DateTimeParser::parseDurationAsString('P1W'));
         self::assertEquals('+5 days', DateTimeParser::parseDurationAsString('P5D'));
         self::assertEquals('+5 days 3 hours 50 minutes 12 seconds', DateTimeParser::parseDurationAsString('P5DT3H50M12S'));
-        self::assertEquals('-1 weeks 50 minutes', DateTimeParser::parseDurationAsString('-P1WT50M'));
+        self::assertEquals('-1 weeks -50 minutes', DateTimeParser::parseDurationAsString('-P1WT50M'));
         self::assertEquals('+50 days 3 hours 2 seconds', DateTimeParser::parseDurationAsString('+P50DT3H2S'));
         self::assertEquals('+0 seconds', DateTimeParser::parseDurationAsString('+PT0S'));
         self::assertEquals(new \DateInterval('PT0S'), DateTimeParser::parseDuration('PT0S'));
@@ -39,6 +39,24 @@ class DateTimeParserTest extends TestCase
     {
         self::assertEquals(new \DateInterval('PT1H'), DateTimeParser::parse('+PT1H'));
         self::assertEquals(new \DateInterval('P1D'), DateTimeParser::parse('+P1D'));
+    }
+
+    #[DataProvider('durationsAsString')]
+    public function testParseDurationAsStringMatchesParseDuration(string $duration): void
+    {
+        $ref = new \DateTimeImmutable('2026-01-01T00:00:00Z');
+        self::assertEquals(
+            $ref->add(DateTimeParser::parseDuration($duration)),
+            $ref->modify(DateTimeParser::parseDurationAsString($duration))
+        );
+    }
+
+    /**
+     * @return list<array{string}>
+     */
+    public static function durationsAsString(): array
+    {
+        return [['-P1DT1H'], ['-P1W2DT3M5S'], ['-P'], ['-PT15M'], ['P'], ['+P1DT2H'], ['-PT0S']];
     }
 
     public function testParseDurationZero(): void
