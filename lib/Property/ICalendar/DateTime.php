@@ -261,10 +261,10 @@ class DateTime extends Property
     {
         $dts = $this->getDateTimes();
         $hasTime = $this->hasTime();
-        $isFloating = $this->isFloating();
-
-        $tz = $dts[0]->getTimeZone();
-        $isUtc = !$isFloating && in_array($tz->getName(), ['UTC', 'GMT', 'Z'], true);
+        // Only a value written in UTC gets a Z: a value with a TZID is a
+        // local time, even when the TZID could not be resolved (and was
+        // replaced by the default time zone).
+        $isUtc = str_ends_with(strtoupper((string) ($this->getParts()[0] ?? '')), 'Z');
 
         return array_map(
             function (\DateTimeInterface $dt) use ($hasTime, $isUtc) {
