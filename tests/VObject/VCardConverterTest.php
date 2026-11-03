@@ -637,4 +637,31 @@ VCF;
     {
         return [['data:image/jpeg;base64,@@@'], ['data:image/jpeg;base64AAAA'], ['data:image?jpeUAA=']];
     }
+
+    public function testUnknownValueTypeOnMediaProperty(): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO;VALUE=X:data:image/jpeg;base64,AAAA\r\nEND:VCARD\r\n");
+        $v3 = $v4->convert(Document::VCARD30);
+        self::assertSame("\x00\x00\x00", $v3->LOGO->getValue());
+        self::assertFalse(isset($v3->LOGO['VALUE']));
+
+        /** @var VCard $v3 */
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nLOGO;VALUE=X;ENCODING=b:AAAA\r\nEND:VCARD\r\n");
+        $v4 = $v3->convert(Document::VCARD40);
+        self::assertSame('data:application/octet-stream;base64,AAAA', $v4->LOGO->getValue());
+        self::assertFalse(isset($v4->LOGO['VALUE']));
+    }
+
+    public function testUnknownValueTypeIsKept(): void
+    {
+        /** @var VCard $v4 */
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nTEL;VALUE=X-FOO:+1234\r\nEND:VCARD\r\n");
+        /** @var VCard $v3 */
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+        self::assertSame('X-FOO', (string) $v3->TEL['VALUE']);
+        $back = $v3->convert(Document::VCARD40);
+        self::assertSame('X-FOO', (string) $back->TEL['VALUE']);
+        self::assertSame('+1234', (string) $back->TEL);
+    }
 }
