@@ -729,4 +729,15 @@ VCF;
         $v3 = Reader::read($v3->serialize());
         self::assertSame('--0203T102200Z', (string) $v3->convert(Document::VCARD40)->BDAY);
     }
+
+    public function testAddressBookServerMemberWithEscapedLineBreak(): void
+    {
+        /** @var VCard $v3 */
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:b\\nEMAIL:x@example.com\r\nEND:VCARD\r\n");
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        self::assertStringContainsString("\r\nMEMBER:urn:uuid:b\\nEMAIL:x@example.com\r\n", $serialized);
+        $v4 = Reader::read($serialized);
+        self::assertCount(1, $v4->select('MEMBER'));
+        self::assertCount(0, $v4->select('EMAIL'));
+    }
 }
