@@ -31,6 +31,20 @@ class RRuleIterator implements \Iterator
     public const dateUpperLimit = 253402300799;
 
     /**
+     * For each frequency, the number of periods in 10000 years: a single
+     * step of a larger INTERVAL leaves the supported date range anyway.
+     */
+    private const maxInterval = [
+        'secondly' => 315569520000,
+        'minutely' => 5259492000,
+        'hourly' => 87658200,
+        'daily' => 3652425,
+        'weekly' => 521775,
+        'monthly' => 120000,
+        'yearly' => 10000,
+    ];
+
+    /**
      * Creates the Iterator.
      *
      * @param string|array $rrule
@@ -162,6 +176,11 @@ class RRuleIterator implements \Iterator
             case 'yearly':
                 $this->nextYearly();
                 break;
+        }
+
+        // Not every advance checks the upper limit itself.
+        if (null !== $this->currentDate && $this->currentDate->getTimestamp() > self::dateUpperLimit) {
+            $this->currentDate = null;
         }
         ++$this->counter;
     }
@@ -949,6 +968,10 @@ class RRuleIterator implements \Iterator
         if (!isset($this->frequency)) {
             throw new InvalidDataException('FREQ is required in RRULE');
         }
+
+        // Clamping a huge INTERVAL changes no instance, and keeps the date
+        // arithmetic away from integer overflows.
+        $this->interval = min($this->interval, self::maxInterval[$this->frequency]);
     }
 
     /**

@@ -1165,6 +1165,41 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    #[DataProvider('hugeIntervalProvider')]
+    public function testHugeIntervalStopsAtUpperLimit(string $rule): void
+    {
+        $this->parse($rule, '2026-01-05 09:00:00', ['2026-01-05 09:00:00']);
+    }
+
+    public static function hugeIntervalProvider(): array
+    {
+        return [
+            ['FREQ=WEEKLY;INTERVAL=461168601842738;COUNT=2'],
+            ['FREQ=DAILY;INTERVAL=3652426;COUNT=2'],
+            ['FREQ=MONTHLY;INTERVAL=120001;COUNT=2'],
+            ['FREQ=YEARLY;INTERVAL=7975;COUNT=2'],
+            ['FREQ=HOURLY;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=MINUTELY;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=SECONDLY;INTERVAL=99999999999999999999;COUNT=2'],
+            ['FREQ=WEEKLY;BYDAY=MO;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=DAILY;BYHOUR=9;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=MONTHLY;BYMONTHDAY=5;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYMONTH=1;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=5;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYWEEKNO=2;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYYEARDAY=5;INTERVAL=9223372036854775807;COUNT=2'],
+        ];
+    }
+
+    public function testHugeIntervalKeepsInstancesOfTheFirstPeriod(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;BYMONTHDAY=5,20;INTERVAL=9223372036854775807;COUNT=3',
+            '2026-01-05 09:00:00',
+            ['2026-01-05 09:00:00', '2026-01-20 09:00:00']
+        );
+    }
+
     public function testYearlyByMonthWithLeadingZero(): void
     {
         $this->parse(
