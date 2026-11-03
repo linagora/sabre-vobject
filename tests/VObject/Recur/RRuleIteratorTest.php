@@ -1216,6 +1216,49 @@ class RRuleIteratorTest extends TestCase
         ];
     }
 
+    #[DataProvider('ambiguousLocalTimeProvider')]
+    public function testAmbiguousLocalTimeIsTheFirstOccurrence(string $rule, string $start, int $skip, string $expected): void
+    {
+        $it = new RRuleIterator($rule, new \DateTimeImmutable($start, new \DateTimeZone('Europe/Paris')));
+        for ($i = 0; $i < $skip; ++$i) {
+            $it->next();
+        }
+        self::assertSame($expected, $it->current()->format('c'));
+    }
+
+    public static function ambiguousLocalTimeProvider(): array
+    {
+        return [
+            'monthly' => ['FREQ=MONTHLY;INTERVAL=9;COUNT=2', '2026-01-25 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+            'yearly BYMONTH' => ['FREQ=YEARLY;BYMONTH=10;COUNT=2', '2026-01-25 02:30:00', 0, '2026-10-25T02:30:00+02:00'],
+            'yearly BYMONTH BYDAY' => ['FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU;COUNT=2', '2025-10-26 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+            'weekly' => ['FREQ=WEEKLY;INTERVAL=39;COUNT=2', '2026-01-25 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+            'daily' => ['FREQ=DAILY;INTERVAL=273;COUNT=2', '2026-01-25 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+        ];
+    }
+
+    public function testAmbiguousLocalTimeIsTheFirstOccurrenceFromMutableStart(): void
+    {
+        $it = new RRuleIterator('FREQ=MONTHLY;INTERVAL=9;COUNT=2', new \DateTime('2026-01-25 02:30:00', new \DateTimeZone('Europe/Paris')));
+        $it->next();
+        self::assertSame('2026-10-25T02:30:00+02:00', $it->current()->format('c'));
+    }
+
+    public function testDailyByHourOnTheAmbiguousHour(): void
+    {
+        $it = new RRuleIterator('FREQ=DAILY;BYHOUR=2;COUNT=4', new \DateTimeImmutable('2026-10-24 02:30:00', new \DateTimeZone('Europe/Paris')));
+        $result = [];
+        foreach ($it as $date) {
+            $result[] = $date->format('c');
+        }
+        self::assertSame([
+            '2026-10-24T02:30:00+02:00',
+            '2026-10-25T02:30:00+02:00',
+            '2026-10-26T02:30:00+01:00',
+            '2026-10-27T02:30:00+01:00',
+        ], $result);
+    }
+
     public function testYearlyByMonthWithLeadingZero(): void
     {
         $this->parse(
