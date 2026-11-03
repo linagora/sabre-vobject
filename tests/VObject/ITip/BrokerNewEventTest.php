@@ -688,4 +688,34 @@ ICS;
         ];
         $this->parse(null, $message, $expected, 'mailto:strunk@example.org');
     }
+
+    public static function nonDateDtStartProvider(): array
+    {
+        $master = "UID:u1\r\nDTSTAMP:20260101T000000Z\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\n";
+
+        return [
+            'master TEXT' => ["BEGIN:VEVENT\r\n{$master}DTSTART;VALUE=TEXT:tomorrow\r\nEND:VEVENT\r\n"],
+            'master PERIOD' => ["BEGIN:VEVENT\r\n{$master}DTSTART;VALUE=PERIOD:20260105T090000Z/PT1H\r\nEND:VEVENT\r\n"],
+            'override TEXT' => ["BEGIN:VEVENT\r\n{$master}DTSTART:20260105T090000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\nEND:VEVENT\r\n"
+                ."BEGIN:VEVENT\r\n{$master}RECURRENCE-ID:20260108T090000Z\r\nDTSTART;VALUE=TEXT:0108T14000\r\nEND:VEVENT\r\n"],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonDateDtStartProvider')]
+    public function testDtstartWithANonDateValueIsRejected(string $events): void
+    {
+        $vcal = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n{$events}END:VCALENDAR\r\n");
+
+        $this->expectException(ITipException::class);
+        (new Broker())->parseEvent($vcal, 'mailto:o@example.com');
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonDateDtStartProvider')]
+    public function testDeletingAnEventWithANonDateDtstartIsRejected(string $events): void
+    {
+        $vcal = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n{$events}END:VCALENDAR\r\n");
+
+        $this->expectException(ITipException::class);
+        (new Broker())->parseEvent(null, 'mailto:o@example.com', $vcal);
+    }
 }

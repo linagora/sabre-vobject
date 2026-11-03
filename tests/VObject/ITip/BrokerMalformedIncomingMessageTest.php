@@ -122,6 +122,25 @@ class BrokerMalformedIncomingMessageTest extends TestCase
         ];
     }
 
+    #[DataProvider('nonDateMasterDtStarts')]
+    public function testCancelOntoAMasterWithANonDateDtstartIsInvalidData(string $dtStart): void
+    {
+        $stored = str_replace("DTSTART:20260302T090000Z\r\n", $dtStart."\r\n", self::RECURRING)."END:VCALENDAR\r\n";
+        $instance = "BEGIN:VEVENT\r\nUID:meeting-1\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260303T090000Z\r\n"
+            ."SEQUENCE:1\r\nORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n";
+
+        $this->expectException(InvalidDataException::class);
+        (new Broker())->processMessage(self::message('CANCEL', $instance), Reader::read($stored));
+    }
+
+    public static function nonDateMasterDtStarts(): array
+    {
+        return [
+            'TEXT' => ['DTSTART;VALUE=TEXT:tomorrow'],
+            'PERIOD' => ['DTSTART;VALUE=PERIOD:20260302T090000Z/PT1H'],
+        ];
+    }
+
     public function testParseEventWithNonAddressOrganizer(): void
     {
         $vcal = Reader::read(
