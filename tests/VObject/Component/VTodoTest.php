@@ -193,6 +193,34 @@ HI;
         ], $messages);
     }
 
+    #[DataProvider('invalidDueOrDtstart')]
+    public function testValidateWithInvalidDueOrDtstart(string $lines): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTODO\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\n$lines\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(\Sabre\VObject\Node::PROFILE_CALDAV | \Sabre\VObject\Node::REPAIR);
+        self::assertContains(3, array_column($messages, 'level'));
+    }
+
+    public static function invalidDueOrDtstart(): array
+    {
+        return [
+            ["DTSTART:20261103T100000Z\r\nDUE:x"],
+            ["DTSTART:x\r\nDUE:20261103T100000Z"],
+            ["DTSTART:20261103T100000Z\r\nDUE:"],
+            ["DTSTART:20261103T100000Z\r\nDUE:PT1H"],
+            ["DTSTART;VALUE=DATE:20261103\r\nDUE;VALUE=DATE:20261304"],
+        ];
+    }
+
+    public function testValidateWithTextDueAndDtstart(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTODO\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART;VALUE=TEXT:today\r\nDUE;VALUE=TEXT:tomorrow\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+        // No Error from a comparison of two Text properties.
+        self::assertIsArray($vcal->validate(\Sabre\VObject\Node::PROFILE_CALDAV | \Sabre\VObject\Node::REPAIR));
+    }
+
     public function testValidateDuplicatePercentComplete(): void
     {
         $input = <<<HI
