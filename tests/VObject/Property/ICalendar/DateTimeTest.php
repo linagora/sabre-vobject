@@ -438,4 +438,19 @@ class DateTimeTest extends TestCase
         self::assertSame('20260111T173000Z', (string) $expanded->VEVENT[0]->DTEND);
         self::assertSame('20260111T163000Z', (string) $expanded->VEVENT[0]->{'RECURRENCE-ID'});
     }
+
+    public function testDateWithTzidUsesReferenceZone(): void
+    {
+        $vevent = $this->vcal->add('VEVENT', ['DTSTART' => '20260320']);
+        $vevent->DTSTART['VALUE'] = 'DATE';
+        $vevent->DTSTART['TZID'] = 'Asia/Tokyo';
+        $paris = new \DateTimeZone('Europe/Paris');
+
+        self::assertTrue($vevent->DTSTART->isFloating());
+        $before = $vevent->DTSTART->getDateTime($paris);
+        self::assertEquals('2026-03-20T00:00:00+01:00', $before->format('c'));
+
+        $vevent->DTSTART->setDateTime($before);
+        self::assertEquals($before->getTimestamp(), $vevent->DTSTART->getDateTime($paris)->getTimestamp());
+    }
 }
