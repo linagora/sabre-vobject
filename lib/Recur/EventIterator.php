@@ -359,7 +359,18 @@ class EventIterator implements \Iterator
     public function getEventObject(): VEvent
     {
         if ($this->currentOverriddenEvent) {
-            return $this->currentOverriddenEvent;
+            // An instance does not recur: recurrence properties of an
+            // overridden instance are dropped, as from the master's copies.
+            if (!isset($this->currentOverriddenEvent->RRULE)
+                && !isset($this->currentOverriddenEvent->RDATE)
+                && !isset($this->currentOverriddenEvent->EXDATE)
+                && !isset($this->currentOverriddenEvent->EXRULE)) {
+                return $this->currentOverriddenEvent;
+            }
+            $event = clone $this->currentOverriddenEvent;
+            unset($event->RRULE, $event->RDATE, $event->EXDATE, $event->EXRULE);
+
+            return $event;
         }
 
         /** @var VEvent $event */
