@@ -636,7 +636,8 @@ class RRuleIterator implements \Iterator
                 if ($this->byDay) {
                     // An ordinal makes no sense here (RFC 5545 section
                     // 3.3.10 forbids it with BYWEEKNO): getDays() drops it.
-                    $dayOffsets = $this->getDays();
+                    // ISO days run from 1 (Monday) to 7 (Sunday).
+                    $dayOffsets = array_map(static fn (int $day): int => 0 === $day ? 7 : $day, $this->getDays());
                 } else {   // default is Monday
                     $dayOffsets[] = 1;
                 }
@@ -681,7 +682,8 @@ class RRuleIterator implements \Iterator
                 if ($this->byDay) {
                     // An ordinal makes no sense here (RFC 5545 section
                     // 3.3.10 forbids it with BYWEEKNO): getDays() drops it.
-                    $dayOffsets = $this->getDays();
+                    // ISO days run from 1 (Monday) to 7 (Sunday).
+                    $dayOffsets = array_map(static fn (int $day): int => 0 === $day ? 7 : $day, $this->getDays());
                 } else {   // default is Monday-Sunday
                     $dayOffsets = [1, 2, 3, 4, 5, 6, 7];
                 }
