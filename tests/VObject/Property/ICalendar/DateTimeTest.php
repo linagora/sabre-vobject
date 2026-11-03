@@ -509,4 +509,19 @@ class DateTimeTest extends TestCase
         self::assertSame(3, $messages[0]['level']);
         self::assertSame($before, $property->serialize());
     }
+
+    public function testJsonValueOfUnresolvedTzidIsNotUtc(): void
+    {
+        $vcal = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTIMEZONE\r\nTZID:Customized Time Zone\r\n"
+            ."BEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20261103T100000Z\r\nDTSTART;TZID=Customized Time Zone:20261103T100000\r\n"
+            ."DTEND;TZID=Foo/Bar:20261103T110000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame(['2026-11-03T10:00:00'], $vcal->VEVENT->DTSTART->getJsonValue());
+        self::assertSame(['2026-11-03T11:00:00'], $vcal->VEVENT->DTEND->getJsonValue());
+        self::assertSame(['2026-11-03T10:00:00Z'], $vcal->VEVENT->DTSTAMP->getJsonValue());
+
+        $again = \Sabre\VObject\Reader::readJson(json_encode($vcal->jsonSerialize()));
+        self::assertSame('20261103T100000', $again->VEVENT->DTSTART->getValue());
+        self::assertSame('20261103T100000Z', $again->VEVENT->DTSTAMP->getValue());
+    }
 }
