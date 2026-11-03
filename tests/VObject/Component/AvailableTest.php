@@ -66,4 +66,25 @@ class AvailableTest extends TestCase
             $document->AVAILABLE->getEffectiveStartEnd()
         );
     }
+
+    public function testGetEffectiveStartEndWithoutEnd(): void
+    {
+        $vcal = <<<VCAL_WRAP
+        BEGIN:VCALENDAR
+        BEGIN:AVAILABLE
+        DTSTART:20150717T162200Z
+        END:AVAILABLE
+        END:VCALENDAR
+        VCAL_WRAP;
+
+        $document = Reader::read($vcal);
+        $tz = new \DateTimeZone('UTC');
+        self::assertEquals(
+            [
+                new \DateTimeImmutable('2015-07-17 16:22:00', $tz),
+                new \DateTimeImmutable('2015-07-17 16:22:00', $tz),
+            ],
+            $document->AVAILABLE->getEffectiveStartEnd()
+        );
+    }
 }
