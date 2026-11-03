@@ -405,9 +405,11 @@ class MimeDir extends Parser
                     $property['parameters'][$lastParam] = $value;
                 } elseif (is_array($property['parameters'][$lastParam])) {
                     $property['parameters'][$lastParam][] = $value;
-                } elseif ($property['parameters'][$lastParam] === $value) {
-                    // When the current value of the parameter is the same as the
-                    // new one, then we can leave the current parameter as it is.
+                } elseif ('=' === $match[0][0] && $property['parameters'][$lastParam] === $value) {
+                    // When a repeated parameter (VALUE=DATE;VALUE=DATE) has
+                    // the same value as the current one, then we can leave
+                    // the current parameter as it is. The values of one list
+                    // (TYPE=a,a,b) are all kept.
                 } else {
                     $property['parameters'][$lastParam] = [
                         $property['parameters'][$lastParam],

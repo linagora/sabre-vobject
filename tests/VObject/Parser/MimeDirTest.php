@@ -294,6 +294,22 @@ EOF;
         echo $vcard->serialize();
     }
 
+    public function testRepeatedValuesInParameterListAreKept(): void
+    {
+        $vcal = (new MimeDir())->parse("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\n"
+            ."ATTENDEE;DELEGATED-TO=\"mailto:b@x\",\"mailto:b@x\",\"mailto:c@x\":mailto:a@x\r\n"
+            ."ATTENDEE;X-L=a,b,a:mailto:d@x\r\n"
+            ."ATTENDEE;X-L=,:mailto:e@x\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        $attendees = $vcal->VEVENT->select('ATTENDEE');
+        self::assertSame(['mailto:b@x', 'mailto:b@x', 'mailto:c@x'], $attendees[0]['DELEGATED-TO']->getParts());
+        self::assertSame(['a', 'b', 'a'], $attendees[1]['X-L']->getParts());
+        self::assertSame(['', ''], $attendees[2]['X-L']->getParts());
+
+        $reread = (new MimeDir())->parse($vcal->serialize());
+        self::assertSame($vcal->serialize(), $reread->serialize());
+    }
+
     public function testNamelessValueParameterSelectsTheClass(): void
     {
         $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nX-FOO;URL:x\r\nNOTE;ENCODING=QUOTED-PRINTABLE;QUOTED-PRINTABLE:a=3Db\r\nEND:VCARD\r\n");
