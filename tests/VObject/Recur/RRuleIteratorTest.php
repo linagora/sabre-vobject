@@ -2199,4 +2199,51 @@ class RRuleIteratorTest extends TestCase
             $result
         );
     }
+
+    public function testMonthlyRuleWithoutInstanceEndsQuickly(): void
+    {
+        // The second-to-last Friday is between the 15th and the 24th.
+        $it = new RRuleIterator(
+            'FREQ=MONTHLY;BYDAY=-2FR;BYMONTHDAY=2,9,-3',
+            new \DateTimeImmutable('2026-01-29 18:00:00', new \DateTimeZone('Europe/Paris'))
+        );
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public function testYearlyRuleWithoutInstanceEndsQuickly(): void
+    {
+        $it = new RRuleIterator(
+            'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30',
+            new \DateTimeImmutable('2026-01-29 18:00:00', new \DateTimeZone('UTC'))
+        );
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public function testRareInstancesAreStillFound(): void
+    {
+        // A Monday 29 February: 2016, 2044, 2072.
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3',
+            '2016-02-29 10:00:00',
+            ['2016-02-29 10:00:00', '2044-02-29 10:00:00', '2072-02-29 10:00:00']
+        );
+        // Every 41 months, a Friday 13th: the scan visits each month of the
+        // 400-year cycle in a different order, and still finds them.
+        $it = new RRuleIterator(
+            'FREQ=MONTHLY;INTERVAL=41;BYDAY=FR;BYMONTHDAY=13;COUNT=5',
+            new \DateTimeImmutable('2026-02-13 10:00:00', new \DateTimeZone('UTC'))
+        );
+        $count = 0;
+        foreach ($it as $date) {
+            self::assertSame('Fri 13', $date->format('D j'));
+            ++$count;
+        }
+        self::assertSame(5, $count);
+    }
 }
