@@ -186,12 +186,12 @@ class Parameter extends Node implements \Stringable
             return implode(';', $value);
         }
 
-        return $this->name.'='.array_reduce(
-            $value,
-            function ($out, $item) {
-                if (!is_null($out)) {
-                    $out .= ',';
-                }
+        // Each value is encoded on its own and the list is joined once:
+        // concatenating in an array_reduce() callback copied the whole
+        // string for every value (quadratic time on long lists).
+        return $this->name.'='.implode(',', array_map(
+            function ($item) {
+                $item = (string) $item;
 
                 // If there's no special characters in the string, we'll use the simple
                 // format.
@@ -210,11 +210,12 @@ class Parameter extends Node implements \Stringable
                 // severely trips on + characters not being quoted, so we
                 // added + as well.
                 if (!preg_match('#(?: [\n":;\^,\+] )#x', $item)) {
-                    return $out.$item;
+                    return $item;
                 }
+
                 // Enclosing in double-quotes, and using RFC6868 for encoding any
                 // special characters
-                $out .= '"'.strtr(
+                return '"'.strtr(
                     $item,
                     [
                         '^' => '^^',
@@ -222,10 +223,9 @@ class Parameter extends Node implements \Stringable
                         '"' => '^\'',
                     ]
                 ).'"';
-
-                return $out;
-            }
-        );
+            },
+            $value
+        ));
     }
 
     /**

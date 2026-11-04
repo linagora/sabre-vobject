@@ -159,4 +159,28 @@ class ParameterTest extends TestCase
         self::assertSame([], $vcal->validate());
         self::assertIsString(json_encode($vcal->jsonSerialize(), JSON_THROW_ON_ERROR));
     }
+
+    public function testSerializeManyValuesIsLinear(): void
+    {
+        $cal = new Component\VCalendar();
+        $prop = $cal->add('X-VALUES', 'v');
+        $prop['X-P'] = array_fill(0, 200000, '!:!');
+
+        $start = microtime(true);
+        $out = $prop['X-P']->serialize();
+        $elapsed = microtime(true) - $start;
+
+        self::assertSame('X-P='.implode(',', array_fill(0, 200000, '"!:!"')), $out);
+        // Quadratic before: minutes for this list.
+        self::assertLessThan(2.0, $elapsed);
+    }
+
+    public function testSerializeMixesPlainAndQuotedValues(): void
+    {
+        $cal = new Component\VCalendar();
+        $prop = $cal->add('X-VALUES', 'v');
+        $prop['X-P'] = ['a', 'b:c', "d\ne^f\"g", '+'];
+
+        self::assertSame('X-P=a,"b:c","d^ne^^f^\'g","+"', $prop['X-P']->serialize());
+    }
 }
