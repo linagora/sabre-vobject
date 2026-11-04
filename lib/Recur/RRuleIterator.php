@@ -31,6 +31,13 @@ class RRuleIterator implements \Iterator
     public const dateUpperLimit = 253402300799;
 
     /**
+     * The Gregorian calendar repeats every 400 years (4800 months, 146097
+     * days, a whole number of weeks): what BYDAY, BYMONTHDAY and BYSETPOS
+     * select in a month only depends on its place in that cycle.
+     */
+    private const GREGORIAN_CYCLE_MONTHS = 4800;
+
+    /**
      * For each frequency, the number of periods in 10000 years: a single
      * step of a larger INTERVAL leaves the supported date range anyway.
      */
@@ -616,6 +623,7 @@ class RRuleIterator implements \Iterator
         }
 
         $selectedOccurrence = -1;
+        $emptyMonths = 0;
         while (true) {
             $occurrences = $this->getMonthlyOccurrences();
 
@@ -655,7 +663,11 @@ class RRuleIterator implements \Iterator
 
             // To prevent running this forever (better: until we hit the max date of DateTimeImmutable) we simply
             // stop at 9999-12-31. Looks like the year 10000 problem is not solved in php ....
-            if ($this->isPastUpperLimit()) {
+            // The days a month yields only depend on its place in the
+            // 400-year Gregorian cycle (4800 months): a rule that matched
+            // none of 4800 candidate months in a row never will, whatever
+            // its INTERVAL, so the scan ends there too.
+            if (++$emptyMonths > self::GREGORIAN_CYCLE_MONTHS || $this->isPastUpperLimit()) {
                 $this->currentDate = null;
 
                 return;
@@ -822,6 +834,7 @@ class RRuleIterator implements \Iterator
         // further.
         if ($this->byDay || $this->byMonthDay) {
             $selectedOccurrence = -1;
+            $emptyYears = 0;
             while (true) {
                 $occurrences = $this->getMonthlyOccurrences();
 
@@ -849,8 +862,17 @@ class RRuleIterator implements \Iterator
                     if ($currentMonth > 12) {
                         $currentYear += $this->interval;
                         $currentMonth = 1;
+                        ++$emptyYears;
                     }
                 } while (!in_array($currentMonth, $this->byMonth, true));
+
+                // As in nextMonthly(): no match in a whole 400-year cycle
+                // of candidate years means no match ever.
+                if ($emptyYears > self::GREGORIAN_CYCLE_MONTHS / 12) {
+                    $this->currentDate = null;
+
+                    return;
+                }
 
                 $this->currentDate = $this->currentDate->setDate(
                     (int) $currentYear,
