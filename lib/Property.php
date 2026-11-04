@@ -285,7 +285,7 @@ abstract class Property extends Node
         $parameters = [];
 
         foreach ($this->parameters as $parameter) {
-            if ('VALUE' === $parameter->name) {
+            if ('VALUE' === $parameter->name || 'GROUP' === $parameter->name) {
                 continue;
             }
             $parameters[strtolower($parameter->name)] = $parameter->jsonSerialize();

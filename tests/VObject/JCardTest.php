@@ -191,4 +191,33 @@ class JCardTest extends TestCase
 
         $this->assertEquals($expected, $card->jsonSerialize());
     }
+
+    public function testGroupParameterIsNotTheGroup()
+    {
+        $card = Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],'
+            .'["email",{"GROUP":"item1"},"text","a@example.com"]]]');
+
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+        $this->assertNull($again->EMAIL->group);
+
+        $serialized = $card->EMAIL->jsonSerialize();
+        $this->assertObjectNotHasAttribute('group', $serialized[1]);
+    }
+
+    public function testGroupParameterFromVCardIsNotTheGroup()
+    {
+        $card = Reader::read(
+            "BEGIN:VCARD\r\n"
+            ."VERSION:4.0\r\n"
+            ."FN:a\r\n"
+            ."EMAIL;GROUP=item1:a@example.com\r\n"
+            ."END:VCARD\r\n"
+        );
+
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+        $this->assertNull($again->EMAIL->group);
+
+        $serialized = $card->EMAIL->jsonSerialize();
+        $this->assertObjectNotHasAttribute('group', $serialized[1]);
+    }
 }
