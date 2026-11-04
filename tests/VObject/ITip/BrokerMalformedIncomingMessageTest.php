@@ -88,14 +88,42 @@ class BrokerMalformedIncomingMessageTest extends TestCase
             ."ORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
             ."END:VCALENDAR\r\n"
         );
-        $result = (new Broker())->processMessage(self::message('CANCEL',
+        $message = self::message('CANCEL',
             "BEGIN:VEVENT\r\nUID:meeting-1\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260303T090000Z\r\n"
             ."SEQUENCE:1\r\nORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
-        ), $existing);
+        );
+        $message->sequence = 1;
+        $result = (new Broker())->processMessage($message, $existing);
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        $vevents = $result->select('VEVENT');
+        self::assertCount(2, $vevents);
+        self::assertSame('20260303T090000Z', (string) $vevents[0]->{'RECURRENCE-ID'});
+        self::assertSame('CANCELLED', (string) $vevents[0]->STATUS);
+        self::assertSame('1', (string) $vevents[0]->SEQUENCE);
+        self::assertSame('20260304T090000Z', (string) $vevents[1]->{'RECURRENCE-ID'});
+        self::assertFalse(isset($vevents[1]->STATUS));
+    }
+
+    public function testCancelOfTheOnlyInstanceWithoutMasterKeepsAnEvent(): void
+    {
+        $existing = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            ."BEGIN:VEVENT\r\nUID:meeting-1\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260303T090000Z\r\n"
+            ."ORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
+            ."END:VCALENDAR\r\n"
+        );
+        $message = self::message('CANCEL',
+            "BEGIN:VEVENT\r\nUID:meeting-1\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260303T090000Z\r\n"
+            ."SEQUENCE:1\r\nORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
+        );
+        $message->sequence = 1;
+        $result = (new Broker())->processMessage($message, $existing);
 
         self::assertInstanceOf(VCalendar::class, $result);
         self::assertCount(1, $result->select('VEVENT'));
-        self::assertSame('20260304T090000Z', (string) $result->VEVENT->{'RECURRENCE-ID'});
+        self::assertSame('CANCELLED', (string) $result->VEVENT->STATUS);
+        self::assertSame('1', (string) $result->VEVENT->SEQUENCE);
     }
 
     #[DataProvider('periodRecurrenceIds')]

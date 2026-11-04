@@ -375,15 +375,20 @@ class Broker
             }
 
             $masterObject = null;
+            foreach ($existingObject->VEVENT as $vevent) {
+                if (!isset($vevent->{'RECURRENCE-ID'})) {
+                    $masterObject = $vevent;
+                }
+            }
 
             foreach ($existingObject->VEVENT as $vevent) {
                 $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? self::recurrenceId($vevent)->getTimeStamp() : 'master';
 
-                if ('master' === $recurIdTimestamp) {
-                    $masterObject = $vevent;
-                }
-
-                if ($cancelWholeEvent) {
+                // Without a master there is no EXDATE to record the
+                // cancellation, and removing the override could leave the
+                // calendar without any VEVENT: the override is marked
+                // cancelled instead.
+                if ($cancelWholeEvent || (!$masterObject && isset($instancesToCancel[$recurIdTimestamp]))) {
                     $vevent->STATUS = 'CANCELLED';
                     // A CANCEL without SEQUENCE has the default sequence 0.
                     $vevent->SEQUENCE = $itipMessage->sequence ?? 0;
@@ -392,7 +397,7 @@ class Broker
                 }
             }
 
-            // Without a master, the cancelled instances were removed above and
+            // Without a master, the cancelled instances were marked above and
             // there is no EXDATE to update.
             if (!$cancelWholeEvent && $masterObject) {
                 $exDates = [];
