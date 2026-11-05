@@ -206,7 +206,8 @@ class MimeDir extends Parser
      */
     private function findVCardVersion(VCard $vcard): void
     {
-        $versionRegex = '/^(?:[^.:;]+\.)?VERSION(?:;[^:]*)?:(.*)$/i';
+        // A line without a colon is read as an empty VERSION.
+        $versionRegex = '/^(?:[^.:;]+\.)?VERSION(?:;[^:]*)?(?::(.*))?$/i';
         if (null === $this->lineBuffer || 1 === preg_match($versionRegex, $this->lineBuffer)) {
             // VERSION comes first, as nearly always.
             return;
@@ -216,13 +217,20 @@ class MimeDir extends Parser
             return;
         }
 
+        // A VERSION inside a nested component is not the version of the card.
+        $depth = 'BEGIN:' === strtoupper(substr($this->lineBuffer, 0, 6)) ? 1 : 0;
         while (false !== ($line = fgets($this->input))) {
             $line = rtrim($line, "\r\n");
-            if (0 === strcasecmp($line, 'END:VCARD')) {
-                break;
-            }
-            if (preg_match($versionRegex, $line, $matches)) {
-                $vcard->setDocumentVersion($matches[1]);
+            $keyword = strtoupper(substr($line, 0, 6));
+            if ('BEGIN:' === $keyword) {
+                ++$depth;
+            } elseif (str_starts_with($keyword, 'END:')) {
+                if (0 === $depth) {
+                    break;
+                }
+                --$depth;
+            } elseif (0 === $depth && preg_match($versionRegex, $line, $matches)) {
+                $vcard->setDocumentVersion($matches[1] ?? '');
                 break;
             }
         }
