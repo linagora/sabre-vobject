@@ -253,7 +253,7 @@ class Json extends Parser
                 $prop instanceof Property\ICalendar\Period => is_array($value) && array_is_list($value) && self::all($value, self::isScalar(...)),
                 // GEO is a [latitude, longitude] pair. INF and NAN have no
                 // JSON (nor iCalendar / vCard) representation.
-                $prop instanceof Property\FloatValue => (self::isScalar($value) || ($single && self::isScalarOrList($value)))
+                $prop instanceof Property\FloatValue => (self::isScalar($value) || ($single && [] !== $value && self::isScalarOrList($value)))
                     && self::all((array) $value, fn ($item) => is_finite((float) $item)),
                 // These classes hold a single value.
                 $prop instanceof Property\Binary,
