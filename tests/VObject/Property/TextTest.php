@@ -118,4 +118,13 @@ class TextTest extends TestCase
         self::assertSame(['Doe', 'John', '', '', ''], $vcard->N->getParts());
         self::assertSame($vcard->N->getParts(), Reader::read($vcard->serialize())->N->getParts());
     }
+
+    public function testVCard21ValueListInAComponentIsSerialized(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:2.1\r\nN:Doe;Rene,J.;;;\r\nFN:x\r\nEND:VCARD\r\n");
+        self::assertStringContainsString("N:Doe;Rene,J.;;;\r\n", $card->serialize());
+
+        $card = Reader::readJson('["vcard",[["version",{},"text","2.1"],["fn",{},"text","x"],["n",{},"text",["Doe",["Rene","J."],"","",""]]]]');
+        self::assertStringContainsString("N:Doe;Rene,J.;;;\r\n", $card->serialize());
+    }
 }
