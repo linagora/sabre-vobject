@@ -365,15 +365,23 @@ class VCardConverter
             return $newProperty;
         }
 
-        $mimeType = substr((string) $value, 5, $comma - 5);
-        $data = substr((string) $value, $comma + 1);
-        if (strpos($mimeType, ';')) {
-            $mimeType = substr($mimeType, 0, strpos($mimeType, ';'));
-            $data = base64_decode($data, true);
+        // data:[<mediatype>][;base64],<data> (RFC 2397): the payload is base64
+        // exactly when the metadata ends in ;base64, else percent-encoded. A
+        // uri with other parameters keeps them, which vCard 3 allows.
+        $metadata = substr((string) $value, 5, $comma - 5);
+        $payload = substr((string) $value, $comma + 1);
+        if (str_ends_with(strtolower($metadata), ';base64')) {
+            $data = base64_decode($payload, true);
             if (false === $data) {
                 // Not valid base64: keep the uri rather than an empty value.
                 return $newProperty;
             }
+            $mimeType = substr($metadata, 0, (int) strpos($metadata, ';'));
+        } elseif (str_contains($metadata, ';')) {
+            return $newProperty;
+        } else {
+            $data = rawurldecode($payload);
+            $mimeType = $metadata;
         }
 
         /** @var Binary $newProperty */
