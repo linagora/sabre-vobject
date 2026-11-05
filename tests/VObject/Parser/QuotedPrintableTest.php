@@ -214,4 +214,22 @@ VCF;
         self::assertSame('a=41', (string) $card->NOTE);
         self::assertSame('a=41', (string) Reader::read($card->serialize())->NOTE);
     }
+
+    public function testVersionOfANestedComponentIsNotTheVersionOfTheCard(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nFN:a\r\nBEGIN:X\r\nVERSION:2.1\r\nEND:X\r\nVERSION:3.0\r\nCATEGORIES:a\\,b,c\r\nEND:VCARD\r\n");
+        self::assertSame(VCard::VCARD30, $card->getDocumentType());
+        self::assertSame(['a,b', 'c'], Reader::read($card->serialize())->CATEGORIES->getParts());
+
+        // The nested component comes first.
+        $card = Reader::read("BEGIN:VCARD\r\nBEGIN:X\r\nVERSION:2.1\r\nEND:X\r\nVERSION:3.0\r\nFN:a\r\nEND:VCARD\r\n");
+        self::assertSame(VCard::VCARD30, $card->getDocumentType());
+    }
+
+    public function testVersionLineWithoutColonReadsTheSameAfterSerialize(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nFN:a\r\nVERSION;X\r\nVERSION:2.1\r\nURL:http://example.com/\r\nEND:VCARD\r\n");
+        $serialized = $card->serialize();
+        self::assertSame($serialized, Reader::read($serialized)->serialize());
+    }
 }
