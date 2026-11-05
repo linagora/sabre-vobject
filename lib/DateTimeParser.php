@@ -75,8 +75,10 @@ class DateTimeParser
 
         // Only a transition that happened in the day before can make the
         // local time ambiguous; getTransitions() returns false for
-        // timezones that are a mere UTC offset.
-        $transitions = $tz->getTransitions($timestamp - 86400, $timestamp);
+        // timezones that are a mere UTC offset. Whether it includes a
+        // transition at its end depends on the time zone database, and the
+        // first instant after a transition is ambiguous too.
+        $transitions = $tz->getTransitions($timestamp - 86400, $timestamp + 1);
         if (!is_array($transitions) || count($transitions) < 2) {
             return $date;
         }
