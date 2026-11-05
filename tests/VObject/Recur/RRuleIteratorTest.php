@@ -1783,6 +1783,44 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testDailyByMonthWithoutByDayOrByHour(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYMONTH=1,3;COUNT=4',
+            '2026-03-30 09:00:00',
+            [
+                '2026-03-30 09:00:00',
+                '2026-03-31 09:00:00',
+                '2027-01-01 09:00:00',
+                '2027-01-02 09:00:00',
+            ]
+        );
+    }
+
+    public function testDailyByMonthKeepsTheStartTimeAfterADstGap(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYMONTH=3;COUNT=3',
+            '2026-03-28 02:30:00',
+            [
+                '2026-03-28 02:30:00',
+                '2026-03-29 03:30:00',
+                '2026-03-30 02:30:00',
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testDailyByMonthThatIsNeverReachedEndsQuickly(): void
+    {
+        $it = new RRuleIterator('FREQ=DAILY;BYMONTH=2;INTERVAL=146097', new \DateTimeImmutable('2026-01-01 09:00:00', new \DateTimeZone('UTC')));
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
     public function testNegativeValidByWeekNo(): void
     {
         $this->parse(
