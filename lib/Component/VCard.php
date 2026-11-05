@@ -292,6 +292,10 @@ class VCard extends VObject\Document
             }
         }
 
+        // Validating the children repairs their names: FN is counted after it,
+        // and copied from values that are repaired too.
+        $messages = parent::validate($options);
+
         $fn = $this->select('FN');
         if (1 !== count($fn)) {
             $repaired = false;
@@ -330,10 +334,7 @@ class VCard extends VObject\Document
             ];
         }
 
-        return array_merge(
-            parent::validate($options),
-            $warnings
-        );
+        return array_merge($messages, $warnings);
     }
 
     /**
