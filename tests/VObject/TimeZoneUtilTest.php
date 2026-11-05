@@ -518,4 +518,23 @@ HI;
     {
         return [['X-LIC-LOCATION'], ['X-MICROSOFT-CDO-TZID']];
     }
+
+    public function testObservanceWithSeveralFreqValues(): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\n"
+            ."DTSTART:20200101T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\nRRULE:FREQ=YEARLY,MONTHLY\r\n"
+            ."END:STANDARD\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
+        );
+
+        // As esn-sabre's esn.php does.
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            self::assertSame('+01:00', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+        } finally {
+            restore_error_handler();
+        }
+    }
 }
