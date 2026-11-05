@@ -209,7 +209,10 @@ class Json extends Parser
         if ($defaultPropertyClass !== $prop::class
             && ($prop->getValueType() !== $valueType
                 || (new $defaultPropertyClass($this->root, $prop->name))->getValueType() !== $valueType)) {
-            $prop['VALUE'] = $valueType;
+            // Only declares the type: offsetSet() would rewrite the value of a
+            // date-time, through the time zone that its TZID resolves to.
+            unset($prop['VALUE']);
+            $prop->add('VALUE', $valueType);
         }
 
         return $prop;
