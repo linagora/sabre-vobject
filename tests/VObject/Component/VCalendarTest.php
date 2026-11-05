@@ -983,4 +983,31 @@ ICS);
             );
         }
     }
+
+    #[DataProvider('eventsEndingInARepeatedHour')]
+    public function testExpandKeepsEndInRepeatedHour(string $dtStart, string $dtEnd, string $expectedStart, string $expectedEnd): void
+    {
+        $vcal = VObject\Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;TZID=America/New_York:$dtStart\r\nDTEND;TZID=America/New_York:$dtEnd\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $expanded = $vcal->expand(
+            new \DateTimeImmutable('2026-11-01T06:00:00Z'),
+            new \DateTimeImmutable('2026-11-01T12:00:00Z')
+        );
+
+        self::assertSame($expectedStart, (string) $expanded->VEVENT->DTSTART);
+        self::assertSame($expectedEnd, (string) $expanded->VEVENT->DTEND);
+    }
+
+    public static function eventsEndingInARepeatedHour(): array
+    {
+        return [
+            'one hour' => ['20261030T011500', '20261030T021500', '20261101T051500Z', '20261101T061500Z'],
+            'two hours' => ['20261030T003000', '20261030T023000', '20261101T043000Z', '20261101T063000Z'],
+            'thirty minutes, end read before its start' => ['20261030T014500', '20261030T021500', '20261101T054500Z', '20261101T061500Z'],
+        ];
+    }
 }
