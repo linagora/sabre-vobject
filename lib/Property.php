@@ -246,7 +246,9 @@ abstract class Property extends Node implements \Stringable
     public function setJsonValue(array $value): void
     {
         if (1 === count($value)) {
-            $this->setValue(reset($value));
+            // A lone null is an empty value, as in the text form: a null
+            // value would mean that the property has no value at all.
+            $this->setValue(reset($value) ?? '');
         } else {
             $this->setValue($value);
         }
