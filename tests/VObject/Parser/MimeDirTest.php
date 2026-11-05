@@ -402,4 +402,16 @@ EOF;
         (new MimeDir())->parse("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\n"
             ."DTEND;VALUE=DATE,DATE-TIME:20260101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
     }
+
+    public function testBareCarriageReturnInNonTextValueIsDropped(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nLANG:fr\rNOTE:x\r\nFN:y\r\nEND:VCARD\r\n");
+        self::assertSame('frNOTE:x', $card->LANG->getValue());
+        $out = $card->serialize();
+        self::assertSame(substr_count($out, "\r"), substr_count($out, "\r\n"));
+        self::assertSame('frNOTE:x', Reader::read($out)->LANG->getValue());
+
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\nRRULE:FREQ=DAILY\r;COUNT=2\r\nDURATION:PT1H\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame('FREQ=DAILY;COUNT=2', $vcal->VEVENT->RRULE->getValue());
+    }
 }

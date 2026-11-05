@@ -553,6 +553,10 @@ class MimeDir extends Parser
                 default:
                     throw new ParseException('Unsupported CHARSET: '.$propObj['CHARSET']);
             }
+            if (!$propObj instanceof Property\Text && !$propObj instanceof Property\Binary) {
+                // These classes store and write back their value as is.
+                $property['value'] = str_replace("\r", '', $property['value']);
+            }
             $propObj->setRawMimeDirValue($property['value']);
         }
 
