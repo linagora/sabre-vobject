@@ -580,4 +580,23 @@ VCF;
         self::assertSame('http://a/b', $vcard->URL->getValue());
         self::assertSame('http://a/b', (string) VObject\Reader::readJson(json_encode($vcard->jsonSerialize(), JSON_THROW_ON_ERROR))->URL);
     }
+
+    public function testDateTimeOfAnUnknownPropertyKeepsAnUnresolvedTzid(): void
+    {
+        $vcal = VObject\Reader::readJson('["vcalendar",[],[["vevent",[["x-a",{"tzid":"Foo/Bar"},"date-time","2026-11-03T11:00:00"]],[]]]]');
+        $property = $vcal->VEVENT->{'X-A'};
+
+        self::assertSame('20261103T110000', $property->getValue());
+        self::assertSame('Foo/Bar', (string) $property['TZID']);
+        self::assertSame('DATE-TIME', (string) $property['VALUE']);
+    }
+
+    public function testDateTimeOfAnUnknownPropertyKeepsTheNameOfACustomVtimezone(): void
+    {
+        $vcal = VObject\Reader::readJson('["vcalendar",[],[["vevent",[["x-a",{"tzid":"Customized Time Zone"},"date-time","2026-11-03T11:00:00"]],[]],'
+            .'["vtimezone",[["tzid",{},"text","Customized Time Zone"]],[["standard",[["dtstart",{},"date-time","1970-01-01T00:00:00"],["tzoffsetfrom",{},"utc-offset","+01:00"],["tzoffsetto",{},"utc-offset","+01:00"]],[]]]]]]');
+
+        self::assertSame('Customized Time Zone', (string) $vcal->VEVENT->{'X-A'}['TZID']);
+        self::assertSame('20261103T110000', $vcal->VEVENT->{'X-A'}->getValue());
+    }
 }
