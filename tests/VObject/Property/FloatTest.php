@@ -44,4 +44,21 @@ class FloatTest extends TestCase
         $this->expectException(VObject\ParseException::class);
         VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],["geo",{},"float",["1e999","0"]]]]');
     }
+
+    public function testSerializeKeepsTheValueAndWritesNoExponent(): void
+    {
+        $cal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nGEO:48.85836123456789;-0.00005\r\n"
+            ."X-A;VALUE=FLOAT:1000000000000000\r\nX-B;VALUE=FLOAT:4691686184283978\r\nX-C;VALUE=FLOAT:0\r\nX-D;VALUE=FLOAT:1.5\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $out = $cal->serialize();
+
+        self::assertStringContainsString("GEO:48.85836123456789;-0.00005\r\n", $out);
+        self::assertStringContainsString("X-A;VALUE=FLOAT:1000000000000000\r\n", $out);
+        self::assertStringContainsString("X-B;VALUE=FLOAT:4691686184283978\r\n", $out);
+        self::assertStringContainsString("X-C;VALUE=FLOAT:0\r\n", $out);
+        self::assertStringContainsString("X-D;VALUE=FLOAT:1.5\r\n", $out);
+        self::assertSame([48.85836123456789, -0.00005], VObject\Reader::read($out)->VEVENT->GEO->getParts());
+    }
 }
