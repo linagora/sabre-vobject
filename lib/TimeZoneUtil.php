@@ -86,7 +86,8 @@ class TimeZoneUtil
         if ($vcalendar) {
             // If that didn't work, we will scan VTIMEZONE objects
             foreach ($vcalendar->select('VTIMEZONE') as $vtimezone) {
-                if ((string) $vtimezone->TZID === $tzid) {
+                // select() also returns a property of that name.
+                if ($vtimezone instanceof Component\VTimeZone && $vtimezone->TZID instanceof Property && (string) $vtimezone->TZID === $tzid) {
                     foreach ($this->timezoneGuessers as $timezoneGuesser) {
                         $timezone = $timezoneGuesser->guess($vtimezone, $failIfUncertain);
                         if (!$timezone instanceof \DateTimeZone) {
