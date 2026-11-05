@@ -759,4 +759,15 @@ VCF;
         $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO:data:image/gif,a%20b\r\nEND:VCARD\r\n");
         self::assertSame('a b', $v4->convert(Document::VCARD30)->LOGO->getValue());
     }
+
+    public function testAnniversaryStaysUngroupedWhenCardHasAnotherAbDate(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\n"
+            ."ITEM1.X-ABDATE:20200101\r\nANNIVERSARY:20100601\r\nEND:VCARD\r\n");
+        $back = $v4->convert(Document::VCARD30)->convert(Document::VCARD40);
+
+        self::assertCount(1, $back->select('ANNIVERSARY'));
+        self::assertEmpty($back->ANNIVERSARY->group);
+        self::assertSame('20100601', (string) $back->ANNIVERSARY);
+    }
 }

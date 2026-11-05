@@ -238,8 +238,14 @@ class VCardConverter
                     }
 
                     // If we already have an anniversary property with the same
-                    // value, ignore.
+                    // value, ignore. X-ANNIVERSARY holds the same anniversary
+                    // with its own group, whichever is converted first.
                     foreach ($output->select('ANNIVERSARY') as $anniversary) {
+                        if ($anniversary->getValue() === $newProperty->getValue()) {
+                            return;
+                        }
+                    }
+                    foreach ($input->select('X-ANNIVERSARY') as $anniversary) {
                         if ($anniversary->getValue() === $newProperty->getValue()) {
                             return;
                         }
