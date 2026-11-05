@@ -952,4 +952,35 @@ ICS);
         self::assertSame(['single', 'neg', 'override'], $uids);
         self::assertCount(0, $vcal->expand(...$february)->select('VEVENT'));
     }
+
+    public function testExpandDoesNotReturnAnEndBeforeTheStart(): void
+    {
+        $head = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\n";
+        $stamp = "DTSTAMP:20261103T100000Z\r\n";
+        $vcal = VObject\Reader::read($head
+            ."BEGIN:VEVENT\r\nUID:single\r\n$stamp"
+            ."DTSTART:20260410T090000Z\r\nDTEND:20260105T100000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:negative\r\n$stamp"
+            ."DTSTART:20260410T090000Z\r\nDURATION:-P100D\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:series\r\n$stamp"
+            ."DTSTART:20260410T090000Z\r\nDTEND:20260410T100000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:series\r\n$stamp"
+            ."RECURRENCE-ID:20260411T090000Z\r\nDTSTART:20260411T090000Z\r\nDTEND:20260105T100000Z\r\nEND:VEVENT\r\n"
+            ."END:VCALENDAR\r\n");
+
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-01-11T17:00:00Z'), new \DateTimeImmutable('2026-05-22T17:00:00Z'));
+
+        self::assertCount(4, $expanded->select('VEVENT'));
+        foreach ($expanded->select('VEVENT') as $vevent) {
+            if ('negative' === (string) $vevent->UID) {
+                self::assertSame('PT0S', (string) $vevent->DURATION);
+                continue;
+            }
+            self::assertGreaterThanOrEqual(
+                $vevent->DTSTART->getDateTime(),
+                $vevent->DTEND->getDateTime(),
+                (string) $vevent->UID
+            );
+        }
+    }
 }

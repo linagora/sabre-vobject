@@ -364,7 +364,7 @@ class VCalendar extends VObject\Document
                     }
                     $recurringEvents[$series[$uid]][] = clone $child;
                 } elseif ('VEVENT' === $child->name && $child->isInTimeRange($start, $end)) {
-                    $newChildren[] = $stripTimezones(clone $child);
+                    $newChildren[] = self::withoutInvertedEnd($stripTimezones(clone $child));
                 }
             }
         }
@@ -382,13 +382,33 @@ class VCalendar extends VObject\Document
 
             while ($it->valid() && $it->getDTStart() < $end) {
                 if ($it->getDTEnd() > $start) {
-                    $newChildren[] = $stripTimezones($it->getEventObject());
+                    $newChildren[] = self::withoutInvertedEnd($stripTimezones($it->getEventObject()));
                 }
                 $it->next();
             }
         }
 
         return new self($newChildren);
+    }
+
+    /**
+     * An end before the start is taken as the start when an event is selected
+     * (see VEvent::isInTimeRange and EventIterator::getDtEnd): the expanded
+     * event has that end as well.
+     */
+    private static function withoutInvertedEnd(VEvent $event): VEvent
+    {
+        if ($event->DTEND instanceof Property\ICalendar\DateTime && $event->DTSTART instanceof Property\ICalendar\DateTime
+            && $event->DTEND->getDateTime() < $event->DTSTART->getDateTime()) {
+            $end = clone $event->DTSTART;
+            $end->name = 'DTEND';
+            unset($event->DTEND);
+            $event->add($end);
+        } elseif ($event->DURATION instanceof Property\ICalendar\Duration && 1 === $event->DURATION->getDateInterval()->invert) {
+            $event->DURATION = 'PT0S';
+        }
+
+        return $event;
     }
 
     /**
