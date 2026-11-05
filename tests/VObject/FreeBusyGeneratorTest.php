@@ -1083,4 +1083,36 @@ ICS;
 
         self::assertFreeBusyReport("FREEBUSY:20110101T120000Z/20110101T130000Z\nFREEBUSY;FBTYPE=BUSY-TENTATIVE:20110102T120000Z/20110102T130000Z", $blob);
     }
+
+    #[DataProvider('allDayMastersWithDateTimeRDate')]
+    public function testAllDayMasterWithDateTimeRDateMatchesExpand(string $rdate): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;VALUE=DATE:20260115\r\n$rdate\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $zone = new \DateTimeZone('America/St_Johns');
+        $start = new \DateTimeImmutable('2026-01-01T00:00:00Z');
+        $end = new \DateTimeImmutable('2026-03-03T00:00:00Z');
+
+        $periods = [];
+        $result = (new FreeBusyGenerator($start, $end, $vcal, $zone))->getResult();
+        foreach ($result->VFREEBUSY->select('FREEBUSY') as $freebusy) {
+            $periods[] = (string) $freebusy;
+        }
+
+        self::assertSame([
+            '20260109T033000Z/20260110T033000Z',
+            '20260115T033000Z/20260116T033000Z',
+        ], $periods);
+    }
+
+    public static function allDayMastersWithDateTimeRDate(): array
+    {
+        return [
+            'date-time' => ['RDATE:20260109T080000Z'],
+            'period' => ['RDATE;VALUE=PERIOD:20260109T080000Z/PT1H'],
+            'date' => ['RDATE;VALUE=DATE:20260109'],
+        ];
+    }
 }

@@ -192,6 +192,14 @@ class EventIterator implements \Iterator
             foreach ($this->masterEvent->RDATE as $rdate) {
                 $rdateValues = array_merge($rdateValues, $this->rdateStarts($rdate));
             }
+            if ($this->allDay) {
+                // An instance of an all-day event is all-day as well, as
+                // getEventObject() writes it, whatever the RDATE holds.
+                $rdateValues = array_map(
+                    fn (\DateTimeInterface $start) => new \DateTimeImmutable($start->format('Y-m-d'), $this->startDate->getTimezone()),
+                    $rdateValues
+                );
+            }
             $this->recurIterator = new RDateIterator(
                 $rdateValues,
                 $this->startDate
