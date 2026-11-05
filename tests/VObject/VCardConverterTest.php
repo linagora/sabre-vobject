@@ -813,4 +813,31 @@ VCF;
         self::assertSame('20200202', (string) $v4->{'X-ANNIVERSARY'});
         self::assertCount(1, $v4->select('KIND'));
     }
+
+    #[DataProvider('nativeAnniversaries')]
+    public function testNativeAnniversaryAfterExtensions(array $lines, ?string $extensionName): void
+    {
+        $v3 = Reader::read(implode("\r\n", ['BEGIN:VCARD', 'VERSION:3.0', 'UID:a', 'FN:a', ...$lines, 'END:VCARD', '']));
+        $v4 = Reader::read($v3->convert(Document::VCARD40)->serialize());
+
+        self::assertCount(1, $v4->select('ANNIVERSARY'));
+        self::assertSame('20200202', (string) $v4->ANNIVERSARY);
+        if ($extensionName) {
+            self::assertSame('20100601', (string) current($v4->select($extensionName)));
+        }
+        foreach ($v4->validate() as $message) {
+            self::assertLessThan(3, $message['level'], $message['message']);
+        }
+    }
+
+    public static function nativeAnniversaries(): array
+    {
+        return [
+            'X-ANNIVERSARY first' => [['X-ANNIVERSARY:20100601', 'ANNIVERSARY:20200202'], 'X-ANNIVERSARY'],
+            'native first' => [['ANNIVERSARY:20200202', 'X-ANNIVERSARY:20100601'], 'X-ANNIVERSARY'],
+            'same value' => [['X-ANNIVERSARY:20200202', 'ANNIVERSARY:20200202'], null],
+            'labelled X-ABDATE first' => [['ITEM1.X-ABDATE:20100601', 'ITEM1.X-ABLABEL:_$!<Anniversary>!$_', 'ANNIVERSARY:20200202'], 'ITEM1.X-ABDATE'],
+            'native twice' => [['ANNIVERSARY:20200202', 'ANNIVERSARY:20100601'], 'X-ANNIVERSARY'],
+        ];
+    }
 }
