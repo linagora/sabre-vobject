@@ -232,6 +232,9 @@ class Text extends Property
             $val = \array_pad($val, $this->minimumPropertyValues[$this->name], '');
         }
 
+        // A component of N or ADR may hold a list of values.
+        $val = \array_map(static fn ($part) => \is_array($part) ? \implode(',', $part) : $part, $val);
+
         // Imploding multiple parts into a single value, and splitting the
         // values with ;.
         if (\count($val) > 1) {
