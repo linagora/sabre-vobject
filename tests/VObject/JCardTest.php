@@ -278,4 +278,33 @@ class JCardTest extends TestCase
         self::assertSame([], $card->getComponents());
         self::assertSame([], $card->validate(Node::PROFILE_CARDDAV));
     }
+
+    public function testEmptyGroupCanBeReadBack(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:a\r\n.NOTE:x\r\nEND:VCARD\r\n");
+
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+
+        self::assertSame('x', (string) $again->NOTE);
+        self::assertNull($again->NOTE->group);
+    }
+
+    public function testEmptyGroupIsReportedAndRepaired(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:a\r\n.NOTE:x\r\nEND:VCARD\r\n");
+        self::assertContains('The property NOTE has an empty group', array_column($card->validate(), 'message'));
+
+        $card->validate(Node::REPAIR);
+
+        self::assertNull($card->NOTE->group);
+        self::assertStringContainsString("\r\nNOTE:x\r\n", $card->serialize());
+    }
+
+    public function testGroupZeroIsKept(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:a\r\n0.NOTE:x\r\nEND:VCARD\r\n");
+        $again = Reader::readJson(json_encode($card->jsonSerialize()));
+
+        self::assertSame('0', $again->NOTE->group);
+    }
 }

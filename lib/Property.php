@@ -272,8 +272,9 @@ abstract class Property extends Node implements \Stringable
             $parameters[strtolower((string) $parameter->name)] = $parameter->jsonSerialize();
         }
         // In jCard, we need to encode the property-group as a separate 'group'
-        // parameter.
-        if (null !== $this->group) {
+        // parameter. An empty group is not a group (RFC 6350 section 3.3):
+        // Parser\Json refuses it, and a stored one must stay readable.
+        if (null !== $this->group && '' !== $this->group) {
             $parameters['group'] = $this->group;
         }
 
@@ -558,6 +559,17 @@ abstract class Property extends Node implements \Stringable
 
                     return array_merge($warnings, $replacement->validate($options));
                 }
+            }
+        }
+
+        if ('' === $this->group) {
+            $warnings[] = [
+                'level' => $options & self::REPAIR ? 1 : 3,
+                'message' => 'The property '.$this->name.' has an empty group',
+                'node' => $this,
+            ];
+            if ($options & self::REPAIR) {
+                $this->group = null;
             }
         }
 
