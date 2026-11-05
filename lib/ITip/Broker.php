@@ -478,13 +478,22 @@ class Broker
                 // A reply without an attendee does not tell who replied.
                 continue;
             }
+            // These values are copied into the stored object, which is not
+            // validated again: a PARTSTAT must be a token, and a request
+            // status must be a statcode (RFC 5545 section 3.8.8.3).
+            $partstat = isset($attendee['PARTSTAT']) ? (string) $attendee['PARTSTAT']->getValue() : 'NEEDS-ACTION';
+            if (!preg_match('/^[A-Za-z0-9-]+\z/', $partstat)) {
+                continue;
+            }
             $instances[$recurIdTimestamp] = [
-                'partstat' => isset($attendee['PARTSTAT']) ? (string) $attendee['PARTSTAT']->getValue() : 'NEEDS-ACTION',
+                'partstat' => $partstat,
                 'recurIdDateTime' => $recurIdDateTime,
             ];
             if (isset($vevent->{'REQUEST-STATUS'})) {
-                $requestStatus = $vevent->{'REQUEST-STATUS'}->getValue();
-                [$requestStatus] = explode(';', $requestStatus);
+                [$statusCode] = explode(';', (string) $vevent->{'REQUEST-STATUS'}->getValue());
+                if (preg_match('/^[0-9]+(\.[0-9]+){1,2}\z/', $statusCode)) {
+                    $requestStatus = $statusCode;
+                }
             }
         }
 

@@ -2,6 +2,11 @@
 
 namespace Sabre\VObject\ITip;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\Node;
+use Sabre\VObject\Reader;
+
 class BrokerProcessReplyTest extends BrokerTester
 {
     public function testReplyNoOriginal(): void
@@ -766,5 +771,66 @@ END:VCALENDAR
 ICS;
 
         $this->process($itip, $old, $expected);
+    }
+
+    #[DataProvider('invalidReplyValues')]
+    public function testReplyDoesNotStoreInvalidValues(string $replyLines, string $expectedStatus): void
+    {
+        $stored = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:u1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260106T100000Z\r\nORGANIZER:mailto:o@example.com\r\n"
+            ."ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $message = new Message();
+        $message->uid = 'u1';
+        $message->component = 'VEVENT';
+        $message->method = 'REPLY';
+        $message->sequence = 1;
+        $message->sender = 'mailto:a@example.com';
+        $message->recipient = 'mailto:o@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:u1\r\n".$replyLines."END:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $result = (new Broker())->processMessage($message, $stored);
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        self::assertSame([], array_filter($result->validate(Node::PROFILE_CALDAV), fn ($m) => 3 === $m['level']));
+        self::assertIsString(json_encode($result->jsonSerialize(), JSON_THROW_ON_ERROR));
+        self::assertSame($expectedStatus, (string) $result->VEVENT->ATTENDEE['PARTSTAT']);
+    }
+
+    public static function invalidReplyValues(): array
+    {
+        return [
+            'quoted-printable REQUEST-STATUS' => ["ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nREQUEST-STATUS;ENCODING=QUOTED-PRINTABLE:2=FF0;Success\r\n", 'ACCEPTED'],
+            'raw REQUEST-STATUS' => ["ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nREQUEST-STATUS:2\xFF0;Success\r\n", 'ACCEPTED'],
+            'raw PARTSTAT' => ["ATTENDEE;PARTSTAT=ACC\xFFEPTED:mailto:a@example.com\r\n", 'NEEDS-ACTION'],
+            'PARTSTAT that is not a token' => ["ATTENDEE;PARTSTAT=\"ACCEPTED\$x\":mailto:a@example.com\r\n", 'NEEDS-ACTION'],
+        ];
+    }
+
+    public function testReplyKeepsDefaultScheduleStatusForInvalidRequestStatus(): void
+    {
+        $stored = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTART:20260106T100000Z\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $message = new Message();
+        $message->uid = 'u1';
+        $message->component = 'VEVENT';
+        $message->method = 'REPLY';
+        $message->sender = 'mailto:a@example.com';
+        $message->recipient = 'mailto:o@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:u1\r\n"
+            ."ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nREQUEST-STATUS:nope;x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $result = (new Broker())->processMessage($message, $stored);
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        self::assertSame('2.0', (string) $result->VEVENT->ATTENDEE['SCHEDULE-STATUS']);
     }
 }
