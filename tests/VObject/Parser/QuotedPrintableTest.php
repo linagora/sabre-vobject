@@ -2,8 +2,10 @@
 
 namespace Sabre\VObject\Parser;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component;
+use Sabre\VObject\ParseException;
 use Sabre\VObject\Property;
 use Sabre\VObject\Reader;
 
@@ -110,6 +112,47 @@ VCF;
         self::assertSame($vcard->serialize(), $reread->serialize());
         self::assertSame("a;b\nc", $reread->NOTE->getValue());
         self::assertSame('a, b;c', $reread->TEL->getValue());
+    }
+
+    #[DataProvider('lineBreaksInNonTextValues')]
+    public function testLineBreakInQuotedPrintableNonTextValueIsRefused(string $document): void
+    {
+        $this->expectException(ParseException::class);
+        Reader::read($document);
+    }
+
+    public static function lineBreaksInNonTextValues(): array
+    {
+        $event = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\n%s\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $vcard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\n%s\r\nEND:VCARD\r\n";
+
+        return [
+            'injected component' => [sprintf($event, 'DURATION;ENCODING=QUOTED-PRINTABLE:PT1H=0AEND:VEVENT=0ABEGIN:VEVENT=0AUID:b')],
+            'trailing line feed' => [sprintf($event, 'DURATION;ENCODING=QUOTED-PRINTABLE:PT1H=0A')],
+            'carriage return' => [sprintf($event, 'DURATION;ENCODING=QUOTED-PRINTABLE:PT1H=0D')],
+            'date-time' => [sprintf($event, 'DTSTART;ENCODING=QUOTED-PRINTABLE:20260101=0AATTENDEE:mailto:x@example.com')],
+            'period' => [sprintf($event, 'FREEBUSY;ENCODING=QUOTED-PRINTABLE:20260101T000000Z/PT1H=0ANOTE:x')],
+            'recur' => [sprintf($event, 'RRULE;ENCODING=QUOTED-PRINTABLE:FREQ=3DDAILY=0ANOTE:x')],
+            'language tag' => [sprintf($vcard, 'LANG;ENCODING=QUOTED-PRINTABLE:fr=0ANOTE:injected')],
+        ];
+    }
+
+    public function testPlainFoldInQuotedPrintableNonTextValueIsNotALineBreak(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nLANG;ENCODING=QUOTED-PRINTABLE:f\r\n r\r\nEND:VCARD\r\n");
+        self::assertSame('fr', $vcard->LANG->getValue());
+
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nLANG;ENCODING=QUOTED-PRINTABLE:f=\r\n r\r\nEND:VCARD\r\n");
+        self::assertSame('fr', $vcard->LANG->getValue());
+    }
+
+    public function testSerializeNeverEmitsALineBreakInAValue(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\nDURATION:PT1H\rEND:VEVENT\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $out = $vcal->serialize();
+        self::assertSame(substr_count($out, "\n"), substr_count($out, "\r\n"));
+        self::assertSame(substr_count($out, "\r"), substr_count($out, "\r\n"));
+        self::assertCount(1, Reader::read($out)->select('VEVENT'));
     }
 
     private function getPropertyValue(Property $property): string
