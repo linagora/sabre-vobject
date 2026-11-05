@@ -374,4 +374,12 @@ VCF;
         self::assertNotContains(3, array_column($messages, 'level'));
         self::assertCount(1, $card->select('VERSION'));
     }
+
+    public function testRepairFnFromNWithOneValueListComponent(): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nN:a,b\r\nEND:VCARD\r\n");
+        $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+
+        self::assertSame('a,b', (string) $card->FN);
+    }
 }

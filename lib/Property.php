@@ -106,7 +106,7 @@ abstract class Property extends Node implements \Stringable
         if (is_array($this->value)) {
             if (0 === count($this->value)) {
                 return null;
-            } elseif (1 === count($this->value)) {
+            } elseif (1 === count($this->value) && !is_array($this->value[0])) {
                 return $this->value[0];
             }
 
