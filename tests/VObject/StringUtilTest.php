@@ -48,4 +48,12 @@ class StringUtilTest extends TestCase
 
         self::assertEquals('', $string);
     }
+
+    public function testIsUTF8RefusesEveryControlCharacter(): void
+    {
+        self::assertFalse(StringUtil::isUTF8("a\x1Cb"));
+        self::assertFalse(StringUtil::isUTF8("a\x10b"));
+        self::assertFalse(StringUtil::isUTF8("a\x7Fb"));
+        self::assertTrue(StringUtil::isUTF8("a\tb\nc\rd"));
+    }
 }
