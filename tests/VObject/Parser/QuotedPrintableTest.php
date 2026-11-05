@@ -51,23 +51,23 @@ class QuotedPrintableTest extends TestCase
 
     public function testReadQuotedPrintableNewlineHard(): void
     {
-        $data = "BEGIN:VCARD\r\nLABEL;ENCODING=QUOTED-PRINTABLE:Aachen=0D=0A=\r\n Germany\r\nEND:VCARD";
+        $data = "BEGIN:VCARD\r\nVERSION:2.1\r\nLABEL;ENCODING=QUOTED-PRINTABLE:Aachen=0D=0A=\r\n Germany\r\nEND:VCARD";
         $result = Reader::read($data);
 
         self::assertInstanceOf(Component::class, $result);
         self::assertEquals('VCARD', $result->name);
-        self::assertCount(1, $result->children());
+        self::assertCount(2, $result->children());
         self::assertEquals("Aachen\r\nGermany", $this->getPropertyValue($result->LABEL));
     }
 
     public function testReadQuotedPrintableCompatibilityMS(): void
     {
-        $data = "BEGIN:VCARD\r\nLABEL;ENCODING=QUOTED-PRINTABLE:Aachen=0D=0A=\r\nDeutschland:okay\r\nEND:VCARD";
+        $data = "BEGIN:VCARD\r\nVERSION:2.1\r\nLABEL;ENCODING=QUOTED-PRINTABLE:Aachen=0D=0A=\r\nDeutschland:okay\r\nEND:VCARD";
         $result = Reader::read($data, Reader::OPTION_FORGIVING);
 
         self::assertInstanceOf(Component::class, $result);
         self::assertEquals('VCARD', $result->name);
-        self::assertCount(1, $result->children());
+        self::assertCount(2, $result->children());
         self::assertEquals("Aachen\r\nDeutschland:okay", $this->getPropertyValue($result->LABEL));
     }
 
@@ -244,5 +244,15 @@ VCF;
         // A soft line break and an encoded line feed keep their meaning.
         $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=\r\n b=0Ac\r\nEND:VCARD\r\n");
         self::assertSame("ab\nc", (string) $vcard->NOTE);
+    }
+
+    public function testQuotedPrintableValueOfAVCardWithoutVersionSurvivesSerialize(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nFN:a\r\nURL;ENCODING=QUOTED-PRINTABLE:http://example.com/a;b\r\nEND:VCARD\r\n");
+        self::assertSame('http://example.com/a;b', (string) Reader::read($card->serialize())->URL);
+
+        $card = Reader::read("BEGIN:VCARD\r\nFN:a\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=3D41\r\nEND:VCARD\r\n");
+        self::assertSame('a=41', (string) $card->NOTE);
+        self::assertSame('a=41', (string) Reader::read($card->serialize())->NOTE);
     }
 }
