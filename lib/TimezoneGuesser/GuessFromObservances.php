@@ -240,13 +240,13 @@ class GuessFromObservances implements TimezoneGuesser
 
         $rrule = array_change_key_case($rrule, CASE_UPPER);
         $supported = ['FREQ', 'INTERVAL', 'BYMONTH', 'BYDAY', 'BYMONTHDAY', 'UNTIL', 'COUNT', 'WKST'];
-        if ('YEARLY' !== strtoupper((string) ($rrule['FREQ'] ?? '')) || [] !== array_diff(array_keys($rrule), $supported)) {
-            return null;
-        }
         foreach ($rrule as $part => $value) {
             if (is_array($value) && 'BYMONTHDAY' !== $part) {
                 return null;
             }
+        }
+        if ('YEARLY' !== strtoupper((string) ($rrule['FREQ'] ?? '')) || [] !== array_diff(array_keys($rrule), $supported)) {
+            return null;
         }
         $interval = (int) ($rrule['INTERVAL'] ?? 1);
         $byMonth = isset($rrule['BYMONTH']) ? (int) $rrule['BYMONTH'] : $month;
