@@ -480,4 +480,30 @@ class PropertyTest extends TestCase
             self::assertSame('0', $card->EMAIL->jsonSerialize()[1]->group);
         }
     }
+
+    public function testRepairedNameWithValueOfNewClassInvalid(): void
+    {
+        $calendar = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260101T000000Z\r\nX..RRULE:foo\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $messages = $calendar->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+
+        self::assertContains(3, array_column($messages, 'level'));
+        self::assertFalse(isset($calendar->VEVENT->RRULE));
+    }
+
+    public function testRepairedNameIntoARuleWithSeveralParts(): void
+    {
+        $calendar = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260101T000000Z\r\nX..RRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $messages = $calendar->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+
+        self::assertNotContains(3, array_column($messages, 'level'));
+        self::assertSame(['FREQ' => 'DAILY', 'COUNT' => '2'], $calendar->VEVENT->RRULE->getParts());
+    }
 }

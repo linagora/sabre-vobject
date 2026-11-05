@@ -551,7 +551,22 @@ abstract class Property extends Node implements \Stringable
                     $replacement = $this->root->createProperty($newName, null, null, $valueType, $this->lineIndex ?? null, $this->lineString ?? null);
                     $replacement->group = $this->group;
                     $replacement->parameters = $this->parameters;
-                    $replacement->setRawMimeDirValue($this->getRawMimeDirValue());
+                    // A text value is written escaped, which a class that is
+                    // not text would keep: it gets the value itself.
+                    $rawValue = $this instanceof Property\Text && !$replacement instanceof Property\Text
+                        ? (string) $this->getValue()
+                        : $this->getRawMimeDirValue();
+                    try {
+                        $replacement->setRawMimeDirValue($rawValue);
+                    } catch (InvalidDataException $e) {
+                        $warnings[] = [
+                            'level' => 3,
+                            'message' => 'The property '.$this->name.' cannot be repaired into '.$newName.': '.$e->getMessage(),
+                            'node' => $this,
+                        ];
+
+                        return $warnings;
+                    }
 
                     $parent = $this->parent;
                     $parent->remove($this);
