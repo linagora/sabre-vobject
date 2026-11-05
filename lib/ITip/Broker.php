@@ -751,19 +751,10 @@ class Broker
 
                         // If there were exceptions, we need to add it to an
                         // existing EXDATE property, if it exists.
-                        if ($exceptions) {
-                            if (isset($currentEvent->EXDATE)) {
-                                $currentEvent->EXDATE->setParts(array_merge(
-                                    $currentEvent->EXDATE->getParts(),
-                                    $exceptions
-                                ));
-                            } else {
-                                $currentEvent->EXDATE = $exceptions;
-                                if ($currentEvent->DTSTART['TZID']) {
-                                    $currentEvent->EXDATE['TZID'] = clone $currentEvent->DTSTART['TZID'];
-                                }
-                            }
-                        }
+                        self::addExDates($currentEvent, array_map(
+                            static fn (string $id) => $eventInfo['instances'][$id]->{'RECURRENCE-ID'},
+                            array_map(strval(...), $exceptions)
+                        ));
 
                         // Cleaning up any scheduling information that
                         // shouldn't be sent along.
@@ -978,6 +969,46 @@ class Broker
         }
 
         return $messages;
+    }
+
+    /**
+     * Excludes the instances of these RECURRENCE-ID properties from an event.
+     *
+     * An EXDATE declares the type of its values, and holds them as instants in
+     * the time zone of DTSTART: a RECURRENCE-ID may be written in another one.
+     *
+     * @param Property\ICalendar\DateTime[] $recurrenceIds
+     */
+    private static function addExDates(VEvent $event, array $recurrenceIds): void
+    {
+        $dates = [];
+        $times = [];
+        $timeZone = $event->DTSTART->getDateTime()->getTimezone();
+        foreach ($recurrenceIds as $recurrenceId) {
+            if ($recurrenceId->hasTime()) {
+                $times[] = $recurrenceId->getDateTime()->setTimezone($timeZone);
+            } else {
+                $dates[] = $recurrenceId->getValue();
+            }
+        }
+
+        foreach ([[$dates, ['VALUE' => 'DATE']], [$times, []]] as [$values, $parameters]) {
+            if (!$values) {
+                continue;
+            }
+            $existing = $event->EXDATE;
+            $exDate = $event->add('EXDATE', $values, $parameters);
+            if (isset($exDate['TZID'])) {
+                // The name of the VTIMEZONE, which PHP may know by another one.
+                $exDate['TZID'] = (string) $event->DTSTART['TZID'];
+            }
+            // Added to an existing property of the same form.
+            if ($existing instanceof Property\ICalendar\DateTime && $existing->hasTime() === $exDate->hasTime()
+                && (string) $existing['TZID'] === (string) $exDate['TZID']) {
+                $existing->setParts(array_merge($existing->getParts(), $exDate->getParts()));
+                $event->remove($exDate);
+            }
+        }
     }
 
     /**
