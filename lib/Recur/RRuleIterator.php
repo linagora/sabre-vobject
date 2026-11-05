@@ -482,7 +482,7 @@ class RRuleIterator implements \Iterator
      */
     protected function nextDaily(): void
     {
-        if (!$this->byHour && !$this->byDay) {
+        if (!$this->byHour && !$this->byDay && !$this->byMonth) {
             $this->advanceTheDate('+'.$this->interval.' days');
 
             return;
@@ -523,7 +523,7 @@ class RRuleIterator implements \Iterator
 
                 $this->currentDate = $this->currentDate->modify('+1 hours');
             } else {
-                $this->currentDate = $this->currentDate->modify('+'.$this->interval.' days');
+                $this->advanceTheDate('+'.$this->interval.' days');
                 ++$emptyDays;
             }
 
