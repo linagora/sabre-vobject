@@ -395,9 +395,6 @@ class MimeDir extends Parser
             ) (?=[;:,])
             /xi";
 
-        // echo $regex, "\n"; exit();
-        preg_match_all($regex, $line, $matches, PREG_SET_ORDER);
-
         $property = [
             'name' => null,
             'parameters' => [],
@@ -419,7 +416,7 @@ class MimeDir extends Parser
          * sub-pattern matched, the subsequent named patterns will not show up
          * in the result.
          */
-        foreach ($matches as $match) {
+        foreach ($this->readTokens($regex, $line) as $match) {
             if (isset($match['paramValue'])) {
                 if ($match['paramValue'] && '"' === $match['paramValue'][0]) {
                     $value = \substr($match['paramValue'], 1, -1);
@@ -604,6 +601,25 @@ class MimeDir extends Parser
         }
 
         return $propObj;
+    }
+
+    /**
+     * Yields the tokens of a line one at a time: a list of all of them costs
+     * hundreds of bytes per token, and a parameter value can be a single comma.
+     *
+     * No alternative of the regex matches an empty string, so the offset always
+     * moves. An offset keeps the whole line as the subject, for ^ and (?<=:).
+     *
+     * @return \Generator<array<int|string, string>>
+     */
+    private function readTokens(string $regex, string $line): \Generator
+    {
+        $offset = 0;
+        while (1 === preg_match($regex, $line, $match, PREG_OFFSET_CAPTURE, $offset)) {
+            $offset = $match[0][1] + strlen($match[0][0]);
+
+            yield array_map(static fn (array $group): string => $group[0], $match);
+        }
     }
 
     /**

@@ -414,4 +414,28 @@ EOF;
         $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\nRRULE:FREQ=DAILY\r;COUNT=2\r\nDURATION:PT1H\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
         self::assertSame('FREQ=DAILY;COUNT=2', $vcal->VEVENT->RRULE->getValue());
     }
+
+    public function testManyEmptyParameterValuesDoNotExhaustMemory(): void
+    {
+        $doc = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//EN\r\nBEGIN:VEVENT\r\nUID:u\r\n"
+            .'X-VALUES;X-P='.str_repeat(',', 938300)."b:v\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+        $vobj = Reader::read($doc);
+
+        self::assertLessThan(64 * 1024 * 1024, memory_get_peak_usage() - $before);
+        self::assertCount(938301, $vobj->VEVENT->{'X-VALUES'}['X-P']->getParts());
+        self::assertSame('v', (string) $vobj->VEVENT->{'X-VALUES'});
+    }
+
+    public function testTokensAreReadInOrderAroundAColonInAValue(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nNOTE;X-A=\"b:c\",d;X-E=f:g:h;i=j\r\nEND:VCARD\r\n");
+
+        self::assertSame(['b:c', 'd'], $card->NOTE['X-A']->getParts());
+        self::assertSame('f', (string) $card->NOTE['X-E']);
+        self::assertSame('g:h;i=j', (string) $card->NOTE);
+    }
 }
