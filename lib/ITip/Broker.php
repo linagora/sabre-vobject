@@ -251,8 +251,11 @@ class Broker
                 // This is an attendee deleting the event.
                 foreach ($eventInfo['attendees'] as $key => $attendee) {
                     if (in_array($attendee['href'], $userHref, true)) {
-                        $eventInfo['attendees'][$key]['instances'] = ['master' => ['id' => 'master', 'partstat' => 'DECLINED'],
-                        ];
+                        // Declining the instances the attendee has: there may
+                        // be no master, or the attendee may not be on it.
+                        foreach ($attendee['instances'] as $id => $instance) {
+                            $eventInfo['attendees'][$key]['instances'][$id]['partstat'] = 'DECLINED';
+                        }
                     }
                 }
             }
