@@ -45,8 +45,44 @@ class FloatValue extends Property
     {
         return implode(
             $this->delimiter,
-            $this->getParts()
+            array_map(self::formatFloat(...), $this->getParts())
         );
+    }
+
+    /**
+     * Writes a float as RFC 5545 section 3.3.7 defines it, without an exponent,
+     * with the fewest digits that read back as the same float, whatever the
+     * precision setting of PHP.
+     */
+    private static function formatFloat(mixed $value): string
+    {
+        $float = (float) $value;
+        if (!is_finite($float)) {
+            return (string) $float;
+        }
+
+        $digits = '';
+        $exponent = 0;
+        for ($precision = 0; $precision <= 17; ++$precision) {
+            $scientific = str_replace(',', '.', sprintf('%.'.$precision.'e', abs($float)));
+            if ((float) $scientific === abs($float)) {
+                [$mantissa, $exponent] = explode('e', $scientific);
+                $digits = str_replace('.', '', $mantissa);
+                $exponent = (int) $exponent;
+                break;
+            }
+        }
+
+        $integerDigits = $exponent + 1;
+        if ($integerDigits <= 0) {
+            $plain = '0.'.str_repeat('0', -$integerDigits).$digits;
+        } elseif ($integerDigits >= strlen($digits)) {
+            $plain = $digits.str_repeat('0', $integerDigits - strlen($digits));
+        } else {
+            $plain = substr($digits, 0, $integerDigits).'.'.substr($digits, $integerDigits);
+        }
+
+        return ($float < 0 ? '-' : '').$plain;
     }
 
     /**
