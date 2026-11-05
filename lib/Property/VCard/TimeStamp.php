@@ -44,22 +44,7 @@ class TimeStamp extends Text
      */
     public function getJsonValue(): array
     {
-        $parts = DateTimeParser::parseVCardDateTime($this->getValue());
-
-        $dateStr =
-            $parts['year'].'-'.
-            $parts['month'].'-'.
-            $parts['date'].'T'.
-            $parts['hour'].':'.
-            $parts['minute'].':'.
-            $parts['second'];
-
-        // Timezone
-        if (!is_null($parts['timezone'])) {
-            $dateStr .= $parts['timezone'];
-        }
-
-        return [$dateStr];
+        return [DateAndOrTime::formatJsonValue(DateTimeParser::parseVCardDateTime($this->getValue()))];
     }
 
     /**
@@ -83,6 +68,15 @@ class TimeStamp extends Text
     public function validate(int $options = 0): array
     {
         $messages = parent::validate($options);
+        if ('' === (string) $this->getValue()) {
+            $messages[] = [
+                'level' => 3,
+                'message' => 'A '.$this->getValueType().' value must not be empty',
+                'node' => $this,
+            ];
+
+            return $messages;
+        }
         try {
             $this->getJsonValue();
         } catch (InvalidDataException) {
