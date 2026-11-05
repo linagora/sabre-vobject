@@ -135,8 +135,18 @@ class DateAndOrTime extends Property
      */
     public function getJsonValue(): array
     {
-        $parts = DateTimeParser::parseVCardDateTime($this->getValue());
+        return [self::formatJsonValue(DateTimeParser::parseVCardDateTime($this->getValue()))];
+    }
 
+    /**
+     * Writes the parts returned by DateTimeParser::parseVCardDateTime() in
+     * the extended format of jCard, with separators only next to a part that
+     * exists.
+     *
+     * @param array<string, string|null> $parts
+     */
+    public static function formatJsonValue(array $parts): string
+    {
         $dateStr = '';
 
         // Year
@@ -176,7 +186,7 @@ class DateAndOrTime extends Property
 
         // Early exit if we don't have a time string.
         if (is_null($parts['hour']) && is_null($parts['minute']) && is_null($parts['second'])) {
-            return [$dateStr];
+            return $dateStr;
         }
 
         $dateStr .= 'T';
@@ -216,7 +226,7 @@ class DateAndOrTime extends Property
             $dateStr .= $parts['timezone'];
         }
 
-        return [$dateStr];
+        return $dateStr;
     }
 
     /**
