@@ -249,4 +249,20 @@ VCF;
             'node' => $prop,
         ]], $prop->validate());
     }
+
+    public function testJsonValueOfAnExtendedTimeIsStable(): void
+    {
+        $values = ['1985-04-12T10:22', '--10-22T14:00', 'T10:22', '1996-10-22T14:00:00-0800', 'T10:22:00-0800'];
+        foreach ($values as $value) {
+            $vcard = new VObject\Component\VCard();
+            self::assertSame([$value], $vcard->createProperty('BDAY', $value)->getJsonValue());
+        }
+    }
+
+    public function testJsonValueWithAHourAndASecondCanBeReadAgain(): void
+    {
+        $vcard = new VObject\Component\VCard();
+        $json = $vcard->createProperty('BDAY', '19850412T10-22')->getJsonValue();
+        self::assertSame($json, $vcard->createProperty('BDAY', $json[0])->getJsonValue());
+    }
 }

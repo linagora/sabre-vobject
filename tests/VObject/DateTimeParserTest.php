@@ -135,6 +135,37 @@ class DateTimeParserTest extends TestCase
         }
     }
 
+    #[DataProvider('vCardExtendedTimes')]
+    public function testVCardExtendedTime(string $value, ?string $hour, ?string $minute, ?string $second, ?string $timezone): void
+    {
+        $parts = DateTimeParser::parseVCardDateTime($value);
+        self::assertSame($hour, $parts['hour']);
+        self::assertSame($minute, $parts['minute']);
+        self::assertSame($second, $parts['second']);
+        self::assertSame($timezone, $parts['timezone']);
+    }
+
+    public static function vCardExtendedTimes(): array
+    {
+        return [
+            'HH:MM after a date' => ['1985-04-12T10:22', '10', '22', null, null],
+            'HH:MM alone' => ['T10:22', '10', '22', null, null],
+            'HH:MM:SS' => ['T10:22:33', '10', '22', '33', null],
+            'HH:MM with UTC' => ['2008-02-05T19:14Z', '19', '14', null, 'Z'],
+            'extended offset' => ['T10:22-08:00', '10', '22', null, '-08:00'],
+            'basic offset' => ['1996-10-22T14:00:00-0800', '14', '00', '00', '-0800'],
+            'HH after a date' => ['1985-04-12T10', '10', null, null, null],
+            '-MM:SS' => ['1985-04-12T-22:33', null, '22', '33', null],
+            '--SS' => ['1985-04-12T--33', null, null, '33', null],
+        ];
+    }
+
+    public function testVCardExtendedTimeHourDashMinuteIsRefused(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseVCardDateTime('2009-08-08T14:-11');
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);
