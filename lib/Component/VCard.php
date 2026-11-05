@@ -236,19 +236,21 @@ class VCard extends VObject\Document
                 'node' => $this,
             ];
         }
-        if (1 === count($version)) {
-            $version = (string) $this->VERSION;
-            if ('2.1' !== $version && '3.0' !== $version && '4.0' !== $version) {
+        // Duplicates are merged by parent::validate() when they are the same,
+        // so each value is checked, not only a lone one.
+        $versions = array_unique(array_map(strval(...), $version));
+        foreach ($versions as $value) {
+            if ('2.1' !== $value && '3.0' !== $value && '4.0' !== $value) {
                 $warnings[] = [
                     'level' => 3,
                     'message' => 'Only vcard version 4.0 (RFC6350), version 3.0 (RFC2426) or version 2.1 (icm-vcard-2.1) are supported.',
                     'node' => $this,
                 ];
-                if ($options & self::REPAIR) {
+                if (($options & self::REPAIR) && 1 === count($versions)) {
                     $this->VERSION = $versionMap[self::DEFAULT_VERSION];
                 }
             }
-            if ('2.1' === $version && ($options & self::PROFILE_CARDDAV)) {
+            if ('2.1' === $value && ($options & self::PROFILE_CARDDAV)) {
                 $warnings[] = [
                     'level' => 3,
                     'message' => 'CardDAV servers are not allowed to accept vCard 2.1.',

@@ -352,4 +352,26 @@ VCF;
             self::assertEquals($expectedLevel, $input[0]['level']);
         }
     }
+
+    #[DataProvider('duplicatedUnacceptableVersions')]
+    public function testDuplicatedVersionIsCheckedLikeASingleOne(string $version): void
+    {
+        $line = "VERSION:$version\r\n";
+        $card = VObject\Reader::read("BEGIN:VCARD\r\n$line{$line}FN:a\r\nUID:a\r\nEND:VCARD\r\n");
+        $messages = $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        self::assertContains(3, array_column($messages, 'level'));
+    }
+
+    public static function duplicatedUnacceptableVersions(): array
+    {
+        return [['2.1'], ['9']];
+    }
+
+    public function testDuplicatedAcceptableVersionIsMerged(): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\nEND:VCARD\r\n");
+        $messages = $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        self::assertNotContains(3, array_column($messages, 'level'));
+        self::assertCount(1, $card->select('VERSION'));
+    }
 }
