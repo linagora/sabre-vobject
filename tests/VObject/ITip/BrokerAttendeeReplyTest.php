@@ -1511,4 +1511,66 @@ ICS,
         self::assertSame("RECURRENCE-ID:20260108T100000\r\n", $reply->serialize());
         self::assertSame($new->VEVENT[1]->{'RECURRENCE-ID'}->getDateTime()->getTimestamp(), $reply->getDateTime()->getTimestamp());
     }
+
+    private const REMOVED_OVERRIDE = "BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\n"
+        ."RECURRENCE-ID;TZID=Asia/Tokyo:20260107T180000\r\n"
+        ."DTSTART;TZID=Europe/Paris:20260107T100000\r\nDTEND;TZID=Europe/Paris:20260107T110000\r\n"
+        ."ORGANIZER:mailto:strunk@example.org\r\n"
+        ."ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org\r\nEND:VEVENT\r\n";
+
+    private static function seriesOf(string $attendee, string $partstat): string
+    {
+        return "BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;TZID=Europe/Paris:20260105T100000\r\nDTEND;TZID=Europe/Paris:20260105T110000\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:strunk@example.org\r\n"
+            ."ATTENDEE;PARTSTAT=$partstat:mailto:$attendee\r\nEND:VEVENT\r\n";
+    }
+
+    private static function calendarOf(string $events): string
+    {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n{$events}END:VCALENDAR\r\n";
+    }
+
+    public function testRemovedOverrideRepliesWithTheStatusOfTheMaster(): void
+    {
+        $master = self::seriesOf('one@example.org', 'NEEDS-ACTION');
+
+        $messages = (new Broker())->parseEvent(self::calendarOf($master), 'mailto:one@example.org', self::calendarOf($master.self::REMOVED_OVERRIDE));
+
+        self::assertCount(1, $messages);
+        $event = $messages[0]->message->VEVENT;
+        self::assertSame('NEEDS-ACTION', (string) $event->ATTENDEE['PARTSTAT']);
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-07T09:00:00Z'))->getTimestamp(),
+            $event->{'RECURRENCE-ID'}->getDateTime()->getTimestamp()
+        );
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-07T09:00:00Z'))->getTimestamp(),
+            $event->DTSTART->getDateTime()->getTimestamp()
+        );
+    }
+
+    public function testRemovedOverrideWithTheStatusOfTheMasterSendsNoReply(): void
+    {
+        $master = self::seriesOf('one@example.org', 'ACCEPTED');
+
+        self::assertSame([], (new Broker())->parseEvent(self::calendarOf($master), 'mailto:one@example.org', self::calendarOf($master.self::REMOVED_OVERRIDE)));
+    }
+
+    public function testRemovedOverrideOfAnAttendeeNotOnTheMasterIsDeclined(): void
+    {
+        $old = self::seriesOf('two@example.org', 'ACCEPTED').self::REMOVED_OVERRIDE;
+        $new = self::seriesOf('two@example.org', 'ACCEPTED')
+            ."BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID;TZID=Europe/Paris:20260108T100000\r\n"
+            ."DTSTART;TZID=Europe/Paris:20260108T100000\r\nDTEND;TZID=Europe/Paris:20260108T110000\r\n"
+            ."ORGANIZER:mailto:strunk@example.org\r\nATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org\r\nEND:VEVENT\r\n";
+
+        $messages = (new Broker())->parseEvent(self::calendarOf($new), 'mailto:one@example.org', self::calendarOf($old));
+
+        $statuses = [];
+        foreach ($messages as $message) {
+            $statuses[(string) $message->message->VEVENT->{'RECURRENCE-ID'}] = (string) $message->message->VEVENT->ATTENDEE['PARTSTAT'];
+        }
+        self::assertSame(['20260107T180000' => 'DECLINED', '20260108T100000' => 'ACCEPTED'], $statuses);
+    }
 }

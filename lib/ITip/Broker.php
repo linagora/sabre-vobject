@@ -847,10 +847,20 @@ class Broker
             }
         }
 
+        // An instance that has gone from the new object falls back to the
+        // master: the attendee has the status of the master for it, or none
+        // when they are not on the master.
+        foreach ($instances as $recurId => $instanceInfo) {
+            if (null === $instanceInfo['newstatus']) {
+                $instances[$recurId]['newstatus'] = $eventInfo['attendees'][$attendee]['instances']['master']['partstat'] ?? 'DECLINED';
+            }
+        }
+
         // Gathering a few extra properties for each instance.
         foreach ($instances as $recurId => $instanceInfo) {
-            if (isset($eventInfo['instances'][$recurId])) {
-                $instances[$recurId]['dtstart'] = clone $eventInfo['instances'][$recurId]->DTSTART;
+            $instanceObj = $eventInfo['instances'][$recurId] ?? $oldEventInfo['instances'][$recurId] ?? null;
+            if ($instanceObj) {
+                $instances[$recurId]['dtstart'] = clone $instanceObj->DTSTART;
             } else {
                 $instances[$recurId]['dtstart'] = $recurId;
             }
@@ -887,8 +897,9 @@ class Broker
 
             $summary = isset($calendar->VEVENT->SUMMARY) ? $calendar->VEVENT->SUMMARY->getValue() : '';
             // Adding properties from the correct source instance
-            if (isset($eventInfo['instances'][$instance['id']])) {
-                $instanceObj = $eventInfo['instances'][$instance['id']];
+            // An instance removed from the new object is described as stored.
+            $instanceObj = $eventInfo['instances'][$instance['id']] ?? $oldEventInfo['instances'][$instance['id']] ?? null;
+            if ($instanceObj) {
                 if (isset($instanceObj->SEQUENCE)) {
                     $event->add('SEQUENCE', $instanceObj->SEQUENCE);
 
@@ -921,10 +932,10 @@ class Broker
                     $event->add('SUMMARY', $summary);
                 }
             }
-            if ('master' !== $instance['id'] && isset($eventInfo['instances'][$instance['id']]->{'RECURRENCE-ID'})) {
+            if ('master' !== $instance['id'] && isset($instanceObj->{'RECURRENCE-ID'})) {
                 // The override's own RECURRENCE-ID: its raw value may be in
                 // another time zone than the master (or floating).
-                $event->add(clone $eventInfo['instances'][$instance['id']]->{'RECURRENCE-ID'});
+                $event->add(clone $instanceObj->{'RECURRENCE-ID'});
             } elseif ('master' !== $instance['id']) {
                 // An instance removed through EXDATE: its id is a raw EXDATE
                 // value, in the time zone of the master.
