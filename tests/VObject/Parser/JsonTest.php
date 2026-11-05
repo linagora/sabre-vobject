@@ -567,4 +567,15 @@ VCF;
             'unknown' => ['["x-b",{},"unknown",[]]'],
         ];
     }
+
+    public function testControlCharacterInStoredUriSurvivesJCardRoundTrip(): void
+    {
+        $vcard = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:a\r\nURL:http://a/\x1Cb\r\nEND:VCARD\r\n");
+        self::assertContains(3, array_column($vcard->validate(VObject\Node::PROFILE_CARDDAV), 'level'));
+
+        $vcard->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+
+        self::assertSame('http://a/b', $vcard->URL->getValue());
+        self::assertSame('http://a/b', (string) VObject\Reader::readJson(json_encode($vcard->jsonSerialize(), JSON_THROW_ON_ERROR))->URL);
+    }
 }

@@ -17,7 +17,7 @@ class StringUtil
     public static function isUTF8(string $str): bool
     {
         // Control characters
-        if (preg_match('%[\x00-\x08\x0B-\x0C\x0E\x0F]%', $str)) {
+        if (preg_match('%[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]%', $str)) {
             return false;
         }
 
