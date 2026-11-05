@@ -1253,4 +1253,73 @@ ICS,
         self::assertCount(1, $messages);
         self::assertSame($significant, $messages[0]->significantChange);
     }
+
+    public function testAllDayOverrideWithoutAttendeeGivesDateExdate(): void
+    {
+        $calendar = \Sabre\VObject\Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260102T000000Z
+DTSTART;VALUE=DATE:20260105
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:o@example.com
+ATTENDEE:mailto:a@example.com
+ATTENDEE:mailto:b@example.com
+END:VEVENT
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260102T000000Z
+RECURRENCE-ID;VALUE=DATE:20260106
+DTSTART;VALUE=DATE:20260106
+ORGANIZER:mailto:o@example.com
+ATTENDEE:mailto:b@example.com
+END:VEVENT
+END:VCALENDAR
+ICS);
+
+        $messages = (new Broker())->parseEvent($calendar, 'mailto:o@example.com');
+        $toA = array_values(array_filter($messages, fn ($m) => 'mailto:a@example.com' === $m->recipient))[0];
+
+        self::assertSame('DATE', (string) $toA->message->VEVENT->EXDATE['VALUE']);
+        self::assertSame(['20260106'], $toA->message->VEVENT->EXDATE->getParts());
+        foreach (\Sabre\VObject\Reader::read($toA->message->serialize())->validate() as $problem) {
+            self::assertLessThan(3, $problem['level'], $problem['message']);
+        }
+    }
+
+    public function testOverrideInAnotherZoneGivesTheExdateOfTheSameInstant(): void
+    {
+        $calendar = \Sabre\VObject\Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260102T000000Z
+DTSTART;TZID=Europe/Paris:20260105T100000
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:o@example.com
+ATTENDEE:mailto:a@example.com
+ATTENDEE:mailto:b@example.com
+END:VEVENT
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260102T000000Z
+RECURRENCE-ID;TZID=America/New_York:20260106T040000
+DTSTART;TZID=Europe/Paris:20260106T100000
+ORGANIZER:mailto:o@example.com
+ATTENDEE:mailto:b@example.com
+END:VEVENT
+END:VCALENDAR
+ICS);
+
+        $messages = (new Broker())->parseEvent($calendar, 'mailto:o@example.com');
+        $toA = array_values(array_filter($messages, fn ($m) => 'mailto:a@example.com' === $m->recipient))[0];
+
+        self::assertSame('Europe/Paris', (string) $toA->message->VEVENT->EXDATE['TZID']);
+        self::assertSame(['20260106T100000'], $toA->message->VEVENT->EXDATE->getParts());
+    }
 }
