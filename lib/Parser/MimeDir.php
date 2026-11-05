@@ -170,6 +170,9 @@ class MimeDir extends Parser
         };
 
         $this->root = new $class([], false);
+        if ($this->root instanceof VCard) {
+            $this->findVCardVersion($this->root);
+        }
 
         while (true) {
             // Reading until we hit END:
@@ -191,6 +194,39 @@ class MimeDir extends Parser
         if ($name !== $this->root->name) {
             throw new ParseException('Invalid MimeDir file. expected: "END:'.$this->root->name.'" got: "END:'.$name.'"');
         }
+    }
+
+    /**
+     * Gives a vCard its version when VERSION comes after other properties, as
+     * RFC 2426 allows: these properties would otherwise be read for an unknown
+     * version, and differently once serialize() has moved VERSION first.
+     *
+     * The input is left where it was. An input that cannot seek is read in
+     * order.
+     */
+    private function findVCardVersion(VCard $vcard): void
+    {
+        $versionRegex = '/^(?:[^.:;]+\.)?VERSION(?:;[^:]*)?:(.*)$/i';
+        if (null === $this->lineBuffer || 1 === preg_match($versionRegex, $this->lineBuffer)) {
+            // VERSION comes first, as nearly always.
+            return;
+        }
+        $position = ftell($this->input);
+        if (false === $position || !stream_get_meta_data($this->input)['seekable']) {
+            return;
+        }
+
+        while (false !== ($line = fgets($this->input))) {
+            $line = rtrim($line, "\r\n");
+            if (0 === strcasecmp($line, 'END:VCARD')) {
+                break;
+            }
+            if (preg_match($versionRegex, $line, $matches)) {
+                $vcard->setDocumentVersion($matches[1]);
+                break;
+            }
+        }
+        fseek($this->input, $position);
     }
 
     /**

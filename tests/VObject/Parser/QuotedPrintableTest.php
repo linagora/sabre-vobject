@@ -5,6 +5,7 @@ namespace Sabre\VObject\Parser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component;
+use Sabre\VObject\Component\VCard;
 use Sabre\VObject\ParseException;
 use Sabre\VObject\Property;
 use Sabre\VObject\Reader;
@@ -182,5 +183,35 @@ VCF;
 
         return $value;
          */
+    }
+
+    public function testPropertiesBeforeVersionAreReadAsOnTheNextRead(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=3D41\r\nVERSION:3.0\r\nFN:x\r\nEND:VCARD\r\n");
+        self::assertSame('a=41', (string) $card->NOTE);
+        self::assertSame('a=41', (string) Reader::read($card->serialize())->NOTE);
+
+        $card = Reader::read("BEGIN:VCARD\r\nLOGO:aGk=\r\nVERSION:4.0\r\nFN:x\r\nEND:VCARD\r\n");
+        self::assertInstanceOf(Property\Uri::class, $card->LOGO);
+        self::assertSame($card->LOGO::class, Reader::read($card->serialize())->LOGO::class);
+        self::assertSame('x', (string) $card->FN);
+    }
+
+    public function testVersionOfTheNextCardIsNotUsed(): void
+    {
+        $stream = fopen('php://memory', 'r+');
+        fwrite($stream, "BEGIN:VCARD\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=3D41\r\nFN:x\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:4.0\r\nFN:y\r\nEND:VCARD\r\n");
+        rewind($stream);
+
+        $card = Reader::read($stream);
+
+        self::assertSame(VCard::UNKNOWN, $card->getDocumentType());
+    }
+
+    public function testPropertiesBeforeVersionOfAVCard21(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=3D41\r\nVERSION:2.1\r\nFN:x\r\nEND:VCARD\r\n");
+        self::assertSame('a=41', (string) $card->NOTE);
+        self::assertSame('a=41', (string) Reader::read($card->serialize())->NOTE);
     }
 }

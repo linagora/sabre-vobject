@@ -138,26 +138,27 @@ class VCard extends VObject\Document
     public function getDocumentType(): int
     {
         if (!$this->version) {
-            $version = (string) $this->VERSION;
-
-            switch ($version) {
-                case '2.1':
-                    $this->version = self::VCARD21;
-                    break;
-                case '3.0':
-                    $this->version = self::VCARD30;
-                    break;
-                case '4.0':
-                    $this->version = self::VCARD40;
-                    break;
-                default:
-                    // We don't want to cache the version if it's unknown,
-                    // because we might get a version property in a bit.
-                    return self::UNKNOWN;
-            }
+            $this->setDocumentVersion((string) $this->VERSION);
         }
 
-        return $this->version;
+        // We don't cache the version if it's unknown, because we might get a
+        // version property in a bit.
+        return $this->version ?? self::UNKNOWN;
+    }
+
+    /**
+     * Sets the document type from a VERSION value. A parser calls this when it
+     * finds that value after other properties, whose class and decoding depend
+     * on it. An unknown version is ignored.
+     */
+    public function setDocumentVersion(string $version): void
+    {
+        $this->version = match ($version) {
+            '2.1' => self::VCARD21,
+            '3.0' => self::VCARD30,
+            '4.0' => self::VCARD40,
+            default => $this->version,
+        };
     }
 
     /**
