@@ -382,4 +382,29 @@ VCF;
 
         self::assertSame('a,b', (string) $card->FN);
     }
+
+    #[DataProvider('cardsWithANameRepairedIntoFn')]
+    public function testNameRepairedIntoFnIsCountedAsFn(string $lines, bool $accepted, string $fn): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:u\r\n$lines\r\nEND:VCARD\r\n");
+        $options = VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR;
+
+        self::assertSame($accepted, !in_array(3, array_column($card->validate($options), 'level'), true));
+
+        if ($accepted) {
+            self::assertSame($fn, (string) $card->FN);
+            $again = VObject\Reader::read($card->serialize())->validate($options);
+            self::assertNotContains(3, array_column($again, 'level'));
+        }
+    }
+
+    public static function cardsWithANameRepairedIntoFn(): array
+    {
+        return [
+            'next to an FN' => ["FN:Jane\r\nX..FN:Janet", false, ''],
+            'next to an N' => ["N:Doe;Jane;;;\r\nX..FN:Janet", true, 'Janet'],
+            'dot inside the name' => ["N:E;;;;\r\nA.F.N:0", true, '0'],
+            'alone' => ['X..FN:Janet', true, 'Janet'],
+        ];
+    }
 }
