@@ -116,6 +116,25 @@ class DateTimeParserTest extends TestCase
         self::assertEquals(new \DateInterval('PT9999999999S'), DateTimeParser::parseDuration('PT9999999999S'));
     }
 
+    public function testTrailingLineFeedIsRefused(): void
+    {
+        foreach ([
+            fn () => DateTimeParser::parseDuration("PT1H\n"),
+            fn () => DateTimeParser::parseDateTime("20260101T100000Z\n"),
+            fn () => DateTimeParser::parseDate("20260101\n"),
+            fn () => DateTimeParser::parseVCardDateTime("20260101\n"),
+            fn () => DateTimeParser::parseVCardTime("1000\n"),
+            fn () => DateTimeParser::parseVCardDateAndOrTime("20260101\n"),
+        ] as $parse) {
+            try {
+                $parse();
+                self::fail('A trailing line feed must be refused');
+            } catch (InvalidDataException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);

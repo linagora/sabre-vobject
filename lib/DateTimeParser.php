@@ -30,7 +30,7 @@ class DateTimeParser
     public static function parseDateTime(string $dt, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
         // Format is YYYYMMDD + "T" + hhmmss
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([0-2][0-9])([0-5][0-9])([0-5][0-9])([Z]?)$/', $dt, $matches);
+        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([0-2][0-9])([0-5][0-9])([0-5][0-9])([Z]?)\z/', $dt, $matches);
 
         if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
@@ -105,7 +105,7 @@ class DateTimeParser
     public static function parseDate(string $date, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
         // Format is YYYYMMDD
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])$/', $date, $matches);
+        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])\z/', $date, $matches);
 
         if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
@@ -132,7 +132,7 @@ class DateTimeParser
      */
     public static function parseDuration(string $duration): \DateInterval
     {
-        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?$/', $duration, $matches);
+        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?\z/', $duration, $matches);
         if (!$result) {
             throw new InvalidDataException('The supplied iCalendar duration value is incorrect: '.$duration);
         }
@@ -225,7 +225,7 @@ class DateTimeParser
      */
     public static function parseDurationAsString(string $duration): string
     {
-        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?$/', $duration, $matches);
+        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?\z/', $duration, $matches);
         if (!$result) {
             throw new InvalidDataException('The supplied iCalendar duration value is incorrect: '.$duration);
         }
@@ -361,7 +361,7 @@ class DateTimeParser
                 )?
 
             )?
-            $/x';
+            \z/x';
 
         if (!preg_match($regex, $date, $matches)) {
             // Attempting to parse the extended format.
@@ -385,7 +385,7 @@ class DateTimeParser
                     )?
 
                 )?
-                $/x';
+                \z/x';
 
             if (!preg_match($regex, $date, $matches)) {
                 throw new InvalidDataException('Invalid vCard date-time string: '.$date);
@@ -468,7 +468,7 @@ class DateTimeParser
                 Z | (?: \+|-)(?: [0-9]{4})
 
             )?
-            $/x';
+            \z/x';
 
         if (!preg_match($regex, $date, $matches)) {
             // Attempting to parse the extended format.
@@ -483,7 +483,7 @@ class DateTimeParser
                     Z | (?: \+|-)(?: [0-9]{2}:[0-9]{2})
 
                 )?
-                $/x';
+                \z/x';
 
             if (!preg_match($regex, $date, $matches)) {
                 throw new InvalidDataException('Invalid vCard time string: '.$date);
@@ -567,7 +567,7 @@ class DateTimeParser
                          '|(?<year>\d{4})-(?<month>\d\d)'.
                          '|--(?<month>\d\d)(?<date>\d\d)?'.
                          '|---(?<date>\d\d)'.
-                         ')$/';
+                         ')\z/';
 
         // (\d\d(\d\d(\d\d)?)?|-\d\d(\d\d)?|--\d\d)(Z|[+\-]\d\d(\d\d)?)?
         $valueTime = '/^(?J)(?:'.
@@ -575,7 +575,7 @@ class DateTimeParser
                          '|-(?<minute>\d\d)(?<second>\d\d)?'.
                          '|--(?<second>\d\d))'.
                          '(?<timezone>(Z|[+\-]\d\d(\d\d)?))?'.
-                         ')$/';
+                         ')\z/';
 
         // (\d{8}|--\d{4}|---\d\d)T\d\d(\d\d(\d\d)?)?(Z|[+\-]\d\d(\d\d?)?
         $valueDateTime = '/^(?:'.
@@ -585,7 +585,7 @@ class DateTimeParser
                          'T'.
                          '(?<hour>\d\d)((?<minute>\d\d)(?<second>\d\d)?)?'.
                          '(?<timezone>(Z|[+\-]\d\d(\d\d?)))?'.
-                         ')$/';
+                         ')\z/';
 
         // date-and-or-time is date | date-time | time
         // in this strict order.

@@ -210,7 +210,9 @@ abstract class Property extends Node implements \Stringable
             $str .= ';'.$param->serialize();
         }
 
-        $str .= ':'.$this->getRawMimeDirValue();
+        // A value never starts a new line: MIME-dir has no generic escape for
+        // a line break, and each class escapes or refuses the ones it allows.
+        $str .= ':'.\str_replace(["\r", "\n"], '', $this->getRawMimeDirValue());
 
         $str = \preg_replace(
             '/(
