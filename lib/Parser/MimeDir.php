@@ -566,15 +566,15 @@ class MimeDir extends Parser
                 // without the encoding, so that serialize() escapes it as
                 // any other value.
                 unset($propObj['ENCODING']);
-                $encoded = $this->extractQuotedPrintableValue();
+                // A plain fold is not part of the value; "=" before a line
+                // feed is a soft line break, removed by the decoder.
+                $decoded = quoted_printable_decode((string) preg_replace('/(?<!=)\n/', '', $this->extractQuotedPrintableValue()));
                 if ($propObj instanceof Property\Text || $propObj instanceof Property\Binary) {
-                    $propObj->setRawMimeDirValue(quoted_printable_decode($encoded));
+                    $propObj->setRawMimeDirValue($decoded);
                 } else {
                     // These classes store and write back their value as is,
                     // so a line break would start a new line in the stored
-                    // text. A plain fold is not part of the value; "=" before
-                    // a line feed is a soft line break, removed by the decoder.
-                    $decoded = quoted_printable_decode((string) preg_replace('/(?<!=)\n/', '', $encoded));
+                    // text.
                     if (strpbrk($decoded, "\r\n")) {
                         throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': the value of '.$propObj->name.' must not hold a line break');
                     }

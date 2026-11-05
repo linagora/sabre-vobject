@@ -232,4 +232,17 @@ VCF;
         $serialized = $card->serialize();
         self::assertSame($serialized, Reader::read($serialized)->serialize());
     }
+
+    public function testPlainFoldInQuotedPrintableTextValueIsNotALineBreak(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\nDESCRIPTION;ENCODING=QUOTED-PRINTABLE:first\r\n  second\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame('first second', (string) $vcal->VEVENT->DESCRIPTION);
+
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nNOTE;ENCODING=QUOTED-PRINTABLE:first\r\n  second\r\nEND:VCARD\r\n");
+        self::assertSame('first second', (string) $vcard->NOTE);
+
+        // A soft line break and an encoded line feed keep their meaning.
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=\r\n b=0Ac\r\nEND:VCARD\r\n");
+        self::assertSame("ab\nc", (string) $vcard->NOTE);
+    }
 }
