@@ -756,10 +756,22 @@ class RRuleIterator implements \Iterator
                     $checkDates = [];
 
                     // loop through all WeekNo and Days to check all the combinations
+                    // 28 December is always in the last ISO week of its year.
+                    $weeksInYear = (int) (clone $this->currentDate)->setDate((int) $currentYear, 12, 28)->format('W');
+
                     foreach ($this->byWeekNo as $byWeekNo) {
+                        // setISODate() takes a week out of range as an offset
+                        // from week 1: a negative value counts from the end
+                        // of the year, and a week the year does not have
+                        // gives no instance.
+                        $week = $byWeekNo > 0 ? $byWeekNo : $weeksInYear + 1 + $byWeekNo;
+                        if ($week < 1 || $week > $weeksInYear) {
+                            continue;
+                        }
+
                         foreach ($dayOffsets as $dayOffset) {
                             $date = clone $this->currentDate;
-                            $date = $date->setISODate($currentYear, $byWeekNo, $dayOffset);
+                            $date = $date->setISODate((int) $currentYear, $week, $dayOffset);
 
                             if ($date > $this->currentDate) {
                                 $checkDates[] = $date;
