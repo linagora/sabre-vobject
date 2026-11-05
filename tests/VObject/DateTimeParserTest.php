@@ -166,6 +166,27 @@ class DateTimeParserTest extends TestCase
         DateTimeParser::parseVCardDateTime('2009-08-08T14:-11');
     }
 
+    #[DataProvider('zeroPaddedDurations')]
+    public function testParseDurationAsStringIgnoresLeadingZeros(string $duration): void
+    {
+        $ref = new \DateTimeImmutable('2026-01-01T00:00:00Z');
+        self::assertEquals(
+            $ref->add(DateTimeParser::parseDuration($duration)),
+            $ref->modify(DateTimeParser::parseDurationAsString($duration))
+        );
+    }
+
+    public static function zeroPaddedDurations(): array
+    {
+        return [['PT0000000000000000000001H'], ['P1W0000000000000000001D'], ['P1W0000000000000000000002D'], ['PT00H'], ['-PT0000000000000000000001H']];
+    }
+
+    public function testParseDurationAsStringRefusesATooLargeNumber(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseDurationAsString('PT99999999999999999999H');
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);
