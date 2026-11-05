@@ -243,9 +243,16 @@ class DateTimeParser
 
         $units = [];
         foreach ($parts as $part) {
-            if (isset($matches[$part]) && $matches[$part]) {
-                $units[] = $matches[$part].' '.$part.'s';
+            // Without its leading zeros, as in parseDuration(): modify() does
+            // not read a long number as a relative amount.
+            $value = isset($matches[$part]) ? ltrim($matches[$part], '0') : '';
+            if ('' === $value) {
+                continue;
             }
+            if ((string) (int) $value !== $value) {
+                throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$duration);
+            }
+            $units[] = $value.' '.$part.'s';
         }
 
         if (!$units) {
