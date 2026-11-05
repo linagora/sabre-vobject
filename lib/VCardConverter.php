@@ -198,12 +198,32 @@ class VCardConverter
             switch ($property->name) {
                 case 'X-ABSHOWAS':
                     if ('COMPANY' === strtoupper((string) $property->getValue())) {
-                        $newProperty = $output->createProperty('KIND', 'ORG');
+                        if (self::hasValue($output, 'KIND', 'ORG')) {
+                            return;
+                        }
+                        if (!isset($output->KIND)) {
+                            $newProperty = $output->createProperty('KIND', 'ORG');
+                        }
                     }
                     break;
                 case 'X-ADDRESSBOOKSERVER-KIND':
                     if ('GROUP' === strtoupper((string) $property->getValue())) {
-                        $newProperty = $output->createProperty('KIND', 'GROUP');
+                        if (self::hasValue($output, 'KIND', 'GROUP')) {
+                            return;
+                        }
+                        if (!isset($output->KIND)) {
+                            $newProperty = $output->createProperty('KIND', 'GROUP');
+                        }
+                    }
+                    break;
+                case 'KIND':
+                    // KIND appears at most once in a vCard 4.0 (RFC 6350
+                    // section 6.1.4): another value stays as an extension.
+                    if (self::hasValue($output, 'KIND', (string) $property->getValue())) {
+                        return;
+                    }
+                    if (isset($output->KIND)) {
+                        $newProperty->name = 'X-KIND';
                     }
                     break;
                 case 'X-ADDRESSBOOKSERVER-MEMBER':
@@ -216,13 +236,15 @@ class VCardConverter
                     );
                     break;
                 case 'X-ANNIVERSARY':
-                    $newProperty->name = 'ANNIVERSARY';
                     // If we already have an anniversary property with the same
-                    // value, ignore.
-                    foreach ($output->select('ANNIVERSARY') as $anniversary) {
-                        if ($anniversary->getValue() === $newProperty->getValue()) {
-                            return;
-                        }
+                    // value, ignore. ANNIVERSARY appears at most once in a
+                    // vCard 4.0 (RFC 6350 section 6.2.6): another value stays
+                    // as an extension.
+                    if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())) {
+                        return;
+                    }
+                    if (!isset($output->ANNIVERSARY)) {
+                        $newProperty->name = 'ANNIVERSARY';
                     }
                     break;
                 case 'X-ABDATE':
@@ -240,15 +262,15 @@ class VCardConverter
                     // If we already have an anniversary property with the same
                     // value, ignore. X-ANNIVERSARY holds the same anniversary
                     // with its own group, whichever is converted first.
-                    foreach ($output->select('ANNIVERSARY') as $anniversary) {
-                        if ($anniversary->getValue() === $newProperty->getValue()) {
-                            return;
-                        }
+                    if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
+                        || self::hasValue($input, 'X-ANNIVERSARY', (string) $newProperty->getValue())) {
+                        return;
                     }
-                    foreach ($input->select('X-ANNIVERSARY') as $anniversary) {
-                        if ($anniversary->getValue() === $newProperty->getValue()) {
-                            return;
-                        }
+                    if (isset($output->ANNIVERSARY)) {
+                        // Another anniversary stays as an extension, with its
+                        // label, which is otherwise dropped below.
+                        $output->add($output->createProperty($property->group.'.X-ABLABEL', $label->getValue()));
+                        break;
                     }
                     $newProperty->name = 'ANNIVERSARY';
                     break;
@@ -348,6 +370,20 @@ class VCardConverter
         $newProperty->setValue('data:'.$mimeType.';base64,'.base64_encode((string) $value));
 
         return $newProperty;
+    }
+
+    /**
+     * Returns true if a card has a property with that value, whatever its case.
+     */
+    private static function hasValue(Component\VCard $card, string $name, string $value): bool
+    {
+        foreach ($card->select($name) as $property) {
+            if (0 === strcasecmp((string) $property->getValue(), $value)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
