@@ -93,7 +93,7 @@ class Parameter extends Node implements \Stringable
      */
     public function setValue($value): void
     {
-        $this->value = $value;
+        $this->value = self::withoutCarriageReturn($value);
     }
 
     /**
@@ -116,7 +116,7 @@ class Parameter extends Node implements \Stringable
      */
     public function setParts(array $value): void
     {
-        $this->value = $value;
+        $this->value = self::withoutCarriageReturn($value);
     }
 
     /**
@@ -145,11 +145,26 @@ class Parameter extends Node implements \Stringable
      */
     public function addValue($part): void
     {
+        $part = self::withoutCarriageReturn($part);
         if (is_null($this->value)) {
             $this->value = $part;
         } else {
             $this->value = array_merge((array) $this->value, (array) $part);
         }
+    }
+
+    /**
+     * A bare carriage return cannot be encoded in a parameter value (RFC 6868
+     * only encodes LF), and would end the line for many readers: it is dropped
+     * as soon as the value is set, so every path reads the same value.
+     */
+    private static function withoutCarriageReturn(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return array_map(self::withoutCarriageReturn(...), $value);
+        }
+
+        return is_string($value) ? str_replace("\r", '', $value) : $value;
     }
 
     /**
@@ -173,10 +188,7 @@ class Parameter extends Node implements \Stringable
      */
     public function serialize(): string
     {
-        // A bare carriage return cannot be encoded in a parameter value
-        // (RFC 6868 only encodes LF), and would end the line for many
-        // readers: it is dropped, as in TEXT values.
-        $value = array_map(fn ($item) => is_string($item) ? str_replace("\r", '', $item) : $item, $this->getParts());
+        $value = $this->getParts();
 
         if (0 === count($value)) {
             return $this->name.'=';

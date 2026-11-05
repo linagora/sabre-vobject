@@ -757,8 +757,7 @@ class MimeDir extends Parser
                     }
                     // @codeCoverageIgnoreEnd
                 },
-                // A bare carriage return is dropped, as serialize() does.
-                str_replace("\r", '', $input)
+                $input
             );
     }
 
