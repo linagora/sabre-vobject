@@ -204,6 +204,14 @@ class DateTimeParserTest extends TestCase
         self::assertSame('2026-03-15T23:59:59+00:00', DateTimeParser::parseDateTime('20260315T235959Z')->format('c'));
     }
 
+    public function testFirstInstantOfARepeatedHourIsItsFirstOccurrence(): void
+    {
+        // 02:00 occurs at 00:00Z, then at 01:00Z when the clock goes back.
+        $date = DateTimeParser::parseDateTime('20261025T020000', new \DateTimeZone('Europe/Paris'));
+
+        self::assertSame('2026-10-25T00:00:00+00:00', $date->setTimezone(new \DateTimeZone('UTC'))->format('c'));
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);
