@@ -469,4 +469,19 @@ HI;
             ."RRULE:FREQ=YEARLY;BYMONTH=1.;BYDAY=-1SU\r\nEND:DAYLIGHT\r\n");
         self::assertSame('+01:00', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
     }
+
+    #[DataProvider('nonNumericCdoIds')]
+    public function testNonNumericCdoIdFallsThroughToTheObservances(string $cdoId): void
+    {
+        $vcal = self::customVTimeZone(
+            "BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n",
+            "X-MICROSOFT-CDO-TZID:$cdoId\r\n"
+        );
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
+
+    public static function nonNumericCdoIds(): array
+    {
+        return [['1a'], ['Customized Time Zone'], ['']];
+    }
 }
