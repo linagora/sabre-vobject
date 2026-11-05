@@ -408,4 +408,49 @@ END:VCALENDAR
 ICS;
         $this->parse($oldMessage, null, [], 'mailto:one@example.org');
     }
+
+    private const OVERRIDE = "BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\n"
+        ."RECURRENCE-ID:20260107T100000Z\r\nDTSTART:20260107T140000Z\r\nDTEND:20260107T150000Z\r\n"
+        ."ORGANIZER:mailto:strunk@example.org\r\nATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org\r\nEND:VEVENT\r\n";
+
+    private const SERIES_START = "BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\n"
+        ."DTSTART:20260105T100000Z\r\nDTEND:20260105T110000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\n"
+        ."ORGANIZER:mailto:strunk@example.org\r\n";
+
+    public function testAttendeeDeleteDeclinesEveryStoredInstance(): void
+    {
+        $old = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n".self::SERIES_START
+            ."ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org\r\nEND:VEVENT\r\n"
+            .self::OVERRIDE."END:VCALENDAR\r\n";
+
+        $messages = (new Broker())->parseEvent(null, 'mailto:one@example.org', $old);
+
+        self::assertCount(2, $messages);
+        foreach ($messages as $message) {
+            self::assertSame('DECLINED', (string) $message->message->VEVENT->ATTENDEE['PARTSTAT']);
+        }
+    }
+
+    public function testAttendeeDeleteOfACopyWithoutMaster(): void
+    {
+        $old = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n".self::OVERRIDE."END:VCALENDAR\r\n";
+
+        $messages = (new Broker())->parseEvent(null, 'mailto:one@example.org', $old);
+
+        self::assertCount(1, $messages);
+        self::assertSame('DECLINED', (string) $messages[0]->message->VEVENT->ATTENDEE['PARTSTAT']);
+        self::assertSame('20260107T100000Z', (string) $messages[0]->message->VEVENT->{'RECURRENCE-ID'});
+    }
+
+    public function testAttendeeDeleteDoesNotDeclineAMasterTheyAreNotOn(): void
+    {
+        $old = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n".self::SERIES_START
+            ."ATTENDEE;PARTSTAT=ACCEPTED:mailto:two@example.org\r\nEND:VEVENT\r\n"
+            .self::OVERRIDE."END:VCALENDAR\r\n";
+
+        $messages = (new Broker())->parseEvent(null, 'mailto:one@example.org', $old);
+
+        self::assertCount(1, $messages);
+        self::assertSame('20260107T100000Z', (string) $messages[0]->message->VEVENT->{'RECURRENCE-ID'});
+    }
 }
