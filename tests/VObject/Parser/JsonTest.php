@@ -565,6 +565,8 @@ VCF;
             'uri' => ['["x-a",{},"uri",[]]'],
             'cal-address' => ['["attendee",{},"cal-address",[]]'],
             'unknown' => ['["x-b",{},"unknown",[]]'],
+            'float' => ['["x-c",{},"float",[]]'],
+            'geo' => ['["geo",{},"float",[]]'],
         ];
     }
 
