@@ -2357,4 +2357,10 @@ class RRuleIteratorTest extends TestCase
         }
         self::assertSame(5, $count);
     }
+
+    public function testUntilHoldingADurationIsInvalidData(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        new RRuleIterator('FREQ=DAILY;UNTIL=P1D', new \DateTimeImmutable('2026-01-01T00:00:00Z'));
+    }
 }
