@@ -986,7 +986,12 @@ class RRuleIterator implements \Iterator
                     break;
 
                 case 'UNTIL':
-                    $this->until = DateTimeParser::parse(self::scalarPart($key, $value), $this->startDate->getTimezone());
+                    // parse() also reads a duration, which is no end date.
+                    $until = DateTimeParser::parse(self::scalarPart($key, $value), $this->startDate->getTimezone());
+                    if (!$until instanceof \DateTimeInterface) {
+                        throw new InvalidDataException('UNTIL must be a date or date-time value');
+                    }
+                    $this->until = $until;
 
                     // In some cases events are generated with an UNTIL=
                     // parameter before the actual start of the event.
