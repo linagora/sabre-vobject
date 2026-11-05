@@ -550,4 +550,21 @@ VCF;
             self::assertSame($again, json_encode(VObject\Reader::readJson($again)->jsonSerialize(), JSON_THROW_ON_ERROR));
         }
     }
+
+    #[DataProvider('emptyListValues')]
+    public function testAnEmptyListIsNotAValue(string $property): void
+    {
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcalendar",[],[["vevent",[["uid",{},"text","a"],'.$property.']]]]');
+    }
+
+    public static function emptyListValues(): array
+    {
+        return [
+            'text' => ['["summary",{},"text",[]]'],
+            'uri' => ['["x-a",{},"uri",[]]'],
+            'cal-address' => ['["attendee",{},"cal-address",[]]'],
+            'unknown' => ['["x-b",{},"unknown",[]]'],
+        ];
+    }
 }

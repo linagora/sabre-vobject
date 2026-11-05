@@ -266,7 +266,7 @@ class Json extends Parser
                 // components, which may themselves have several values.
                 // Other text values are scalars, or a single list of them.
                 $prop instanceof Text => self::isScalar($value) || ($single
-                    && is_array($value) && array_is_list($value)
+                    && is_array($value) && [] !== $value && array_is_list($value)
                     && self::all($value, ';' === $prop->delimiter ? self::isScalarOrList(...) : self::isScalar(...))
                 ),
                 default => self::isScalar($value),
