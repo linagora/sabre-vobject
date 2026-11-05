@@ -1754,6 +1754,35 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    #[DataProvider('dailyRulesWithoutFurtherInstance')]
+    public function testDailyRuleWithoutFurtherInstanceEndsQuickly(string $rule): void
+    {
+        $it = new RRuleIterator($rule, new \DateTimeImmutable('2026-01-01 09:00:00', new \DateTimeZone('Europe/Paris')));
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public static function dailyRulesWithoutFurtherInstance(): array
+    {
+        return [
+            'interval of a week' => ['FREQ=DAILY;INTERVAL=7;BYDAY=TU'],
+            'interval of a week, BYHOUR' => ['FREQ=DAILY;INTERVAL=7;BYDAY=TU;BYHOUR=9'],
+            'interval of two weeks' => ['FREQ=DAILY;INTERVAL=14;BYDAY=TU,WE'],
+            'past UNTIL' => ['FREQ=DAILY;INTERVAL=2;BYDAY=TU;BYMONTH=6;UNTIL=20260301T000000Z'],
+        ];
+    }
+
+    public function testDailyWeeklyIntervalOnTheWeekdayStillRecurs(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;INTERVAL=7;BYDAY=TH;COUNT=3',
+            '2026-01-01 09:00:00',
+            ['2026-01-01 09:00:00', '2026-01-08 09:00:00', '2026-01-15 09:00:00']
+        );
+    }
+
     public function testNegativeValidByWeekNo(): void
     {
         $this->parse(

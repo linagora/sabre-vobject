@@ -36,6 +36,7 @@ class RRuleIterator implements \Iterator
      * select in a month only depends on its place in that cycle.
      */
     private const GREGORIAN_CYCLE_MONTHS = 4800;
+    private const GREGORIAN_CYCLE_DAYS = 146097;
 
     /**
      * For each frequency, the number of periods in 10000 years: a single
@@ -502,16 +503,28 @@ class RRuleIterator implements \Iterator
             $recurrenceMonths = $this->getMonths();
         }
 
+        // Stepping by a number of weeks keeps the weekday: no other day of
+        // BYDAY can ever be reached.
+        if ($this->byDay && 0 === $this->interval % 7 && !in_array((int) $this->currentDate->format('w'), $recurrenceDays, true)) {
+            $this->currentDate = null;
+
+            return;
+        }
+
+        $emptyDays = 0;
+
         do {
             if ($this->byHour) {
                 if ('23' === $this->currentDate->format('G')) {
                     // to obey the interval rule
                     $this->currentDate = $this->currentDate->modify('+'.($this->interval - 1).' days');
+                    ++$emptyDays;
                 }
 
                 $this->currentDate = $this->currentDate->modify('+1 hours');
             } else {
                 $this->currentDate = $this->currentDate->modify('+'.$this->interval.' days');
+                ++$emptyDays;
             }
 
             // Current month of the year
@@ -523,7 +536,11 @@ class RRuleIterator implements \Iterator
             // Current hour of the day
             $currentHour = (int) $this->currentDate->format('G');
 
-            if ($this->isPastUpperLimit()) {
+            // As in nextMonthly(): weekdays and months repeat every 400-year
+            // Gregorian cycle, so no match in a whole cycle means none at all.
+            if ($emptyDays > self::GREGORIAN_CYCLE_DAYS
+                || (null !== $this->until && $this->currentDate > $this->until)
+                || $this->isPastUpperLimit()) {
                 $this->currentDate = null;
 
                 return;
