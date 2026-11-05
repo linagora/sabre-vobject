@@ -518,14 +518,18 @@ OUT;
             $vcard
         );
 
-        // Swapping input and output
-        list(
-            $input,
-            $output,
-        ) = [
-            $output,
-            $input,
-        ];
+        // ANNIVERSARY appears at most once in a vCard 4.0: the other values
+        // stay as extensions.
+        $input = $output;
+        $output = <<<'OUT'
+BEGIN:VCARD
+VERSION:4.0
+ITEM1.ANNIVERSARY:20081210
+ITEM2.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20091210
+ITEM3.X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20101210
+END:VCARD
+
+OUT;
 
         /** @var VCard $vcard */
         $vcard = Reader::read($input);
@@ -769,5 +773,44 @@ VCF;
         self::assertCount(1, $back->select('ANNIVERSARY'));
         self::assertEmpty($back->ANNIVERSARY->group);
         self::assertSame('20100601', (string) $back->ANNIVERSARY);
+    }
+
+    public function testExtensionsDoNotMakeRepeatedSingleProperties(): void
+    {
+        $v3 = Reader::read(implode("\r\n", [
+            'BEGIN:VCARD', 'VERSION:3.0', 'UID:a', 'FN:a',
+            'ITEM1.X-ABDATE:20100601', 'ITEM1.X-ABLABEL:_$!<Anniversary>!$_',
+            'ITEM2.X-ABDATE:20200202', 'ITEM2.X-ABLABEL:_$!<Anniversary>!$_',
+            'X-ADDRESSBOOKSERVER-KIND:group', 'X-ABSHOWAS:COMPANY',
+            'END:VCARD', '',
+        ]));
+        $text = $v3->convert(Document::VCARD40)->serialize();
+        $v4 = Reader::read($text);
+
+        self::assertCount(1, $v4->select('ANNIVERSARY'));
+        self::assertCount(1, $v4->select('KIND'));
+        self::assertStringContainsString('ITEM2.X-ABDATE', $text);
+        self::assertStringContainsString('20200202', $text);
+        self::assertStringContainsString('ITEM2.X-ABLABEL:_$!<Anniversary>!$_', $text);
+        self::assertStringContainsString('X-ABSHOWAS:COMPANY', $text);
+        foreach ($v4->validate() as $message) {
+            self::assertLessThan(3, $message['level'], $message['message']);
+        }
+    }
+
+    public function testSeveralXAnniversariesAndKinds(): void
+    {
+        $v3 = Reader::read(implode("\r\n", [
+            'BEGIN:VCARD', 'VERSION:3.0', 'UID:a', 'FN:a',
+            'X-ANNIVERSARY:20100601', 'X-ANNIVERSARY:20200202', 'X-ANNIVERSARY:20100601',
+            'X-ADDRESSBOOKSERVER-KIND:group', 'X-ADDRESSBOOKSERVER-KIND:group',
+            'END:VCARD', '',
+        ]));
+        $v4 = $v3->convert(Document::VCARD40);
+
+        self::assertSame('20100601', (string) $v4->ANNIVERSARY);
+        self::assertCount(1, $v4->select('ANNIVERSARY'));
+        self::assertSame('20200202', (string) $v4->{'X-ANNIVERSARY'});
+        self::assertCount(1, $v4->select('KIND'));
     }
 }
