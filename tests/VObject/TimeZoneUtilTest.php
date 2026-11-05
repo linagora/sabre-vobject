@@ -537,4 +537,26 @@ HI;
             restore_error_handler();
         }
     }
+
+    public function testPropertyNamedVtimezone(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nVTIMEZONE:x\r\nEND:VCALENDAR\r\n");
+
+        // As esn-sabre's esn.php does.
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            self::assertSame(date_default_timezone_get(), TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    public function testComponentNamedTzidInAVtimezone(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nBEGIN:TZID\r\nEND:TZID\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n");
+
+        self::assertSame(date_default_timezone_get(), TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
 }
