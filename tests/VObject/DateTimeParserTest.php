@@ -187,6 +187,23 @@ class DateTimeParserTest extends TestCase
         DateTimeParser::parseDurationAsString('PT99999999999999999999H');
     }
 
+    #[DataProvider('hour24DateTimes')]
+    public function testHour24IsRejected(string $value): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseDateTime($value);
+    }
+
+    public static function hour24DateTimes(): array
+    {
+        return [['20260315T240000Z'], ['20260315T240000'], ['00260101T240022']];
+    }
+
+    public function testLastHourOfTheDayIsAccepted(): void
+    {
+        self::assertSame('2026-03-15T23:59:59+00:00', DateTimeParser::parseDateTime('20260315T235959Z')->format('c'));
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);
