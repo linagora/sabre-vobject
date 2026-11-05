@@ -740,4 +740,23 @@ VCF;
         self::assertCount(1, $v4->select('MEMBER'));
         self::assertCount(0, $v4->select('EMAIL'));
     }
+
+    public function testDataUriWithoutMediaTypeIsDecodedOnce(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO:data:;base64,QUJD\r\nEND:VCARD\r\n");
+        self::assertSame('ABC', $v4->convert(Document::VCARD30)->LOGO->getValue());
+    }
+
+    public function testDataUriWithAParameterIsKept(): void
+    {
+        $uri = 'data:text/plain;charset=utf-8,test';
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO:$uri\r\nEND:VCARD\r\n");
+        self::assertSame($uri, $v4->convert(Document::VCARD30)->LOGO->getValue());
+    }
+
+    public function testDataUriWithoutBase64IsPercentDecoded(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO:data:image/gif,a%20b\r\nEND:VCARD\r\n");
+        self::assertSame('a b', $v4->convert(Document::VCARD30)->LOGO->getValue());
+    }
 }
