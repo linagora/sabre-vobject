@@ -410,4 +410,53 @@ ICS;
 
         $this->process($itip, $old, $expected);
     }
+
+    private static function cancelInstance(string $stored, string $recurrenceId): \Sabre\VObject\Component\VCalendar
+    {
+        $message = new Message();
+        $message->method = 'CANCEL';
+        $message->component = 'VEVENT';
+        $message->uid = 'u1';
+        $message->sequence = 2;
+        $message->sender = 'mailto:o@example.com';
+        $message->recipient = 'mailto:a@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:CANCEL\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260102T000000Z\r\nSEQUENCE:2\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\n$recurrenceId\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        return (new Broker())->processMessage($message, Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\n$stored\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        ));
+    }
+
+    public function testCancelInstanceKeepsTheDatesOfEveryExdateLine(): void
+    {
+        $result = self::cancelInstance(
+            "DTSTART:20260105T100000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\nEXDATE:20260106T100000Z\r\nEXDATE:20260107T100000Z",
+            'RECURRENCE-ID:20260108T100000Z'
+        );
+
+        $excluded = [];
+        foreach ($result->VEVENT->select('EXDATE') as $exDate) {
+            foreach ($exDate->getDateTimes() as $dateTime) {
+                $excluded[] = $dateTime->format('Ymd\THis\Z');
+            }
+        }
+        sort($excluded);
+
+        self::assertSame(['20260106T100000Z', '20260107T100000Z', '20260108T100000Z'], $excluded);
+    }
+
+    public function testCancelInstanceOfAnAllDaySeriesKeepsDateExdates(): void
+    {
+        $result = self::cancelInstance(
+            "DTSTART;VALUE=DATE:20260105\r\nRRULE:FREQ=DAILY;COUNT=5\r\nEXDATE;VALUE=DATE:20260106\r\nEXDATE;VALUE=DATE:20260107",
+            'RECURRENCE-ID;VALUE=DATE:20260108'
+        );
+
+        self::assertSame('DATE', (string) $result->VEVENT->EXDATE['VALUE']);
+        self::assertSame(['20260106', '20260107', '20260108'], $result->VEVENT->EXDATE->getParts());
+    }
 }
