@@ -344,6 +344,23 @@ class FreeBusyGenerator
     }
 
     /**
+     * Returns the FBTYPE of an event or of one of its instances, or null when
+     * it does not take up time.
+     */
+    private function getFbType(VEvent $event): ?string
+    {
+        if (isset($event->TRANSP) && 'TRANSPARENT' === strtoupper((string) $event->TRANSP)) {
+            return null;
+        }
+
+        return match (isset($event->STATUS) ? strtoupper((string) $event->STATUS) : '') {
+            'CANCELLED' => null,
+            'TENTATIVE' => 'BUSY-TENTATIVE',
+            default => 'BUSY',
+        };
+    }
+
+    /**
      * This method takes an array of iCalendar objects and applies its busy
      * times on fbData.
      *
@@ -377,20 +394,6 @@ class FreeBusyGenerator
                 switch ($component->name) {
                     case 'VEVENT':
                         /** @var VEvent $component */
-                        $FBTYPE = 'BUSY';
-                        if (isset($component->TRANSP) && ('TRANSPARENT' === strtoupper($component->TRANSP))) {
-                            break;
-                        }
-                        if (isset($component->STATUS)) {
-                            $status = strtoupper($component->STATUS);
-                            if ('CANCELLED' === $status) {
-                                break;
-                            }
-                            if ('TENTATIVE' === $status) {
-                                $FBTYPE = 'BUSY-TENTATIVE';
-                            }
-                        }
-
                         $times = [];
 
                         if ($component->RRULE || $component->RDATE || isset($overriddenUids[(string) $component->UID])) {
@@ -415,14 +418,22 @@ class FreeBusyGenerator
                                 if ($this->end && $startTime > $this->end) {
                                     break;
                                 }
-                                $times[] = [
-                                    $iterator->getDTStart(),
-                                    $iterator->getDTEnd(),
-                                ];
+                                $fbType = $this->getFbType($iterator->getCurrentOverride() ?? $component);
+                                if (null !== $fbType) {
+                                    $times[] = [
+                                        $iterator->getDTStart(),
+                                        $iterator->getDTEnd(),
+                                        $fbType,
+                                    ];
+                                }
 
                                 $iterator->next();
                             }
                         } else {
+                            $fbType = $this->getFbType($component);
+                            if (null === $fbType) {
+                                break;
+                            }
                             $startTime = $component->DTSTART->getDateTime($this->timeZone);
                             if ($this->end && $startTime > $this->end) {
                                 break;
@@ -447,7 +458,7 @@ class FreeBusyGenerator
                                 break;
                             }
 
-                            $times[] = [$startTime, $endTime];
+                            $times[] = [$startTime, $endTime, $fbType];
                         }
 
                         foreach ($times as $time) {
@@ -455,13 +466,13 @@ class FreeBusyGenerator
                                 break;
                             }
                             if ($this->start && $time[1] < $this->start) {
-                                break;
+                                continue;
                             }
 
                             $fbData->add(
                                 $time[0]->getTimeStamp(),
                                 $time[1]->getTimeStamp(),
-                                $FBTYPE
+                                $time[2]
                             );
                         }
                         break;

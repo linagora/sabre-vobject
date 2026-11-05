@@ -354,6 +354,15 @@ class EventIterator implements \Iterator
     }
 
     /**
+     * Returns the override of the current instance, or null when the instance
+     * comes from the master. Unlike getEventObject(), this builds no VEVENT.
+     */
+    public function getCurrentOverride(): ?VEvent
+    {
+        return $this->currentOverriddenEvent;
+    }
+
+    /**
      * Returns a VEVENT for the current iterations of the event.
      *
      * This VEVENT will have a recurrence id, and its DTSTART and DTEND
