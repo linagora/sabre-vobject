@@ -240,11 +240,21 @@ class VCardConverter
                     // value, ignore. ANNIVERSARY appears at most once in a
                     // vCard 4.0 (RFC 6350 section 6.2.6): another value stays
                     // as an extension.
+                    // A native ANNIVERSARY wins, whatever the order of the lines.
+                    if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
+                        || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())) {
+                        return;
+                    }
+                    if (!isset($output->ANNIVERSARY) && !isset($input->ANNIVERSARY)) {
+                        $newProperty->name = 'ANNIVERSARY';
+                    }
+                    break;
+                case 'ANNIVERSARY':
                     if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())) {
                         return;
                     }
-                    if (!isset($output->ANNIVERSARY)) {
-                        $newProperty->name = 'ANNIVERSARY';
+                    if (isset($output->ANNIVERSARY)) {
+                        $newProperty->name = 'X-ANNIVERSARY';
                     }
                     break;
                 case 'X-ABDATE':
@@ -263,10 +273,11 @@ class VCardConverter
                     // value, ignore. X-ANNIVERSARY holds the same anniversary
                     // with its own group, whichever is converted first.
                     if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
+                        || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())
                         || self::hasValue($input, 'X-ANNIVERSARY', (string) $newProperty->getValue())) {
                         return;
                     }
-                    if (isset($output->ANNIVERSARY)) {
+                    if (isset($output->ANNIVERSARY) || isset($input->ANNIVERSARY)) {
                         // Another anniversary stays as an extension, with its
                         // label, which is otherwise dropped below.
                         $output->add($output->createProperty($property->group.'.X-ABLABEL', $label->getValue()));
