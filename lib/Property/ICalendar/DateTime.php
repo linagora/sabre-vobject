@@ -204,10 +204,12 @@ class DateTime extends Property
         if ($this->hasTime()) {
             $tz = null;
             $isUtc = false;
+            $keepsInstants = true;
 
             foreach ($dt as $d) {
                 if ($isFloating) {
                     $values[] = $d->format('Ymd\\THis');
+                    $keepsInstants = $keepsInstants && self::localTimeKeepsInstant($d);
                     continue;
                 }
                 if (is_null($tz)) {
@@ -224,7 +226,18 @@ class DateTime extends Property
                     $values[] = $d->format('Ymd\\THis\\Z');
                 } else {
                     $values[] = $d->format('Ymd\\THis');
+                    $keepsInstants = $keepsInstants && self::localTimeKeepsInstant($d);
                 }
+            }
+            // The second occurrence of a local time that occurs twice cannot
+            // be written as a local time, which refers to the first (RFC 5545
+            // section 3.3.5): such a property is written in UTC.
+            if (!$keepsInstants) {
+                $values = [];
+                foreach ($dt as $d) {
+                    $values[] = $d->setTimeZone(new \DateTimeZone('UTC'))->format('Ymd\\THis\\Z');
+                }
+                $isUtc = true;
             }
             if ($isUtc || $isFloating) {
                 $this->offsetUnset('TZID');
@@ -237,6 +250,20 @@ class DateTime extends Property
         }
 
         $this->value = $values;
+    }
+
+    /**
+     * Returns true if the local time of a date, read back in its time zone,
+     * is the same instant.
+     */
+    private static function localTimeKeepsInstant(\DateTimeInterface $date): bool
+    {
+        try {
+            return DateTimeParser::parseDateTime($date->format('Ymd\\THis'), $date->getTimezone())->getTimestamp() === $date->getTimestamp();
+        } catch (InvalidDataException) {
+            // A year that the text form cannot hold: nothing to compare with.
+            return true;
+        }
     }
 
     /**

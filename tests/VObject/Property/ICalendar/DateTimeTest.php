@@ -546,4 +546,40 @@ class DateTimeTest extends TestCase
             'floating then utc' => [['20261026T023000', '20261026T022000Z'], [], ['2026-10-26T02:30:00', '2026-10-26T02:20:00Z']],
         ];
     }
+
+    public function testSetDateTimesKeepsSecondOccurrenceOfRepeatedHour(): void
+    {
+        $vcal = new VCalendar();
+        $vevent = $vcal->add('VEVENT');
+        $prop = $vevent->add('EXDATE', ['20261024T023000', '20261025T010000Z'], ['TZID' => 'Europe/Paris']);
+        $dts = $prop->getDateTimes();
+        $before = array_map(fn ($d) => $d->getTimestamp(), $dts);
+
+        $prop->setDateTimes($dts);
+
+        self::assertSame($before, array_map(fn ($d) => $d->getTimestamp(), $prop->getDateTimes()));
+        self::assertFalse(isset($prop['TZID']));
+    }
+
+    public function testSetDateTimeKeepsTheTzidOfTheFirstOccurrenceOfRepeatedHour(): void
+    {
+        $vcal = new VCalendar();
+        $prop = $vcal->createProperty('DTSTART');
+        // 01:15 EDT is the first 01:15 of that day.
+        $prop->setDateTime((new \DateTimeImmutable('2026-11-01T05:15:00Z'))->setTimezone(new \DateTimeZone('America/New_York')));
+
+        self::assertSame('America/New_York', (string) $prop['TZID']);
+        self::assertSame('20261101T011500', $prop->getValue());
+    }
+
+    public function testSetDateTimeWritesSecondOccurrenceOfRepeatedHourInUtc(): void
+    {
+        $vcal = new VCalendar();
+        $prop = $vcal->createProperty('DTSTART');
+        // 01:15 EST is the second 01:15 of that day.
+        $prop->setDateTime((new \DateTimeImmutable('2026-11-01T06:15:00Z'))->setTimezone(new \DateTimeZone('America/New_York')));
+
+        self::assertFalse(isset($prop['TZID']));
+        self::assertSame('20261101T061500Z', $prop->getValue());
+    }
 }
