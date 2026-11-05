@@ -102,7 +102,13 @@ class GuessFromMsTzId implements TimezoneGuesser
         if (!isset($vtimezone->{'X-MICROSOFT-CDO-TZID'})) {
             return null;
         }
-        $cdoId = (int) $vtimezone->{'X-MICROSOFT-CDO-TZID'}->getValue();
+        // A value that is not a number is not a CDO id: casting it would give
+        // its leading digits, or 0, which means UTC.
+        $value = trim((string) $vtimezone->{'X-MICROSOFT-CDO-TZID'}->getValue());
+        if (!ctype_digit($value)) {
+            return null;
+        }
+        $cdoId = (int) $value;
 
         // 2 can mean both Europe/Lisbon and Europe/Sarajevo.
         if (2 === $cdoId && str_contains((string) $vtimezone->TZID, 'Sarajevo')) {
