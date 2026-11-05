@@ -5,6 +5,7 @@ namespace Sabre\VObject\Parser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\Node;
 use Sabre\VObject\ParseException;
 use Sabre\VObject\Property;
 use Sabre\VObject\Reader;
@@ -437,5 +438,23 @@ EOF;
         self::assertSame(['b:c', 'd'], $card->NOTE['X-A']->getParts());
         self::assertSame('f', (string) $card->NOTE['X-E']);
         self::assertSame('g:h;i=j', (string) $card->NOTE);
+    }
+
+    public function testCarriageReturnInValueParameterDoesNotChangeTheClassOnReread(): void
+    {
+        $cal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;VALUE=TEXT\r:20260301T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        self::assertSame(
+            Reader::read($cal->serialize())->VEVENT->DTSTART::class,
+            $cal->VEVENT->DTSTART::class
+        );
+        // Without the CR, this value type is refused at level 3.
+        self::assertSame(3, max(array_column($cal->validate(Node::PROFILE_CALDAV), 'level')));
+
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nX-A;VALUE=\"DA\rTE\":20260301\r\nEND:VCARD\r\n");
+        self::assertSame(Reader::read($card->serialize())->{'X-A'}::class, $card->{'X-A'}::class);
     }
 }

@@ -772,7 +772,10 @@ class MimeDir extends Parser
                     }
                     // @codeCoverageIgnoreEnd
                 },
-                $input
+                // The property class is chosen from these values, before the
+                // Parameter is created: a bare carriage return is dropped here
+                // too, so that the class matches the value that is stored.
+                str_replace("\r", '', $input)
             );
     }
 
