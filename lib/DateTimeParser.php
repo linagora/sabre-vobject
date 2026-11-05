@@ -30,7 +30,7 @@ class DateTimeParser
     public static function parseDateTime(string $dt, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
         // Format is YYYYMMDD + "T" + hhmmss
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([0-2][0-9])([0-5][0-9])([0-5][0-9])([Z]?)\z/', $dt, $matches);
+        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([01][0-9]|2[0-3])([0-5][0-9])([0-5][0-9])([Z]?)\z/', $dt, $matches);
 
         if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
