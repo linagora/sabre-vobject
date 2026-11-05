@@ -534,4 +534,20 @@ VCF;
         self::assertSame('URI', (string) $cal->VEVENT->CONFERENCE['VALUE']);
         self::assertSame('DATE', (string) $cal->VEVENT->DTSTART['VALUE']);
     }
+
+    public function testLoneNullValueGivesADocumentThatRoundTrips(): void
+    {
+        $documents = [
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["bday",{},"date-and-or-time",null]]]',
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["url",{},"uri",null]]]',
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["x-a",{},"text",null]]]',
+            '["vcalendar",[["version",{},"text","2.0"],["prodid",{},"text","p"]],[["vevent",[["uid",{},"text","a"],["dtstamp",{},"date-time","2026-01-01T00:00:00Z"],["dtstart",{},"date-time","2026-01-01T00:00:00Z"],["x-a",{},"uri",null]]]]]',
+        ];
+        foreach ($documents as $json) {
+            $document = VObject\Reader::readJson($json);
+            $document->validate();
+            $again = json_encode($document->jsonSerialize(), JSON_THROW_ON_ERROR);
+            self::assertSame($again, json_encode(VObject\Reader::readJson($again)->jsonSerialize(), JSON_THROW_ON_ERROR));
+        }
+    }
 }
