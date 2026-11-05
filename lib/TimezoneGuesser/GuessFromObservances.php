@@ -6,6 +6,7 @@ namespace Sabre\VObject\TimezoneGuesser;
 
 use Sabre\VObject\Component;
 use Sabre\VObject\Component\VTimeZone;
+use Sabre\VObject\Property;
 
 /**
  * Builds a time zone from the STANDARD and DAYLIGHT observances of a
@@ -163,15 +164,18 @@ class GuessFromObservances implements TimezoneGuesser
      */
     private function parseObservance(Component $observance): ?array
     {
-        $from = $this->parseOffset((string) $observance->TZOFFSETFROM);
-        $to = $this->parseOffset((string) $observance->TZOFFSETTO);
-        $local = $this->parseLocal((string) $observance->DTSTART);
+        $from = $this->parseOffset((string) $this->firstProperty($observance, 'TZOFFSETFROM'));
+        $to = $this->parseOffset((string) $this->firstProperty($observance, 'TZOFFSETTO'));
+        $local = $this->parseLocal((string) $this->firstProperty($observance, 'DTSTART'));
         if (null === $from || null === $to || null === $local) {
             return null;
         }
 
         $rdates = [];
         foreach ($observance->select('RDATE') as $rdate) {
+            if (!$rdate instanceof Property) {
+                continue;
+            }
             foreach ($rdate->getParts() as $value) {
                 $parsed = $this->parseLocal((string) $value);
                 if (null !== $parsed) {
@@ -180,10 +184,7 @@ class GuessFromObservances implements TimezoneGuesser
             }
         }
 
-        $rrule = null;
-        if (isset($observance->RRULE)) {
-            $rrule = $observance->RRULE->getParts();
-        }
+        $rrule = $this->firstProperty($observance, 'RRULE')?->getParts();
 
         return [
             'name' => $observance->name,
@@ -194,6 +195,21 @@ class GuessFromObservances implements TimezoneGuesser
             'rrule' => $rrule,
             'rdates' => $rdates,
         ];
+    }
+
+    /**
+     * Returns the first property of that name: an observance may also hold a
+     * component with the same name, which has no value.
+     */
+    private function firstProperty(Component $observance, string $name): ?Property
+    {
+        foreach ($observance->select($name) as $child) {
+            if ($child instanceof Property) {
+                return $child;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sabre\VObject\TimezoneGuesser;
 
 use Sabre\VObject\Component\VTimeZone;
+use Sabre\VObject\Property;
 
 class GuessFromMsTzId implements TimezoneGuesser
 {
@@ -99,7 +100,7 @@ class GuessFromMsTzId implements TimezoneGuesser
     {
         // Microsoft may add a magic number, which we also have an
         // answer for.
-        if (!isset($vtimezone->{'X-MICROSOFT-CDO-TZID'})) {
+        if (!$vtimezone->{'X-MICROSOFT-CDO-TZID'} instanceof Property) {
             return null;
         }
         // A value that is not a number is not a CDO id: casting it would give
