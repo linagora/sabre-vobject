@@ -484,4 +484,38 @@ HI;
     {
         return [['1a'], ['Customized Time Zone'], ['']];
     }
+
+    #[DataProvider('observanceChildComponents')]
+    public function testComponentNamedLikeAnObservanceProperty(string $name): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\n"
+            ."DTSTART:20200101T030000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nBEGIN:$name\r\nEND:$name\r\n"
+            ."END:STANDARD\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
+        );
+
+        self::assertSame('+01:00', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
+
+    public static function observanceChildComponents(): array
+    {
+        return [['RDATE'], ['RRULE'], ['TZOFFSETTO'], ['DTSTART']];
+    }
+
+    #[DataProvider('vtimezoneChildComponents')]
+    public function testComponentNamedLikeAVtimezoneProperty(string $name): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:$name\r\nEND:$name\r\nBEGIN:STANDARD\r\n"
+            ."DTSTART:20200101T030000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\n"
+            ."END:STANDARD\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
+        );
+
+        self::assertSame('+01:00', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
+
+    public static function vtimezoneChildComponents(): array
+    {
+        return [['X-LIC-LOCATION'], ['X-MICROSOFT-CDO-TZID']];
+    }
 }
