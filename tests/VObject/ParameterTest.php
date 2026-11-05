@@ -183,4 +183,25 @@ class ParameterTest extends TestCase
 
         self::assertSame('X-P=a,"b:c","d^ne^^f^\'g","+"', $prop['X-P']->serialize());
     }
+
+    public function testCarriageReturnInJsonParameterIsNormalizedLikeInMimeDir(): void
+    {
+        $card = Reader::readJson(json_encode(['vcard', [
+            ['version', new \stdClass(), 'text', '4.0'],
+            ['fn', new \stdClass(), 'text', 'x'],
+            ['note', ['x-a' => "a\rb", 'x-b' => ["\r", 'c']], 'text', 'x'],
+        ]]));
+        $reread = Reader::read($card->serialize());
+
+        self::assertSame(['ab'], $reread->NOTE['X-A']->getParts());
+        self::assertSame(['ab'], $card->NOTE['X-A']->getParts());
+        self::assertSame('ab', $card->NOTE->jsonSerialize()[1]->{'x-a'});
+        self::assertSame(['', 'c'], $card->NOTE['X-B']->getParts());
+        self::assertSame(['', 'c'], $reread->NOTE['X-B']->getParts());
+
+        $card->NOTE['X-A']->addValue("d\re");
+        $card->NOTE['X-B']->setParts(["f\rg"]);
+        self::assertSame(['ab', 'de'], $card->NOTE['X-A']->getParts());
+        self::assertSame(['fg'], $card->NOTE['X-B']->getParts());
+    }
 }
