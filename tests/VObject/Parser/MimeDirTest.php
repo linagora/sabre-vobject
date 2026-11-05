@@ -458,4 +458,17 @@ EOF;
         $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nX-A;VALUE=\"DA\rTE\":20260301\r\nEND:VCARD\r\n");
         self::assertSame(Reader::read($card->serialize())->{'X-A'}::class, $card->{'X-A'}::class);
     }
+
+    public function testLineZeroFollowedByAFoldIsAProperty(): void
+    {
+        $cal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n0\r\n :a\r\nEND:VCALENDAR\r\n");
+        self::assertStringContainsString("\r\n0:a\r\n", $cal->serialize());
+    }
+
+    public function testPropertyNamedZeroWithContinuationBytesReadsBack(): void
+    {
+        $value = str_repeat("\x99", 80);
+        $text = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n0:$value\r\nEND:VCALENDAR\r\n")->serialize();
+        self::assertStringContainsString($value, Reader::read($text)->serialize());
+    }
 }

@@ -346,7 +346,7 @@ class MimeDir extends Parser
         while (true) {
             $nextLine = \rtrim(\fgets($this->input), "\r\n");
             ++$this->lineIndex;
-            if (!$nextLine) {
+            if ('' === $nextLine) {
                 break;
             }
             if ("\t" === $nextLine[0] || ' ' === $nextLine[0]) {
@@ -816,7 +816,7 @@ class MimeDir extends Parser
         // missing a whitespace. So if 'forgiving' is turned on, we will take
         // those as well.
         if ($this->options & self::OPTION_FORGIVING) {
-            while (str_ends_with($value, '=') && $this->lineBuffer) {
+            while (str_ends_with($value, '=') && null !== $this->lineBuffer) {
                 // Reading the line
                 $this->readLine();
                 // Grabbing the raw form
