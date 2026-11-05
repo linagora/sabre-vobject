@@ -1073,9 +1073,17 @@ class Broker
                         }
                         // The values of a list part form a set: their
                         // order and repetitions do not change the rule.
+                        //
+                        // A number may be written in several ways (5, 05, +5).
+                        if (str_starts_with((string) $key, 'BY')) {
+                            $val = array_map(
+                                static fn ($item) => preg_replace('/^(-?)\+?0*(\d)/', '$1$2', (string) $item),
+                                (array) $val
+                            );
+                        }
                         if (is_array($val)) {
                             $val = array_unique($val);
-                            sort($val);
+                            sort($val, SORT_STRING);
                             $val = implode(',', $val);
                         }
                         $rrule[] = "$key=$val";
