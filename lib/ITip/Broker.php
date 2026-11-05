@@ -410,8 +410,15 @@ class Broker
                 }
                 $masterTimeZone = $masterObject->DTSTART->getDateTime()->getTimeZone();
 
-                if (isset($masterObject->EXDATE)) {
-                    $exDates = $masterObject->EXDATE->getDateTimes();
+                // EXDATE is a repeatable property: all its lines are merged below.
+                foreach ($masterObject->select('EXDATE') as $exDateProperty) {
+                    if (!$exDateProperty instanceof Property\ICalendar\DateTime) {
+                        throw new InvalidDataException('An EXDATE MUST hold DATE or DATE-TIME values.');
+                    }
+                    $exDates = array_merge($exDates, $exDateProperty->getDateTimes());
+                }
+
+                if ($exDates) {
                     // We only need to update the first timezone, because
                     // setDateTimes will match all other timezones to the
                     // first.
@@ -434,7 +441,7 @@ class Broker
 
                 $masterObject->remove('EXDATE');
 
-                $masterObject->add('EXDATE', array_values($exDates));
+                $masterObject->add('EXDATE', array_values($exDates), $masterObject->DTSTART->hasTime() ? [] : ['VALUE' => 'DATE']);
 
                 // If TZ has been translated to a standard TZ during conversion, we're putting back the original name
                 if (isset($masterObject->EXDATE['TZID'])) {
