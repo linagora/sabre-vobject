@@ -354,7 +354,26 @@ class FreeBusyGenerator
     protected function calculateBusy(FreeBusyData $fbData, array $objects): void
     {
         foreach ($objects as $key => $object) {
-            foreach ($object->getBaseComponents() as $component) {
+            // A UID with an override is recurring even if its master has no
+            // RRULE or RDATE. Without a master, its first override stands in
+            // for it: the iterator yields all the instances of the UID.
+            $components = $object->getBaseComponents();
+            $masterUids = [];
+            foreach ($components as $component) {
+                $masterUids[(string) $component->UID] = true;
+            }
+            $overriddenUids = [];
+            foreach ($object->select('VEVENT') as $vevent) {
+                $uid = (string) $vevent->UID;
+                if (isset($vevent->{'RECURRENCE-ID'}) && '' !== $uid && !isset($overriddenUids[$uid])) {
+                    $overriddenUids[$uid] = true;
+                    if (!isset($masterUids[$uid])) {
+                        $components[] = $vevent;
+                    }
+                }
+            }
+
+            foreach ($components as $component) {
                 switch ($component->name) {
                     case 'VEVENT':
                         /** @var VEvent $component */
@@ -374,7 +393,7 @@ class FreeBusyGenerator
 
                         $times = [];
 
-                        if ($component->RRULE || $component->RDATE) {
+                        if ($component->RRULE || $component->RDATE || isset($overriddenUids[(string) $component->UID])) {
                             try {
                                 $iterator = new EventIterator($object, (string) $component->UID, $this->timeZone);
                             } catch (NoInstancesException) {
