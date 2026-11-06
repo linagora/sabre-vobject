@@ -1573,4 +1573,24 @@ ICS,
         }
         self::assertSame(['20260107T180000' => 'DECLINED', '20260108T100000' => 'ACCEPTED'], $statuses);
     }
+
+    private const EMPTY_PARTSTAT_COPY = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260102T000000Z\r\n"
+        ."DTSTART:20260105T100000Z\r\nORGANIZER:mailto:strunk@example.org\r\nATTENDEE;PARTSTAT=%s:mailto:one@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+    public function testNewCopyWithEmptyPartstatIsNotAResponse(): void
+    {
+        self::assertSame([], (new Broker())->parseEvent(sprintf(self::EMPTY_PARTSTAT_COPY, ''), 'mailto:one@example.org'));
+    }
+
+    public function testEmptyPartstatInAnUpdateRepliesWithTheDefault(): void
+    {
+        $messages = (new Broker())->parseEvent(
+            sprintf(self::EMPTY_PARTSTAT_COPY, ''),
+            'mailto:one@example.org',
+            sprintf(self::EMPTY_PARTSTAT_COPY, 'ACCEPTED')
+        );
+
+        self::assertCount(1, $messages);
+        self::assertSame('NEEDS-ACTION', (string) $messages[0]->message->VEVENT->ATTENDEE['PARTSTAT']);
+    }
 }
