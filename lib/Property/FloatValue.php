@@ -53,11 +53,18 @@ class FloatValue extends Property
      * Writes a float as RFC 5545 section 3.3.7 defines it, without an exponent,
      * with the fewest digits that read back as the same float, whatever the
      * precision setting of PHP.
+     *
+     * RFC 5545 has no form for an infinite float, and validate() refuses it. It
+     * can still be read on a path that does not validate, and is written as a
+     * value that reads back as itself: INF would read back as 0.
      */
     private static function formatFloat(mixed $value): string
     {
         $float = (float) $value;
-        if (!is_finite($float)) {
+        if (is_infinite($float)) {
+            return $float < 0 ? '-1e999' : '1e999';
+        }
+        if (is_nan($float)) {
             return (string) $float;
         }
 
