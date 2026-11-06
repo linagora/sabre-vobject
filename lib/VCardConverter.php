@@ -185,10 +185,16 @@ class VCardConverter
                 $parts = DateTimeParser::parseVCardDateTime($property->getValue());
                 if ($parts['year'] === $property['X-APPLE-OMIT-YEAR']->getValue()) {
                     $time = $this->getTimePart($property->getValue());
-                    $newValue = '' === $time
-                        ? '--'.$parts['month'].'-'.$parts['date']
-                        : '--'.$parts['month'].$parts['date'].$time;
-                    $newProperty->setValue($newValue);
+                    // Without a month, the year is all the value says: it is
+                    // kept. Without a day, only --MM has no year (RFC 6350
+                    // section 4.3.1).
+                    if (!is_null($parts['month']) && !is_null($parts['date'])) {
+                        $newProperty->setValue('' === $time
+                            ? '--'.$parts['month'].'-'.$parts['date']
+                            : '--'.$parts['month'].$parts['date'].$time);
+                    } elseif (!is_null($parts['month']) && '' === $time) {
+                        $newProperty->setValue('--'.$parts['month']);
+                    }
                 }
 
                 // Regardless if the year matched or not, we do need to strip
