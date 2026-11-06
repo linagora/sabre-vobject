@@ -422,10 +422,17 @@ class EventIterator implements \Iterator
         $event->DTSTART->setDateTime($dtStart, $event->DTSTART->isFloating());
         if (isset($event->DTEND)) {
             $dtEnd = $this->getDtEnd();
-            if ($event->DTEND->hasTime() && $event->DTEND->isFloating()) {
+            $floating = $event->DTEND->isFloating();
+            // The end of an instance with a time has a time, even if the
+            // master has a DATE in DTEND: a date would truncate it.
+            if ($event->DTSTART->hasTime() && !$event->DTEND->hasTime()) {
+                unset($event->DTEND['VALUE']);
+                $floating = $event->DTSTART->isFloating();
+            }
+            if ($event->DTEND->hasTime() && $floating) {
                 $dtEnd = $dtEnd->setTimezone($this->timeZone);
             }
-            $event->DTEND->setDateTime($dtEnd, $event->DTEND->isFloating());
+            $event->DTEND->setDateTime($dtEnd, $floating);
         }
         $recurid = clone $event->DTSTART;
         $recurid->name = 'RECURRENCE-ID';
