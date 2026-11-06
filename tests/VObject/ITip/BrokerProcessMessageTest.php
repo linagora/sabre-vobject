@@ -2,9 +2,11 @@
 
 namespace Sabre\VObject\ITip;
 
+use Sabre\VObject\Reader;
+
 class BrokerProcessMessageTest extends BrokerTester
 {
-    public function testRequestNew()
+    public function testRequestNew(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -27,10 +29,10 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, null, $expected);
+        $this->process($itip, null, $expected);
     }
 
-    public function testRequestUpdate()
+    public function testRequestUpdate(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -61,10 +63,10 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testCancel()
+    public function testCancel(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -96,10 +98,69 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testCancelNoExistingEvent()
+    /**
+     * The CANCEL that the organizer sends to a removed attendee of an event
+     * without SEQUENCE has no sequence: the cancelled copy of the attendee
+     * gets the default sequence 0, and can be serialized.
+     */
+    public function testCancelWithoutSequence(): void
+    {
+        $organizerOld = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:strunk@example.org
+ATTENDEE:mailto:one@example.org
+ATTENDEE:mailto:two@example.org
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $organizerNew = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:strunk@example.org
+ATTENDEE:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS);
+        $attendeeCopy = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:strunk@example.org
+ATTENDEE:mailto:one@example.org
+ATTENDEE:mailto:two@example.org
+END:VEVENT
+END:VCALENDAR
+ICS);
+
+        $broker = new Broker();
+        $cancels = array_values(array_filter(
+            $broker->parseEvent($organizerNew, 'mailto:strunk@example.org', $organizerOld),
+            fn (Message $message) => 'CANCEL' === $message->method
+        ));
+        self::assertCount(1, $cancels);
+        self::assertSame('mailto:two@example.org', $cancels[0]->recipient);
+        self::assertNull($cancels[0]->sequence);
+
+        $result = $broker->processMessage($cancels[0], $attendeeCopy);
+
+        self::assertSame('CANCELLED', (string) $result->VEVENT->STATUS);
+        self::assertSame(0, $result->VEVENT->SEQUENCE->getValue());
+        self::assertStringContainsString("SEQUENCE:0\r\n", $result->serialize());
+    }
+
+    public function testCancelNoExistingEvent(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -115,10 +176,205 @@ ICS;
         $old = null;
         $expected = null;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testUnsupportedComponent()
+    public function testCancelInstanceOfRecurring(): void
+    {
+        $itip = <<<ICS
+BEGIN:VCALENDAR
+METHOD:CANCEL
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:Romance Standard Time
+BEGIN:STANDARD
+DTSTART:16010101T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+UID:uid
+RECURRENCE-ID;TZID=Romance Standard Time:20180320T160000
+SUMMARY:CANCEL
+DTSTART;TZID=Romance Standard Time:20180320T160000
+DTEND;TZID=Romance Standard Time:20180320T163000
+DTSTAMP:20180316T132714Z
+STATUS:CANCELLED
+SEQUENCE:1
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:Romance Standard Time
+BEGIN:STANDARD
+DTSTART:16010101T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+RRULE:FREQ=DAILY;UNTIL=20180323T150000Z;INTERVAL=1
+UID:uid
+SUMMARY:Rec Test
+DTSTART;TZID=Romance Standard Time:20180319T160000
+DTEND;TZID=Romance Standard Time:20180319T163000
+DTSTAMP:20180316T132615Z
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $expected = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:Romance Standard Time
+BEGIN:STANDARD
+DTSTART:16010101T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+RRULE:FREQ=DAILY;UNTIL=20180323T150000Z;INTERVAL=1
+UID:uid
+SUMMARY:Rec Test
+DTSTART;TZID=Romance Standard Time:20180319T160000
+DTEND;TZID=Romance Standard Time:20180319T163000
+DTSTAMP:20180316T132615Z
+SEQUENCE:0
+EXDATE;TZID=Romance Standard Time:20180320T160000
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->process($itip, $old, $expected);
+    }
+
+    public function testCancelExistingInstanceOfRecurring(): void
+    {
+        $itip = <<<ICS
+BEGIN:VCALENDAR
+METHOD:CANCEL
+VERSION:2.0
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+UID:uid
+RECURRENCE-ID:20180320T160000Z
+SUMMARY:CANCEL
+DTSTART:20180320T160000Z
+DTEND:20180320T163000Z
+DTSTAMP:20180316T132714Z
+STATUS:CANCELLED
+SEQUENCE:1
+END:VEVENT
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+UID:uid
+RECURRENCE-ID:20180320T160000Z
+SUMMARY:CANCEL
+DTSTART:20180320T160000Z
+DTEND:20180320T163000Z
+DTSTAMP:20180316T132714Z
+STATUS:CANCELLED
+SEQUENCE:1
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+RRULE:FREQ=DAILY;UNTIL=20180323T150000Z;INTERVAL=1
+UID:uid
+SUMMARY:Rec Test
+DTSTART:20180319T160000Z
+DTEND:20180319T163000Z
+DTSTAMP:20180316T132615Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+UID:uid
+RECURRENCE-ID:20180320T160000Z
+SUMMARY:Modified Test
+DTSTART:20180320T160000Z
+DTEND:20180320T163000Z
+DTSTAMP:20180316T132714Z
+STATUS:CANCELLED
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $expected = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+ORGANIZER;CN=Test:MAILTO:test@linagora.com
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=user:MAILT
+ O:one@example.org
+RRULE:FREQ=DAILY;UNTIL=20180323T150000Z;INTERVAL=1
+UID:uid
+SUMMARY:Rec Test
+DTSTART:20180319T160000Z
+DTEND:20180319T163000Z
+DTSTAMP:20180316T132615Z
+SEQUENCE:0
+EXDATE:20180320T160000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->process($itip, $old, $expected);
+    }
+
+    public function testUnsupportedComponent(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -133,10 +389,10 @@ ICS;
         $old = null;
         $expected = null;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testUnsupportedMethod()
+    public function testUnsupportedMethod(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -152,6 +408,55 @@ ICS;
         $old = null;
         $expected = null;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
+    }
+
+    private static function cancelInstance(string $stored, string $recurrenceId): \Sabre\VObject\Component\VCalendar
+    {
+        $message = new Message();
+        $message->method = 'CANCEL';
+        $message->component = 'VEVENT';
+        $message->uid = 'u1';
+        $message->sequence = 2;
+        $message->sender = 'mailto:o@example.com';
+        $message->recipient = 'mailto:a@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:CANCEL\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260102T000000Z\r\nSEQUENCE:2\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\n$recurrenceId\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        return (new Broker())->processMessage($message, Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\n$stored\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        ));
+    }
+
+    public function testCancelInstanceKeepsTheDatesOfEveryExdateLine(): void
+    {
+        $result = self::cancelInstance(
+            "DTSTART:20260105T100000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\nEXDATE:20260106T100000Z\r\nEXDATE:20260107T100000Z",
+            'RECURRENCE-ID:20260108T100000Z'
+        );
+
+        $excluded = [];
+        foreach ($result->VEVENT->select('EXDATE') as $exDate) {
+            foreach ($exDate->getDateTimes() as $dateTime) {
+                $excluded[] = $dateTime->format('Ymd\THis\Z');
+            }
+        }
+        sort($excluded);
+
+        self::assertSame(['20260106T100000Z', '20260107T100000Z', '20260108T100000Z'], $excluded);
+    }
+
+    public function testCancelInstanceOfAnAllDaySeriesKeepsDateExdates(): void
+    {
+        $result = self::cancelInstance(
+            "DTSTART;VALUE=DATE:20260105\r\nRRULE:FREQ=DAILY;COUNT=5\r\nEXDATE;VALUE=DATE:20260106\r\nEXDATE;VALUE=DATE:20260107",
+            'RECURRENCE-ID;VALUE=DATE:20260108'
+        );
+
+        self::assertSame('DATE', (string) $result->VEVENT->EXDATE['VALUE']);
+        self::assertSame(['20260106', '20260107', '20260108'], $result->VEVENT->EXDATE->getParts());
     }
 }

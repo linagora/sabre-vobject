@@ -2,14 +2,13 @@
 
 namespace Sabre\VObject\Recur;
 
-use DateTime;
-use DateTimeImmutable;
-use DateTimeZone;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\InvalidDataException;
 
 class RRuleIteratorTest extends TestCase
 {
-    public function testHourly()
+    public function testHourly(): void
     {
         $this->parse(
             'FREQ=HOURLY;INTERVAL=3;COUNT=12',
@@ -31,7 +30,222 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testDaily()
+    public function testMinutely(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=15;COUNT=4',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-01 23:50:00',
+                '2026-11-02 00:05:00',
+                '2026-11-02 00:20:00',
+                '2026-11-02 00:35:00',
+            ]
+        );
+    }
+
+    public function testMinutelyWithoutEnd(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-01 23:50:00',
+                '2026-11-01 23:51:00',
+                '2026-11-01 23:52:00',
+            ]
+        );
+    }
+
+    public function testMinutelyUntil(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=20;UNTIL=20261102T003000Z',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-01 23:50:00',
+                '2026-11-02 00:10:00',
+                '2026-11-02 00:30:00',
+            ]
+        );
+    }
+
+    public function testMinutelyFastForward(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=10',
+            '2026-11-01 23:50:00',
+            [
+                '2026-11-02 01:00:00',
+                '2026-11-02 01:10:00',
+            ],
+            '2026-11-02 00:55:00'
+        );
+    }
+
+    public function testMinutelyAcrossDstEnd(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=30;COUNT=4',
+            '2026-10-25 01:30:00',
+            [
+                '2026-10-25 01:30:00',
+                '2026-10-25 02:00:00',
+                '2026-10-25 02:30:00',
+                '2026-10-25 02:00:00',
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testMinutelyAcrossDstStart(): void
+    {
+        $this->parse(
+            'FREQ=MINUTELY;INTERVAL=30;COUNT=3',
+            '2026-03-29 01:30:00',
+            [
+                '2026-03-29 01:30:00',
+                '2026-03-29 03:00:00',
+                '2026-03-29 03:30:00',
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testSecondly(): void
+    {
+        $this->parse(
+            'FREQ=SECONDLY;INTERVAL=30;COUNT=3',
+            '2026-11-01 23:59:00',
+            [
+                '2026-11-01 23:59:00',
+                '2026-11-01 23:59:30',
+                '2026-11-02 00:00:00',
+            ]
+        );
+    }
+
+    /**
+     * @param string[] $expected
+     */
+    #[DataProvider('dst2HourlyTransitionProvider')]
+    public function test2HourlyOnDstTransition(string $start, array $expected): void
+    {
+        $this->parse(
+            'FREQ=HOURLY;INTERVAL=2;COUNT=5',
+            $start,
+            $expected,
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public static function dst2HourlyTransitionProvider(): iterable
+    {
+        yield 'On transition start' => [
+            'start' => '2023-03-26 00:00:00',
+            'expected' => [
+                '2023-03-26 00:00:00',
+                '2023-03-26 03:00:00',
+                '2023-03-26 04:00:00',
+                '2023-03-26 06:00:00',
+                '2023-03-26 08:00:00',
+            ],
+        ];
+        yield 'During transition' => [
+            'start' => '2023-03-26 00:15:00',
+            'expected' => [
+                '2023-03-26 00:15:00',
+                '2023-03-26 03:15:00',
+                '2023-03-26 04:15:00',
+                '2023-03-26 06:15:00',
+                '2023-03-26 08:15:00',
+            ],
+        ];
+        yield 'On transition end' => [
+            'start' => '2023-03-26 01:00:00',
+            'expected' => [
+                '2023-03-26 01:00:00',
+                '2023-03-26 03:00:00',
+                '2023-03-26 05:00:00',
+                '2023-03-26 07:00:00',
+                '2023-03-26 09:00:00',
+            ],
+        ];
+        yield 'After transition end' => [
+            'start' => '2023-03-26 01:15:00',
+            'expected' => [
+                '2023-03-26 01:15:00',
+                '2023-03-26 03:15:00',
+                '2023-03-26 05:15:00',
+                '2023-03-26 07:15:00',
+                '2023-03-26 09:15:00',
+            ],
+        ];
+    }
+
+    /**
+     * @param string[] $expected
+     */
+    #[DataProvider('dst6HourlyTransitionProvider')]
+    public function testHourlyOnDstTransition(string $start, array $expected): void
+    {
+        $this->parse(
+            'FREQ=HOURLY;INTERVAL=6;COUNT=5',
+            $start,
+            $expected,
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public static function dst6HourlyTransitionProvider(): iterable
+    {
+        yield 'On transition start' => [
+            'start' => '2023-03-25 20:00:00',
+            'expected' => [
+                '2023-03-25 20:00:00',
+                '2023-03-26 03:00:00',
+                '2023-03-26 08:00:00',
+                '2023-03-26 14:00:00',
+                '2023-03-26 20:00:00',
+            ],
+        ];
+        yield 'During transition' => [
+            'start' => '2023-03-25 20:15:00',
+            'expected' => [
+                '2023-03-25 20:15:00',
+                '2023-03-26 03:15:00',
+                '2023-03-26 08:15:00',
+                '2023-03-26 14:15:00',
+                '2023-03-26 20:15:00',
+            ],
+        ];
+        yield 'On transition end' => [
+            'start' => '2023-03-25 21:00:00',
+            'expected' => [
+                '2023-03-25 21:00:00',
+                '2023-03-26 03:00:00',
+                '2023-03-26 09:00:00',
+                '2023-03-26 15:00:00',
+                '2023-03-26 21:00:00',
+            ],
+        ];
+        yield 'After transition end' => [
+            'start' => '2023-03-25 21:15:00',
+            'expected' => [
+                '2023-03-25 21:15:00',
+                '2023-03-26 03:15:00',
+                '2023-03-26 09:15:00',
+                '2023-03-26 15:15:00',
+                '2023-03-26 21:15:00',
+            ],
+        ];
+    }
+
+    public function testDaily(): void
     {
         $this->parse(
             'FREQ=DAILY;INTERVAL=3;UNTIL=20111025T000000Z',
@@ -48,7 +262,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testDailyByDayByHour()
+    public function testDailyByDayByHour(): void
     {
         $this->parse(
             'FREQ=DAILY;BYDAY=SA,SU;BYHOUR=6,7',
@@ -70,7 +284,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testDailyByHour()
+    public function testDailyByHour(): void
     {
         $this->parse(
             'FREQ=DAILY;INTERVAL=2;BYHOUR=10,11,12,13,14,15',
@@ -92,7 +306,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testDailyByDay()
+    public function testDailyByDay(): void
     {
         $this->parse(
             'FREQ=DAILY;INTERVAL=2;BYDAY=TU,WE,FR',
@@ -114,7 +328,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testDailyCount()
+    public function testDailyCount(): void
     {
         $this->parse(
             'FREQ=DAILY;COUNT=5',
@@ -129,7 +343,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testDailyByMonth()
+    public function testDailyByMonth(): void
     {
         $this->parse(
             'FREQ=DAILY;BYMONTH=9,10;BYDAY=SU',
@@ -146,7 +360,84 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testWeekly()
+    /**
+     * This test can take some seconds to complete.
+     * The "large" annotation means phpunit will let it run for
+     * up to 60 seconds by default.
+     *
+     * @large
+     */
+    public function testDailyBySetPosLoop(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;INTERVAL=7;BYDAY=MO',
+            '2022-03-15',
+            [
+            ],
+            '2022-05-01'
+        );
+    }
+
+    /**
+     * @param string[] $expected
+     */
+    #[DataProvider('dstDailyTransitionProvider')]
+    public function testDailyOnDstTransition(string $start, array $expected): void
+    {
+        $this->parse(
+            'FREQ=DAILY;INTERVAL=1;COUNT=5',
+            $start,
+            $expected,
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public static function dstDailyTransitionProvider(): iterable
+    {
+        yield 'On transition start' => [
+            'start' => '2023-03-24 02:00:00',
+            'expected' => [
+                '2023-03-24 02:00:00',
+                '2023-03-25 02:00:00',
+                '2023-03-26 03:00:00',
+                '2023-03-27 02:00:00',
+                '2023-03-28 02:00:00',
+            ],
+        ];
+        yield 'During transition' => [
+            'start' => '2023-03-24 02:15:00',
+            'expected' => [
+                '2023-03-24 02:15:00',
+                '2023-03-25 02:15:00',
+                '2023-03-26 03:15:00',
+                '2023-03-27 02:15:00',
+                '2023-03-28 02:15:00',
+            ],
+        ];
+        yield 'On transition end' => [
+            'start' => '2023-03-24 03:00:00',
+            'expected' => [
+                '2023-03-24 03:00:00',
+                '2023-03-25 03:00:00',
+                '2023-03-26 03:00:00',
+                '2023-03-27 03:00:00',
+                '2023-03-28 03:00:00',
+            ],
+        ];
+        yield 'After transition end' => [
+            'start' => '2023-03-24 03:15:00',
+            'expected' => [
+                '2023-03-24 03:15:00',
+                '2023-03-25 03:15:00',
+                '2023-03-26 03:15:00',
+                '2023-03-27 03:15:00',
+                '2023-03-28 03:15:00',
+            ],
+        ];
+    }
+
+    public function testWeekly(): void
     {
         $this->parse(
             'FREQ=WEEKLY;INTERVAL=2;COUNT=10',
@@ -166,7 +457,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testWeeklyByDay()
+    public function testWeeklyByDay(): void
     {
         $this->parse(
             'FREQ=WEEKLY;INTERVAL=1;COUNT=4;BYDAY=MO;WKST=SA',
@@ -180,7 +471,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testWeeklyByDay2()
+    public function testWeeklyByDay2(): void
     {
         $this->parse(
             'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,WE,FR;WKST=SU',
@@ -202,7 +493,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testWeeklyByDayByHour()
+    public function testWeeklyByDayByHour(): void
     {
         $this->parse(
             'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,WE,FR;WKST=MO;BYHOUR=8,9,10',
@@ -227,7 +518,68 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testWeeklyByDaySpecificHour()
+    public function testWeeklyByHourWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=MO;BYHOUR=09;COUNT=3',
+            '2026-01-05 09:00:00',
+            [
+                '2026-01-05 09:00:00',
+                '2026-01-12 09:00:00',
+                '2026-01-19 09:00:00',
+            ]
+        );
+    }
+
+    public function testDailyByHourWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYHOUR=08,09;COUNT=4',
+            '2026-01-05 08:00:00',
+            [
+                '2026-01-05 08:00:00',
+                '2026-01-05 09:00:00',
+                '2026-01-06 08:00:00',
+                '2026-01-06 09:00:00',
+            ]
+        );
+    }
+
+    public function testWeeklyByHourWithoutByDay(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;BYHOUR=9,14;COUNT=4',
+            '2026-01-05 09:00:00', // a Monday
+            [
+                '2026-01-05 09:00:00',
+                '2026-01-05 14:00:00',
+                '2026-01-12 09:00:00',
+                '2026-01-12 14:00:00',
+            ]
+        );
+    }
+
+    public function testByHourOutOfRange(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=MO;BYHOUR=24;COUNT=3',
+            '2026-01-05 09:00:00',
+            []
+        );
+    }
+
+    public function testByHourNotNumeric(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=MO;BYHOUR=0x;COUNT=3',
+            '2026-01-05 09:00:00',
+            []
+        );
+    }
+
+    public function testWeeklyByDaySpecificHour(): void
     {
         $this->parse(
             'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,WE,FR;WKST=SU',
@@ -249,22 +601,127 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMonthly()
+    public function testWeeklyByDaySpecificHourOnDstTransition(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;INTERVAL=2;BYDAY=SA,SU',
+            '2023-03-11 02:30:00',
+            [
+                '2023-03-11 02:30:00',
+                '2023-03-12 02:30:00',
+                '2023-03-25 02:30:00',
+                '2023-03-26 03:30:00',
+                '2023-04-08 02:30:00',
+                '2023-04-09 02:30:00',
+            ],
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public function testWeeklyByDayByHourOnDstTransition(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;INTERVAL=2;BYDAY=SA,SU;WKST=MO;BYHOUR=2,14',
+            '2023-03-11 02:00:00',
+            [
+                '2023-03-11 02:00:00',
+                '2023-03-11 14:00:00',
+                '2023-03-12 02:00:00',
+                '2023-03-12 14:00:00',
+                '2023-03-25 02:00:00',
+                '2023-03-25 14:00:00',
+                // 02:00:00 does not exist on 2023-03-26 because of summer-time start.
+                // The current implementation logic does not schedule a recurrence on
+                // the morning of 2023-03-26. But maybe it should schedule one at 03:00:00.
+                // The RFC is silent about the required behavior in this case.
+                // '2023-03-26 03:00:00',
+                '2023-03-26 14:00:00',
+                '2023-04-08 02:00:00',
+                '2023-04-08 14:00:00',
+                '2023-04-09 02:00:00',
+                '2023-04-09 14:00:00',
+            ],
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    /**
+     * @param string[] $expected
+     */
+    #[DataProvider('dstWeeklyTransitionProvider')]
+    public function testWeeklyOnDstTransition(string $start, array $expected): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;INTERVAL=1;COUNT=5',
+            $start,
+            $expected,
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public static function dstWeeklyTransitionProvider(): iterable
+    {
+        yield 'On transition start' => [
+            'start' => '2023-03-12 02:00:00',
+            'expected' => [
+                '2023-03-12 02:00:00',
+                '2023-03-19 02:00:00',
+                '2023-03-26 03:00:00',
+                '2023-04-02 02:00:00',
+                '2023-04-09 02:00:00',
+            ],
+        ];
+        yield 'During transition' => [
+            'start' => '2023-03-12 02:15:00',
+            'expected' => [
+                '2023-03-12 02:15:00',
+                '2023-03-19 02:15:00',
+                '2023-03-26 03:15:00',
+                '2023-04-02 02:15:00',
+                '2023-04-09 02:15:00',
+            ],
+        ];
+        yield 'On transition end' => [
+            'start' => '2023-03-12 03:00:00',
+            'expected' => [
+                '2023-03-12 03:00:00',
+                '2023-03-19 03:00:00',
+                '2023-03-26 03:00:00',
+                '2023-04-02 03:00:00',
+                '2023-04-09 03:00:00',
+            ],
+        ];
+        yield 'After transition end' => [
+            'start' => '2023-03-12 03:15:00',
+            'expected' => [
+                '2023-03-12 03:15:00',
+                '2023-03-19 03:15:00',
+                '2023-03-26 03:15:00',
+                '2023-04-02 03:15:00',
+                '2023-04-09 03:15:00',
+            ],
+        ];
+    }
+
+    public function testMonthly(): void
     {
         $this->parse(
             'FREQ=MONTHLY;INTERVAL=3;COUNT=5',
             '2011-12-05 00:00:00',
             [
-                 '2011-12-05 00:00:00',
-                 '2012-03-05 00:00:00',
-                 '2012-06-05 00:00:00',
-                 '2012-09-05 00:00:00',
-                 '2012-12-05 00:00:00',
+                '2011-12-05 00:00:00',
+                '2012-03-05 00:00:00',
+                '2012-06-05 00:00:00',
+                '2012-09-05 00:00:00',
+                '2012-12-05 00:00:00',
             ]
         );
     }
 
-    public function testMonlthyEndOfMonth()
+    public function testMonthlyEndOfMonth(): void
     {
         $this->parse(
             'FREQ=MONTHLY;INTERVAL=2;COUNT=12',
@@ -286,7 +743,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMonthlyByMonthDay()
+    public function testMonthlyByMonthDay(): void
     {
         $this->parse(
             'FREQ=MONTHLY;INTERVAL=5;COUNT=9;BYMONTHDAY=1,31,-7',
@@ -305,7 +762,27 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMonthlyByDay()
+    public function testMonthlyByMonthDayDstTransition(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;INTERVAL=1;COUNT=8;BYMONTHDAY=1,26',
+            '2023-01-01 02:15:00',
+            [
+                '2023-01-01 02:15:00',
+                '2023-01-26 02:15:00',
+                '2023-02-01 02:15:00',
+                '2023-02-26 02:15:00',
+                '2023-03-01 02:15:00',
+                '2023-03-26 03:15:00',
+                '2023-04-01 02:15:00',
+                '2023-04-26 02:15:00',
+            ],
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public function testMonthlyByDay(): void
     {
         $this->parse(
             'FREQ=MONTHLY;INTERVAL=2;COUNT=16;BYDAY=MO,-2TU,+1WE,3TH',
@@ -331,7 +808,59 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMonthlyByDayByMonthDay()
+    public function testMonthlyByDayUntil(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;INTERVAL=1;BYDAY=WE;WKST=WE;UNTIL=20210317T000000Z',
+            '2021-02-10 00:00:00',
+            [
+                '2021-02-10 00:00:00',
+                '2021-02-17 00:00:00',
+                '2021-02-24 00:00:00',
+                '2021-03-03 00:00:00',
+                '2021-03-10 00:00:00',
+                '2021-03-17 00:00:00',
+            ]
+        );
+    }
+
+    public function testMonthlyByDayOnDstTransition(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;INTERVAL=2;COUNT=13;BYDAY=SU',
+            '2023-01-01 02:30:00',
+            [
+                '2023-01-01 02:30:00',
+                '2023-01-08 02:30:00',
+                '2023-01-15 02:30:00',
+                '2023-01-22 02:30:00',
+                '2023-01-29 02:30:00',
+                '2023-03-05 02:30:00',
+                '2023-03-12 02:30:00',
+                '2023-03-19 02:30:00',
+                '2023-03-26 03:30:00',
+                '2023-05-07 02:30:00',
+                '2023-05-14 02:30:00',
+                '2023-05-21 02:30:00',
+                '2023-05-28 02:30:00',
+            ],
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public function testMonthlyByDayUntilWithImpossibleNextOccurrence(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;INTERVAL=1;BYDAY=2WE;BYMONTHDAY=2;WKST=WE;UNTIL=20210317T000000Z',
+            '2021-02-10 00:00:00',
+            [
+                '2021-02-10 00:00:00',
+            ]
+        );
+    }
+
+    public function testMonthlyByDayByMonthDay(): void
     {
         $this->parse(
             'FREQ=MONTHLY;COUNT=10;BYDAY=MO;BYMONTHDAY=1',
@@ -351,7 +880,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMonthlyByDayBySetPos()
+    public function testMonthlyByDayBySetPos(): void
     {
         $this->parse(
             'FREQ=MONTHLY;COUNT=10;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1,-1',
@@ -371,7 +900,133 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testYearly()
+    /**
+     * An UNTIL falling, at the series' time of day, on a day the rule skips
+     * must not add an occurrence at the UNTIL itself (Exchange bounds its
+     * series that way).
+     *
+     * @param string[] $expected
+     */
+    #[DataProvider('monthlyUntilOnSkippedDayProvider')]
+    public function testMonthlyUntilOnSkippedDay(string $rule, string $start, array $expected): void
+    {
+        $this->parse($rule, $start, $expected);
+    }
+
+    public static function monthlyUntilOnSkippedDayProvider(): iterable
+    {
+        yield 'BYDAY' => [
+            'FREQ=MONTHLY;UNTIL=20270901T090000Z;BYDAY=2SA',
+            '2027-04-10 09:00:00',
+            ['2027-04-10 09:00:00', '2027-05-08 09:00:00', '2027-06-12 09:00:00', '2027-07-10 09:00:00', '2027-08-14 09:00:00'],
+        ];
+        yield 'BYMONTHDAY' => [
+            'FREQ=MONTHLY;UNTIL=20270901T090000Z;BYMONTHDAY=10',
+            '2027-04-10 09:00:00',
+            ['2027-04-10 09:00:00', '2027-05-10 09:00:00', '2027-06-10 09:00:00', '2027-07-10 09:00:00', '2027-08-10 09:00:00'],
+        ];
+        yield 'BYDAY and BYSETPOS' => [
+            'FREQ=MONTHLY;UNTIL=20271201T090000Z;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1',
+            '2027-04-10 09:00:00',
+            [
+                '2027-04-10 09:00:00',
+                '2027-04-30 09:00:00',
+                '2027-05-31 09:00:00',
+                '2027-06-30 09:00:00',
+                '2027-07-30 09:00:00',
+                '2027-08-31 09:00:00',
+                '2027-09-30 09:00:00',
+                '2027-10-29 09:00:00',
+                '2027-11-30 09:00:00',
+            ],
+        ];
+        yield 'DATE-valued UNTIL' => [
+            'FREQ=MONTHLY;UNTIL=20270901;BYDAY=2SA',
+            '2027-04-10 00:00:00',
+            ['2027-04-10 00:00:00', '2027-05-08 00:00:00', '2027-06-12 00:00:00', '2027-07-10 00:00:00', '2027-08-14 00:00:00'],
+        ];
+        yield 'UNTIL one second earlier' => [
+            'FREQ=MONTHLY;UNTIL=20270901T085959Z;BYDAY=2SA',
+            '2027-04-10 09:00:00',
+            ['2027-04-10 09:00:00', '2027-05-08 09:00:00', '2027-06-12 09:00:00', '2027-07-10 09:00:00', '2027-08-14 09:00:00'],
+        ];
+        yield 'UNTIL on the first of the month, which is an occurrence' => [
+            'FREQ=MONTHLY;UNTIL=20270901T090000Z;BYMONTHDAY=1,10',
+            '2027-07-10 09:00:00',
+            ['2027-07-10 09:00:00', '2027-08-01 09:00:00', '2027-08-10 09:00:00', '2027-09-01 09:00:00'],
+        ];
+    }
+
+    /**
+     * @param string[] $expected
+     */
+    #[DataProvider('dstMonthlyTransitionProvider')]
+    public function testMonthlyOnDstTransition(string $start, array $expected): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;INTERVAL=1;COUNT=5',
+            $start,
+            $expected,
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public static function dstMonthlyTransitionProvider(): iterable
+    {
+        yield 'On transition start' => [
+            'start' => '2023-01-26 02:00:00',
+            'expected' => [
+                '2023-01-26 02:00:00',
+                '2023-02-26 02:00:00',
+                '2023-03-26 03:00:00',
+                '2023-04-26 02:00:00',
+                '2023-05-26 02:00:00',
+            ],
+        ];
+        yield 'During transition' => [
+            'start' => '2023-01-26 02:15:00',
+            'expected' => [
+                '2023-01-26 02:15:00',
+                '2023-02-26 02:15:00',
+                '2023-03-26 03:15:00',
+                '2023-04-26 02:15:00',
+                '2023-05-26 02:15:00',
+            ],
+        ];
+        yield 'On transition end' => [
+            'start' => '2023-01-26 03:00:00',
+            'expected' => [
+                '2023-01-26 03:00:00',
+                '2023-02-26 03:00:00',
+                '2023-03-26 03:00:00',
+                '2023-04-26 03:00:00',
+                '2023-05-26 03:00:00',
+            ],
+        ];
+        yield 'After transition end' => [
+            'start' => '2023-01-26 03:15:00',
+            'expected' => [
+                '2023-01-26 03:15:00',
+                '2023-02-26 03:15:00',
+                '2023-03-26 03:15:00',
+                '2023-04-26 03:15:00',
+                '2023-05-26 03:15:00',
+            ],
+        ];
+        yield 'During transition on 31st day of month' => [
+            'start' => '2024-01-31 02:15:00',
+            'expected' => [
+                '2024-01-31 02:15:00',
+                '2024-03-31 03:15:00',
+                '2024-05-31 02:15:00',
+                '2024-07-31 02:15:00',
+                '2024-08-31 02:15:00',
+            ],
+        ];
+    }
+
+    public function testYearly(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=10;INTERVAL=3',
@@ -391,7 +1046,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testYearlyLeapYear()
+    public function testYearlyLeapYear(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=3',
@@ -404,7 +1059,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testYearlyByMonth()
+    public function testYearlyByMonth(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=8;INTERVAL=4;BYMONTH=4,10',
@@ -422,11 +1077,218 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testYearlyByMonthInvalidValue1()
+    public function testYearlyByMonthOnDstTransition(): void
     {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=8;INTERVAL=2;BYMONTH=3,9',
+            '2019-03-26 02:30:00',
+            [
+                '2019-03-26 02:30:00',
+                '2019-09-26 02:30:00',
+                '2021-03-26 02:30:00',
+                '2021-09-26 02:30:00',
+                '2023-03-26 03:30:00',
+                '2023-09-26 02:30:00',
+                '2025-03-26 02:30:00',
+                '2025-09-26 02:30:00',
+            ],
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public function testLowercaseByDayInArray(): void
+    {
+        $this->parse(
+            ['FREQ' => 'MONTHLY', 'BYDAY' => ['-1fr', '+1mo'], 'COUNT' => 3],
+            '2026-01-05 09:00:00',
+            ['2026-01-05 09:00:00', '2026-01-30 09:00:00', '2026-02-02 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthOnLeapDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=2;COUNT=3',
+            '2024-02-29 09:00:00',
+            ['2024-02-29 09:00:00', '2028-02-29 09:00:00', '2032-02-29 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthSkipsMonthsWithoutTheDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=1,4,5;COUNT=4',
+            '2026-01-31 09:00:00',
+            ['2026-01-31 09:00:00', '2026-05-31 09:00:00', '2027-01-31 09:00:00', '2027-05-31 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthWithoutTheDayEnds(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=2,4',
+            '2026-01-31 09:00:00',
+            [],
+            null,
+            'UTC',
+            true
+        );
+    }
+
+    public function testCountAndUntilStopsAtUntil(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=3;COUNT=5;UNTIL=20280101T000000Z',
+            '2026-01-15 09:00:00',
+            ['2026-03-15 09:00:00', '2027-03-15 09:00:00']
+        );
+    }
+
+    public function testCountAndUntilStopsAtCount(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;COUNT=2;UNTIL=20280101T000000Z',
+            '2026-01-15 09:00:00',
+            ['2026-01-15 09:00:00', '2026-01-16 09:00:00']
+        );
+    }
+
+    public function testMonthlyCountAndUntilBeforeStartYieldsOnlyStart(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;BYDAY=-5FR;COUNT=2;UNTIL=20260320T000000Z',
+            '2026-09-29 00:00:00',
+            ['2026-09-29 00:00:00'],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    #[DataProvider('hugeIntervalProvider')]
+    public function testHugeIntervalStopsAtUpperLimit(string $rule): void
+    {
+        $this->parse($rule, '2026-01-05 09:00:00', ['2026-01-05 09:00:00']);
+    }
+
+    public static function hugeIntervalProvider(): array
+    {
+        return [
+            ['FREQ=WEEKLY;INTERVAL=461168601842738;COUNT=2'],
+            ['FREQ=DAILY;INTERVAL=3652426;COUNT=2'],
+            ['FREQ=MONTHLY;INTERVAL=120001;COUNT=2'],
+            ['FREQ=YEARLY;INTERVAL=7975;COUNT=2'],
+            ['FREQ=HOURLY;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=MINUTELY;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=SECONDLY;INTERVAL=99999999999999999999;COUNT=2'],
+            ['FREQ=WEEKLY;BYDAY=MO;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=DAILY;BYHOUR=9;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=MONTHLY;BYMONTHDAY=5;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYMONTH=1;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=5;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYWEEKNO=2;INTERVAL=9223372036854775807;COUNT=2'],
+            ['FREQ=YEARLY;BYYEARDAY=5;INTERVAL=9223372036854775807;COUNT=2'],
+        ];
+    }
+
+    public function testHugeIntervalKeepsInstancesOfTheFirstPeriod(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;BYMONTHDAY=5,20;INTERVAL=9223372036854775807;COUNT=3',
+            '2026-01-05 09:00:00',
+            ['2026-01-05 09:00:00', '2026-01-20 09:00:00']
+        );
+    }
+
+    #[DataProvider('withoutInstanceEastOfUtcProvider')]
+    public function testWithoutInstanceEastOfUtcStopsBeforeYear10000(string $rule, string $start): void
+    {
+        $it = new RRuleIterator($rule, new \DateTimeImmutable($start, new \DateTimeZone('Asia/Tokyo')));
+        $it->next();
+        self::assertFalse($it->valid());
+    }
+
+    public static function withoutInstanceEastOfUtcProvider(): array
+    {
+        return [
+            ['FREQ=MONTHLY;BYMONTHDAY=31;BYSETPOS=2', '2026-01-31 08:00:00'],
+            ['FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=31;BYSETPOS=2', '2026-01-31 08:00:00'],
+        ];
+    }
+
+    #[DataProvider('ambiguousLocalTimeProvider')]
+    public function testAmbiguousLocalTimeIsTheFirstOccurrence(string $rule, string $start, int $skip, string $expected): void
+    {
+        $it = new RRuleIterator($rule, new \DateTimeImmutable($start, new \DateTimeZone('Europe/Paris')));
+        for ($i = 0; $i < $skip; ++$i) {
+            $it->next();
+        }
+        self::assertSame($expected, $it->current()->format('c'));
+    }
+
+    public static function ambiguousLocalTimeProvider(): array
+    {
+        return [
+            'monthly' => ['FREQ=MONTHLY;INTERVAL=9;COUNT=2', '2026-01-25 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+            'yearly BYMONTH' => ['FREQ=YEARLY;BYMONTH=10;COUNT=2', '2026-01-25 02:30:00', 0, '2026-10-25T02:30:00+02:00'],
+            'yearly BYMONTH BYDAY' => ['FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU;COUNT=2', '2025-10-26 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+            'weekly' => ['FREQ=WEEKLY;INTERVAL=39;COUNT=2', '2026-01-25 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+            'daily' => ['FREQ=DAILY;INTERVAL=273;COUNT=2', '2026-01-25 02:30:00', 1, '2026-10-25T02:30:00+02:00'],
+        ];
+    }
+
+    public function testAmbiguousLocalTimeIsTheFirstOccurrenceFromMutableStart(): void
+    {
+        $it = new RRuleIterator('FREQ=MONTHLY;INTERVAL=9;COUNT=2', new \DateTime('2026-01-25 02:30:00', new \DateTimeZone('Europe/Paris')));
+        $it->next();
+        self::assertSame('2026-10-25T02:30:00+02:00', $it->current()->format('c'));
+    }
+
+    public function testDailyByHourOnTheAmbiguousHour(): void
+    {
+        $it = new RRuleIterator('FREQ=DAILY;BYHOUR=2;COUNT=4', new \DateTimeImmutable('2026-10-24 02:30:00', new \DateTimeZone('Europe/Paris')));
+        $result = [];
+        foreach ($it as $date) {
+            $result[] = $date->format('c');
+        }
+        self::assertSame([
+            '2026-10-24T02:30:00+02:00',
+            '2026-10-25T02:30:00+02:00',
+            '2026-10-26T02:30:00+01:00',
+            '2026-10-27T02:30:00+01:00',
+        ], $result);
+    }
+
+    public function testYearlyByMonthWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=06;COUNT=2',
+            '2026-01-15 09:00:00',
+            ['2026-06-15 09:00:00', '2027-06-15 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthWithLeadingZeroAndByMonthDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=+6,011;BYMONTHDAY=3;COUNT=3',
+            '2026-01-15 09:00:00',
+            ['2026-06-03 09:00:00', '2026-11-03 09:00:00', '2027-06-03 09:00:00']
+        );
+    }
+
+    public function testDailyByMonthWithLeadingZero(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYMONTH=02;BYHOUR=09;COUNT=3',
+            '2026-01-31 09:00:00',
+            ['2026-01-31 09:00:00', '2026-02-01 09:00:00', '2026-02-02 09:00:00']
+        );
+    }
+
+    public function testYearlyByMonthInvalidValue1(): void
+    {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;COUNT=6;BYMONTHDAY=24;BYMONTH=0',
             '2011-04-07 00:00:00',
@@ -434,11 +1296,9 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testYearlyByMonthInvalidValue2()
+    public function testYearlyByMonthInvalidValue2(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;COUNT=6;BYMONTHDAY=24;BYMONTH=bla',
             '2011-04-07 00:00:00',
@@ -446,11 +1306,9 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testYearlyByMonthManyInvalidValues()
+    public function testYearlyByMonthManyInvalidValues(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;COUNT=6;BYMONTHDAY=24;BYMONTH=0,bla',
             '2011-04-07 00:00:00',
@@ -458,11 +1316,9 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testYearlyByMonthEmptyValue()
+    public function testYearlyByMonthEmptyValue(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;COUNT=6;BYMONTHDAY=24;BYMONTH=',
             '2011-04-07 00:00:00',
@@ -470,7 +1326,66 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testYearlyByMonthByDay()
+    #[DataProvider('invalidPartProvider')]
+    public function testInvalidPart(string|array $rule): void
+    {
+        $this->expectException(InvalidDataException::class);
+        iterator_to_array(new RRuleIterator($rule, new \DateTimeImmutable('2026-01-15 10:00:00', new \DateTimeZone('UTC'))));
+    }
+
+    public static function invalidPartProvider(): array
+    {
+        return [
+            'non-numeric BYSETPOS' => ['FREQ=MONTHLY;BYMONTHDAY=15;BYSETPOS=x'],
+            'zero BYSETPOS' => ['FREQ=MONTHLY;BYDAY=MO;BYSETPOS=0'],
+            'out of range BYSETPOS' => ['FREQ=MONTHLY;BYDAY=MO;BYSETPOS=367'],
+            'non-integer BYSETPOS' => ['FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1.5'],
+            'non-numeric BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY=x'],
+            'zero BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY=0'],
+            'out of range BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY=1,-32'],
+            'empty BYMONTHDAY' => ['FREQ=MONTHLY;BYMONTHDAY='],
+            'multi-valued FREQ' => ['FREQ=DAILY,WEEKLY;COUNT=2'],
+            'multi-valued UNTIL' => ['FREQ=DAILY;UNTIL=20260201,20260301'],
+            'multi-valued COUNT' => ['FREQ=DAILY;COUNT=1,2'],
+            'multi-valued INTERVAL' => ['FREQ=DAILY;COUNT=2;INTERVAL=1,2'],
+            'multi-valued WKST' => ['FREQ=WEEKLY;COUNT=2;WKST=MO,SU'],
+            'unknown WKST' => ['FREQ=WEEKLY;COUNT=2;BYDAY=MO;WKST=XX'],
+            'nested array BYSETPOS' => [['FREQ' => 'MONTHLY', 'BYDAY' => 'MO', 'BYSETPOS' => [['1']]]],
+            'no FREQ' => ['COUNT=3'],
+            'empty rule' => [''],
+            'no FREQ, as an array' => [['COUNT' => '3']],
+            'BYDAY with a trailing LF' => [['FREQ' => 'MONTHLY', 'BYDAY' => "FR\n", 'COUNT' => 3]],
+            'BYDAY with a sign and no ordinal' => ['FREQ=MONTHLY;BYDAY=+FR;COUNT=3'],
+            'BYDAY with a minus sign and no ordinal' => ['FREQ=MONTHLY;BYDAY=-FR;COUNT=3'],
+            'nested array BYDAY' => [['FREQ' => 'WEEKLY', 'BYDAY' => [['MO']], 'COUNT' => 3]],
+            'non-integer BYMONTH' => ['FREQ=YEARLY;BYMONTH=2.3;COUNT=2'],
+            'BYMONTH with a trailing dot' => ['FREQ=YEARLY;BYMONTH=1.;COUNT=2'],
+            'BYMONTH with a space' => ['FREQ=YEARLY;BYMONTH= 3;COUNT=2'],
+            'BYMONTH with a vertical tab' => ["FREQ=YEARLY;BYMONTH=3\v;COUNT=2"],
+            'BYMONTH with a trailing LF' => [['FREQ' => 'YEARLY', 'BYMONTH' => "3\n", 'COUNT' => 2]],
+            'negative BYMONTH' => ['FREQ=YEARLY;BYMONTH=-6;COUNT=2'],
+            'BYMONTH in exponent form' => ['FREQ=DAILY;BYMONTH=1e1;COUNT=2'],
+            'non-integer BYHOUR' => ['FREQ=DAILY;BYHOUR=9.5;COUNT=2'],
+            'non-integer BYWEEKNO' => ['FREQ=YEARLY;BYWEEKNO=1.5;COUNT=2'],
+            'non-integer BYYEARDAY' => ['FREQ=YEARLY;BYYEARDAY=1.5;COUNT=2'],
+            'BYMONTHDAY with a trailing LF' => [['FREQ' => 'MONTHLY', 'BYMONTHDAY' => "5\n", 'COUNT' => 2]],
+        ];
+    }
+
+    public function testSignedBySetPosAndByMonthDay(): void
+    {
+        $this->parse(
+            'FREQ=MONTHLY;COUNT=3;BYMONTHDAY=+1,-1;BYSETPOS=+2',
+            '2026-01-01 10:00:00',
+            [
+                '2026-01-01 10:00:00',
+                '2026-01-31 10:00:00',
+                '2026-02-28 10:00:00',
+            ]
+        );
+    }
+
+    public function testYearlyByMonthByDay(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=8;INTERVAL=5;BYMONTH=4,10;BYDAY=1MO,-1SU',
@@ -488,19 +1403,61 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testYearlyByYearDay()
+    public function testYearlyByMonthByDayOnDstTransition(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=13;INTERVAL=2;BYMONTH=3;BYDAY=SU',
+            '2021-03-07 02:30:00',
+            [
+                '2021-03-07 02:30:00',
+                '2021-03-14 02:30:00',
+                '2021-03-21 02:30:00',
+                '2021-03-28 03:30:00',
+                '2023-03-05 02:30:00',
+                '2023-03-12 02:30:00',
+                '2023-03-19 02:30:00',
+                '2023-03-26 03:30:00',
+                '2025-03-02 02:30:00',
+                '2025-03-09 02:30:00',
+                '2025-03-16 02:30:00',
+                '2025-03-23 02:30:00',
+                '2025-03-30 03:30:00',
+            ],
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public function testYearlyNewYearsDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=7;INTERVAL=2;BYYEARDAY=1',
+            '2011-01-01 03:07:00',
+            [
+                '2011-01-01 03:07:00',
+                '2013-01-01 03:07:00',
+                '2015-01-01 03:07:00',
+                '2017-01-01 03:07:00',
+                '2019-01-01 03:07:00',
+                '2021-01-01 03:07:00',
+                '2023-01-01 03:07:00',
+            ]
+        );
+    }
+
+    public function testYearlyByYearDay(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=7;INTERVAL=2;BYYEARDAY=190',
-            '2011-07-10 03:07:00',
+            '2011-07-09 03:07:00',
             [
-                '2011-07-10 03:07:00',
-                '2013-07-10 03:07:00',
-                '2015-07-10 03:07:00',
-                '2017-07-10 03:07:00',
-                '2019-07-10 03:07:00',
-                '2021-07-10 03:07:00',
-                '2023-07-10 03:07:00',
+                '2011-07-09 03:07:00',
+                '2013-07-09 03:07:00',
+                '2015-07-09 03:07:00',
+                '2017-07-09 03:07:00',
+                '2019-07-09 03:07:00',
+                '2021-07-09 03:07:00',
+                '2023-07-09 03:07:00',
             ]
         );
     }
@@ -509,56 +1466,56 @@ class RRuleIteratorTest extends TestCase
      * Regression test for #383
      * $parser->next() used to cause an infinite loop.
      */
-    public function testYearlyByYearDayImmutable()
+    public function testYearlyByYearDayImmutable(): void
     {
         $start = '2011-07-10 03:07:00';
         $rule = 'FREQ=YEARLY;COUNT=7;INTERVAL=2;BYYEARDAY=190';
         $tz = 'UTC';
 
-        $dt = new DateTimeImmutable($start, new DateTimeZone($tz));
+        $dt = new \DateTimeImmutable($start, new \DateTimeZone($tz));
         $parser = new RRuleIterator($rule, $dt);
 
         $parser->next();
 
         $item = $parser->current();
-        $this->assertEquals($item->format('Y-m-d H:i:s'), '2013-07-10 03:07:00');
+        self::assertEquals('2013-07-09 03:07:00', $item->format('Y-m-d H:i:s'));
     }
 
-    public function testYearlyByYearDayMultiple()
+    public function testYearlyByYearDayMultiple(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=8;INTERVAL=3;BYYEARDAY=190,301',
             '2011-07-10 14:53:11',
             [
                 '2011-07-10 14:53:11',
-                '2011-10-29 14:53:11',
-                '2014-07-10 14:53:11',
-                '2014-10-29 14:53:11',
-                '2017-07-10 14:53:11',
-                '2017-10-29 14:53:11',
-                '2020-07-09 14:53:11',
-                '2020-10-28 14:53:11',
+                '2011-10-28 14:53:11',
+                '2014-07-09 14:53:11',
+                '2014-10-28 14:53:11',
+                '2017-07-09 14:53:11',
+                '2017-10-28 14:53:11',
+                '2020-07-08 14:53:11',
+                '2020-10-27 14:53:11',
             ]
         );
     }
 
-    public function testYearlyByYearDayByDay()
+    public function testYearlyByYearDayByDay(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=6;BYYEARDAY=97;BYDAY=SA',
             '2001-04-07 14:53:11',
             [
                 '2001-04-07 14:53:11',
-                '2006-04-08 14:53:11',
-                '2012-04-07 14:53:11',
-                '2017-04-08 14:53:11',
-                '2023-04-08 14:53:11',
-                '2034-04-08 14:53:11',
+                '2007-04-07 14:53:11',
+                '2018-04-07 14:53:11',
+                '2024-04-06 14:53:11',
+                '2029-04-07 14:53:11',
+                '2035-04-07 14:53:11',
             ]
         );
     }
 
-    public function testYearlyByYearDayNegative()
+    public function testYearlyByYearDayNegative(): void
     {
         $this->parse(
             'FREQ=YEARLY;COUNT=8;BYYEARDAY=-97,-5',
@@ -576,11 +1533,94 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
+    /*
+     * Verifies that -365 back in the year is usually 1 Jan, but
+     * in leap years it is 2 Jan.
      */
-    public function testYearlyByYearDayInvalid390()
+    public function testYearlyByYearDayLargeNegative(): void
     {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=8;BYYEARDAY=-365',
+            '2001-01-01 14:53:11',
+            [
+                '2001-01-01 14:53:11',
+                '2002-01-01 14:53:11',
+                '2003-01-01 14:53:11',
+                '2004-01-02 14:53:11',
+                '2005-01-01 14:53:11',
+                '2006-01-01 14:53:11',
+                '2007-01-01 14:53:11',
+                '2008-01-02 14:53:11',
+            ]
+        );
+    }
+
+    /*
+     * Verifies that -366 back in the year is 1 Jan in a leap year. Other years
+     * have no such day: that is an invalid date, which gives no instance
+     * (RFC 5545 section 3.3.10).
+     */
+    public function testYearlyByYearDayMaxNegative(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=8;BYYEARDAY=-366',
+            '2001-01-01 14:53:11',
+            [
+                '2001-01-01 14:53:11',
+                '2004-01-01 14:53:11',
+                '2008-01-01 14:53:11',
+                '2012-01-01 14:53:11',
+                '2016-01-01 14:53:11',
+                '2020-01-01 14:53:11',
+                '2024-01-01 14:53:11',
+                '2028-01-01 14:53:11',
+            ]
+        );
+    }
+
+    public function testYearlyByYearDay366OnlyInLeapYears(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=4;BYYEARDAY=366',
+            '2028-12-31 00:00:00',
+            [
+                '2028-12-31 00:00:00',
+                '2032-12-31 00:00:00',
+                '2036-12-31 00:00:00',
+                '2040-12-31 00:00:00',
+            ]
+        );
+    }
+
+    public function testYearlyByYearDayBothEndsOfALeapYear(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=4;BYYEARDAY=-366,366',
+            '2028-12-31 00:00:00',
+            [
+                '2028-12-31 00:00:00',
+                '2032-01-01 00:00:00',
+                '2032-12-31 00:00:00',
+                '2036-01-01 00:00:00',
+            ]
+        );
+    }
+
+    /**
+     * A year that is never a leap year gives no instance, and the rule ends.
+     */
+    public function testYearlyByYearDay366WithoutALeapYearEnds(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;INTERVAL=400;BYYEARDAY=366',
+            '2001-01-01 00:00:00',
+            ['2001-01-01 00:00:00']
+        );
+    }
+
+    public function testYearlyByYearDayInvalid390(): void
+    {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;COUNT=8;INTERVAL=4;BYYEARDAY=390',
             '2011-04-07 00:00:00',
@@ -589,11 +1629,9 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testYearlyByYearDayInvalid0()
+    public function testYearlyByYearDayInvalid0(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;COUNT=8;INTERVAL=4;BYYEARDAY=0',
             '2011-04-07 00:00:00',
@@ -602,7 +1640,79 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testFastForward()
+    public function testYearlyByDayByWeekNo(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=3;BYDAY=MO;BYWEEKNO=13,15,50',
+            '2021-01-01 00:00:00',
+            [
+                '2021-01-01 00:00:00',
+                '2021-03-29 00:00:00',
+                '2021-04-12 00:00:00',
+            ]
+        );
+    }
+
+    /**
+     * @param string[] $expected
+     */
+    #[DataProvider('dstYearlyTransitionProvider')]
+    public function testYearlyOnDstTransition(string $start, array $expected): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;INTERVAL=1;COUNT=5',
+            $start,
+            $expected,
+            null,
+            'Europe/Zurich',
+        );
+    }
+
+    public static function dstYearlyTransitionProvider(): iterable
+    {
+        yield 'On transition start' => [
+            'start' => '2021-03-26 02:00:00',
+            'expected' => [
+                '2021-03-26 02:00:00',
+                '2022-03-26 02:00:00',
+                '2023-03-26 03:00:00',
+                '2024-03-26 02:00:00',
+                '2025-03-26 02:00:00',
+            ],
+        ];
+        yield 'During transition' => [
+            'start' => '2021-03-26 02:15:00',
+            'expected' => [
+                '2021-03-26 02:15:00',
+                '2022-03-26 02:15:00',
+                '2023-03-26 03:15:00',
+                '2024-03-26 02:15:00',
+                '2025-03-26 02:15:00',
+            ],
+        ];
+        yield 'On transition end' => [
+            'start' => '2021-03-26 03:00:00',
+            'expected' => [
+                '2021-03-26 03:00:00',
+                '2022-03-26 03:00:00',
+                '2023-03-26 03:00:00',
+                '2024-03-26 03:00:00',
+                '2025-03-26 03:00:00',
+            ],
+        ];
+        yield 'After transition end' => [
+            'start' => '2021-03-26 03:15:00',
+            'expected' => [
+                '2021-03-26 03:15:00',
+                '2022-03-26 03:15:00',
+                '2023-03-26 03:15:00',
+                '2024-03-26 03:15:00',
+                '2025-03-26 03:15:00',
+            ],
+        ];
+    }
+
+    public function testFastForward(): void
     {
         // The idea is that we're fast-forwarding too far in the future, so
         // there will be no results left.
@@ -624,7 +1734,7 @@ class RRuleIteratorTest extends TestCase
      *
      * @medium
      */
-    public function testFifthTuesdayProblem()
+    public function testFifthTuesdayProblem(): void
     {
         $this->parse(
             'FREQ=MONTHLY;INTERVAL=1;UNTIL=20071030T035959Z;BYDAY=5TU',
@@ -639,7 +1749,7 @@ class RRuleIteratorTest extends TestCase
      * This bug came from a Fruux customer. This would result in a never-ending
      * request.
      */
-    public function testFastFowardTooFar()
+    public function testFastForwardTooFar(): void
     {
         $this->parse(
             'FREQ=WEEKLY;BYDAY=MO;UNTIL=20090704T205959Z;INTERVAL=1',
@@ -660,7 +1770,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testValidByWeekNo()
+    public function testValidByWeekNo(): void
     {
         $this->parse(
             'FREQ=YEARLY;BYWEEKNO=20;BYDAY=TU',
@@ -682,29 +1792,140 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testNegativeValidByWeekNo()
+    #[DataProvider('dailyRulesWithoutFurtherInstance')]
+    public function testDailyRuleWithoutFurtherInstanceEndsQuickly(string $rule): void
     {
+        $it = new RRuleIterator($rule, new \DateTimeImmutable('2026-01-01 09:00:00', new \DateTimeZone('Europe/Paris')));
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public static function dailyRulesWithoutFurtherInstance(): array
+    {
+        return [
+            'interval of a week' => ['FREQ=DAILY;INTERVAL=7;BYDAY=TU'],
+            'interval of a week, BYHOUR' => ['FREQ=DAILY;INTERVAL=7;BYDAY=TU;BYHOUR=9'],
+            'interval of two weeks' => ['FREQ=DAILY;INTERVAL=14;BYDAY=TU,WE'],
+            'past UNTIL' => ['FREQ=DAILY;INTERVAL=2;BYDAY=TU;BYMONTH=6;UNTIL=20260301T000000Z'],
+        ];
+    }
+
+    public function testDailyWeeklyIntervalOnTheWeekdayStillRecurs(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;INTERVAL=7;BYDAY=TH;COUNT=3',
+            '2026-01-01 09:00:00',
+            ['2026-01-01 09:00:00', '2026-01-08 09:00:00', '2026-01-15 09:00:00']
+        );
+    }
+
+    public function testDailyByMonthWithoutByDayOrByHour(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYMONTH=1,3;COUNT=4',
+            '2026-03-30 09:00:00',
+            [
+                '2026-03-30 09:00:00',
+                '2026-03-31 09:00:00',
+                '2027-01-01 09:00:00',
+                '2027-01-02 09:00:00',
+            ]
+        );
+    }
+
+    public function testDailyByMonthKeepsTheStartTimeAfterADstGap(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYMONTH=3;COUNT=3',
+            '2026-03-28 02:30:00',
+            [
+                '2026-03-28 02:30:00',
+                '2026-03-29 03:30:00',
+                '2026-03-30 02:30:00',
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testDailyByMonthThatIsNeverReachedEndsQuickly(): void
+    {
+        $it = new RRuleIterator('FREQ=DAILY;BYMONTH=2;INTERVAL=146097', new \DateTimeImmutable('2026-01-01 09:00:00', new \DateTimeZone('UTC')));
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public function testNegativeValidByWeekNo(): void
+    {
+        // Week 33 of a 52-week year, week 34 of a 53-week year such as 2015.
         $this->parse(
             'FREQ=YEARLY;BYWEEKNO=-20;BYDAY=TU,FR',
             '2011-09-02 00:00:00',
             [
                 '2011-09-02 00:00:00',
-                '2012-08-07 00:00:00',
-                '2012-08-10 00:00:00',
-                '2013-08-06 00:00:00',
-                '2013-08-09 00:00:00',
-                '2014-08-05 00:00:00',
-                '2014-08-08 00:00:00',
-                '2015-08-11 00:00:00',
-                '2015-08-14 00:00:00',
-                '2016-08-09 00:00:00',
-                '2016-08-12 00:00:00',
-                '2017-08-08 00:00:00',
+                '2012-08-14 00:00:00',
+                '2012-08-17 00:00:00',
+                '2013-08-13 00:00:00',
+                '2013-08-16 00:00:00',
+                '2014-08-12 00:00:00',
+                '2014-08-15 00:00:00',
+                '2015-08-18 00:00:00',
+                '2015-08-21 00:00:00',
+                '2016-08-16 00:00:00',
+                '2016-08-19 00:00:00',
+                '2017-08-15 00:00:00',
             ]
         );
     }
 
-    public function testTwoValidByWeekNo()
+    public function testYearlyByLastWeekNo(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=-1;BYDAY=MO',
+            '2026-12-28 09:00:00',
+            [
+                '2026-12-28 09:00:00',
+                '2027-12-27 09:00:00',
+                '2028-12-25 09:00:00',
+                '2029-12-24 09:00:00',
+                '2030-12-23 09:00:00',
+            ]
+        );
+    }
+
+    public function testYearlyByLastWeekNoKeepsTheInterval(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;INTERVAL=2;BYWEEKNO=-1;BYDAY=MO',
+            '2026-12-28 09:00:00',
+            [
+                '2026-12-28 09:00:00',
+                '2028-12-25 09:00:00',
+                '2030-12-23 09:00:00',
+                '2032-12-27 09:00:00',
+                '2034-12-25 09:00:00',
+            ]
+        );
+    }
+
+    public function testYearlyByWeekNoSkipsAYearWithoutThatWeek(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=53;BYDAY=MO;COUNT=3',
+            '2020-12-28 09:00:00',
+            [
+                '2020-12-28 09:00:00',
+                '2026-12-28 09:00:00',
+                '2032-12-27 09:00:00',
+            ]
+        );
+    }
+
+    public function testTwoValidByWeekNo(): void
     {
         $this->parse(
             'FREQ=YEARLY;BYWEEKNO=20;BYDAY=TU,FR',
@@ -726,7 +1947,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testValidByWeekNoByDayDefault()
+    public function testValidByWeekNoByDayDefault(): void
     {
         $this->parse(
             'FREQ=YEARLY;BYWEEKNO=20',
@@ -748,7 +1969,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMultipleValidByWeekNo()
+    public function testMultipleValidByWeekNo(): void
     {
         $this->parse(
             'FREQ=YEARLY;BYWEEKNO=20,50;BYDAY=TU,FR',
@@ -770,11 +1991,73 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testInvalidByWeekNo()
+    public function testYearlyByWeekNoWithOrdinalByDay(): void
     {
+        // RFC 5545 forbids an ordinal here; it is ignored, as in WEEKLY rules.
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=10;BYDAY=1MO;COUNT=2',
+            '1997-05-12 09:00:00',
+            ['1997-05-12 09:00:00', '1998-03-02 09:00:00']
+        );
+    }
+
+    public function testYearlyByYearDayWithOrdinalByDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYYEARDAY=-1;BYDAY=-1FR;COUNT=2',
+            '2026-01-02 09:00:00',
+            ['2026-01-02 09:00:00', '2027-12-31 09:00:00']
+        );
+    }
+
+    public function testYearlyByWeekNoSunday(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=5;BYDAY=SU;COUNT=3',
+            '1997-05-16 09:00:00',
+            ['1997-05-16 09:00:00', '1998-02-01 09:00:00', '1999-02-07 09:00:00']
+        );
+    }
+
+    public function testYearlyByYearDaySunday(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYYEARDAY=1;BYDAY=SU;COUNT=2',
+            '2017-01-01 09:00:00',
+            ['2017-01-01 09:00:00', '2023-01-01 09:00:00']
+        );
+    }
+
+    public function testByWeekNoWithoutByDayKeepsStartWeekday(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=20;COUNT=3',
+            '2026-05-14 09:00:00', // Thursday of week 20
+            ['2026-05-14 09:00:00', '2027-05-20 09:00:00', '2028-05-18 09:00:00']
+        );
+    }
+
+    public function testYearlyByWeekNoOnLeapDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=9;BYDAY=MO;COUNT=3',
+            '1988-02-29 09:00:00',
+            ['1988-02-29 09:00:00', '1989-02-27 09:00:00', '1990-02-26 09:00:00']
+        );
+    }
+
+    public function testYearlyByYearDayOnLeapDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYYEARDAY=60;COUNT=3',
+            '2024-02-29 09:00:00',
+            ['2024-02-29 09:00:00', '2025-03-01 09:00:00', '2026-03-01 09:00:00']
+        );
+    }
+
+    public function testInvalidByWeekNo(): void
+    {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;BYWEEKNO=54',
             '2011-05-16 00:00:00',
@@ -786,7 +2069,7 @@ class RRuleIteratorTest extends TestCase
     /**
      * This also at one point caused an infinite loop. We're keeping the test.
      */
-    public function testYearlyByMonthLoop()
+    public function testYearlyByMonthLoop(): void
     {
         $this->parse(
             'FREQ=YEARLY;INTERVAL=1;UNTIL=20120203T225959Z;BYMONTH=2;BYSETPOS=1;BYDAY=SU,MO,TU,WE,TH,FR,SA',
@@ -799,14 +2082,82 @@ class RRuleIteratorTest extends TestCase
     }
 
     /**
+     * This test can take some seconds to complete.
+     * The "large" annotation means phpunit will let it run for
+     * up to 60 seconds by default.
+     *
+     * @large
+     */
+    public function testYearlyBySetPosLoop(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=5;BYSETPOS=3;BYMONTHDAY=3',
+            '2022-03-03 15:45:00',
+            [
+            ],
+            '2022-05-01'
+        );
+    }
+
+    /**
+     * This caused an incorrect date to be returned by the rule iterator when
+     * start date was not on the rrule list.
+     *
+     * @param string[] $expected
+     */
+    #[DataProvider('yearlyStartDateNotOnRRuleListProvider')]
+    public function testYearlyStartDateNotOnRRuleList(string $rule, string $start, array $expected): void
+    {
+        $this->parse($rule, $start, $expected);
+    }
+
+    public static function yearlyStartDateNotOnRRuleListProvider(): array
+    {
+        // When DTSTART does not match BYMONTH/BYDAY rules, the first occurrence
+        // should be the first valid date according to the RRULE, not DTSTART itself.
+        // See: https://github.com/linagora/esn-sabre/issues/50
+        return [
+            [
+                'FREQ=YEARLY;BYMONTH=6;BYDAY=-1FR;UNTIL=20250901T000000Z',
+                '2023-09-01 12:00:00',
+                [
+                    // DTSTART (2023-09-01) is not in June, so first occurrence is June 2024
+                    '2024-06-28 12:00:00',
+                    '2025-06-27 12:00:00',
+                ],
+            ],
+            [
+                'FREQ=YEARLY;BYMONTH=6;BYDAY=-1FR;UNTIL=20250901T000000Z',
+                '2023-06-01 12:00:00',
+                [
+                    // DTSTART (2023-06-01) is in June but is not the last Friday,
+                    // so first occurrence is the last Friday of June 2023
+                    '2023-06-30 12:00:00',
+                    '2024-06-28 12:00:00',
+                    '2025-06-27 12:00:00',
+                ],
+            ],
+            [
+                'FREQ=YEARLY;BYMONTH=6;BYDAY=-1FR;UNTIL=20250901T000000Z',
+                '2023-05-01 12:00:00',
+                [
+                    // DTSTART (2023-05-01) is not in June, so first occurrence is June 2023
+                    '2023-06-30 12:00:00',
+                    '2024-06-28 12:00:00',
+                    '2025-06-27 12:00:00',
+                ],
+            ],
+        ];
+    }
+
+    /**
      * Something, somewhere produced an ics with an interval set to 0. Because
      * this means we increase the current day (or week, month) by 0, this also
      * results in an infinite loop.
-     *
-     * @expectedException \Sabre\VObject\InvalidDataException
      */
-    public function testZeroInterval()
+    public function testZeroInterval(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=YEARLY;INTERVAL=0',
             '2012-08-24 14:57:00',
@@ -815,11 +2166,9 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testInvalidFreq()
+    public function testInvalidFreq(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=SMONTHLY;INTERVAL=3;UNTIL=20111025T000000Z',
             '2011-10-07',
@@ -827,11 +2176,9 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    /**
-     * @expectedException \Sabre\VObject\InvalidDataException
-     */
-    public function testByDayBadOffset()
+    public function testByDayBadOffset(): void
     {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=WEEKLY;INTERVAL=1;COUNT=4;BYDAY=0MO;WKST=SA',
             '2014-08-01 00:00:00',
@@ -839,7 +2186,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testUntilBeginHasTimezone()
+    public function testUntilBeginHasTimezone(): void
     {
         $this->parse(
             'FREQ=WEEKLY;UNTIL=20131118T183000',
@@ -860,7 +2207,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testUntilBeforeDtStart()
+    public function testUntilBeforeDtStart(): void
     {
         $this->parse(
             'FREQ=DAILY;UNTIL=20140101T000000Z',
@@ -871,7 +2218,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testIgnoredStuff()
+    public function testIgnoredStuff(): void
     {
         $this->parse(
             'FREQ=DAILY;BYSECOND=1;BYMINUTE=1;BYYEARDAY=1;BYWEEKNO=1;COUNT=2',
@@ -883,7 +2230,7 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testMinusFifthThursday()
+    public function testMinusFifthThursday(): void
     {
         $this->parse(
             'FREQ=MONTHLY;BYDAY=-4TH,-5TH;COUNT=4',
@@ -898,10 +2245,29 @@ class RRuleIteratorTest extends TestCase
     }
 
     /**
-     * @expectedException \Sabre\VObject\InvalidDataException
+     * This test can take some seconds to complete.
+     * The "large" annotation means phpunit will let it run for
+     * up to 60 seconds by default.
+     *
+     * @large
      */
-    public function testUnsupportedPart()
+    public function testNeverEnding(): void
     {
+        $this->parse(
+            'FREQ=MONTHLY;BYDAY=2TU;BYSETPOS=2',
+            '2015-01-01 00:15:00',
+            [
+                '2015-01-01 00:15:00',
+            ],
+            null,
+            'UTC',
+            true
+        );
+    }
+
+    public function testUnsupportedPart(): void
+    {
+        $this->expectException(InvalidDataException::class);
         $this->parse(
             'FREQ=DAILY;BYWODAN=1',
             '2014-08-02 00:15:00',
@@ -909,38 +2275,61 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
-    public function testIteratorFunctions()
+    public function testIteratorFunctions(): void
     {
-        $parser = new RRuleIterator('FREQ=DAILY', new DateTime('2014-08-02 00:00:13'));
+        $parser = new RRuleIterator('FREQ=DAILY', new \DateTime('2014-08-02 00:00:13'));
         $parser->next();
-        $this->assertEquals(
-            new DateTime('2014-08-03 00:00:13'),
+        self::assertEquals(
+            new \DateTime('2014-08-03 00:00:13'),
             $parser->current()
         );
-        $this->assertEquals(
+        self::assertEquals(
             1,
             $parser->key()
         );
 
         $parser->rewind();
 
-        $this->assertEquals(
-            new DateTime('2014-08-02 00:00:13'),
+        self::assertEquals(
+            new \DateTime('2014-08-02 00:00:13'),
             $parser->current()
         );
-        $this->assertEquals(
+        self::assertEquals(
             0,
             $parser->key()
         );
     }
 
-    public function parse($rule, $start, $expected, $fastForward = null, $tz = 'UTC')
+    /**
+     * Test YEARLY recurrence with BYMONTH and BYMONTHDAY where DTSTART month differs from BYMONTH.
+     *
+     * Issue: https://github.com/linagora/esn-sabre/issues/50
+     *
+     * When DTSTART is April 11 but RRULE specifies BYMONTH=5 (May) and BYMONTHDAY=15,
+     * the first occurrence should be May 15, not April 15.
+     */
+    public function testYearlyByMonthByMonthDayDifferentFromDTSTART(): void
     {
-        $dt = new DateTime($start, new DateTimeZone($tz));
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=15;COUNT=3',
+            '2030-04-11 10:00:00',
+            [
+                '2030-05-15 10:00:00',
+                '2031-05-15 10:00:00',
+                '2032-05-15 10:00:00',
+            ],
+            null,
+            'Asia/Ho_Chi_Minh'
+        );
+    }
+
+    public function parse($rule, string $start, array $expected, ?string $fastForward = null, string $tz = 'UTC', bool $runTillTheEnd = false): void
+    {
+        $dt = new \DateTime($start, new \DateTimeZone($tz));
         $parser = new RRuleIterator($rule, $dt);
 
         if ($fastForward) {
-            $parser->fastForward(new DateTime($fastForward));
+            $parser->fastForward(new \DateTime($fastForward));
         }
 
         $result = [];
@@ -948,15 +2337,128 @@ class RRuleIteratorTest extends TestCase
             $item = $parser->current();
             $result[] = $item->format('Y-m-d H:i:s');
 
-            if ($parser->isInfinite() && count($result) >= count($expected)) {
+            if (!$runTillTheEnd && $parser->isInfinite() && count($result) >= count($expected)) {
                 break;
             }
             $parser->next();
         }
 
-        $this->assertEquals(
+        self::assertEquals(
             $expected,
             $result
+        );
+    }
+
+    public function testMonthlyRuleWithoutInstanceEndsQuickly(): void
+    {
+        // The second-to-last Friday is between the 15th and the 24th.
+        $it = new RRuleIterator(
+            'FREQ=MONTHLY;BYDAY=-2FR;BYMONTHDAY=2,9,-3',
+            new \DateTimeImmutable('2026-01-29 18:00:00', new \DateTimeZone('Europe/Paris'))
+        );
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public function testYearlyRuleWithoutInstanceEndsQuickly(): void
+    {
+        $it = new RRuleIterator(
+            'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30',
+            new \DateTimeImmutable('2026-01-29 18:00:00', new \DateTimeZone('UTC'))
+        );
+        $start = microtime(true);
+        $it->next();
+        self::assertFalse($it->valid());
+        self::assertLessThan(0.5, microtime(true) - $start);
+    }
+
+    public function testRareInstancesAreStillFound(): void
+    {
+        // A Monday 29 February: 2016, 2044, 2072.
+        $this->parse(
+            'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO;COUNT=3',
+            '2016-02-29 10:00:00',
+            ['2016-02-29 10:00:00', '2044-02-29 10:00:00', '2072-02-29 10:00:00']
+        );
+        // Every 41 months, a Friday 13th: the scan visits each month of the
+        // 400-year cycle in a different order, and still finds them.
+        $it = new RRuleIterator(
+            'FREQ=MONTHLY;INTERVAL=41;BYDAY=FR;BYMONTHDAY=13;COUNT=5',
+            new \DateTimeImmutable('2026-02-13 10:00:00', new \DateTimeZone('UTC'))
+        );
+        $count = 0;
+        foreach ($it as $date) {
+            self::assertSame('Fri 13', $date->format('D j'));
+            ++$count;
+        }
+        self::assertSame(5, $count);
+    }
+
+    public function testUntilHoldingADurationIsInvalidData(): void
+    {
+        $this->expectException(InvalidDataException::class);
+        new RRuleIterator('FREQ=DAILY;UNTIL=P1D', new \DateTimeImmutable('2026-01-01T00:00:00Z'));
+    }
+
+    public function testYearlyByWeekNoFollowsWkst(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO;WKST=SU;COUNT=3',
+            '1997-05-12 00:00:00',
+            [
+                '1997-05-12 00:00:00',
+                '1998-05-18 00:00:00',
+                '1999-05-17 00:00:00',
+            ],
+        );
+    }
+
+    /**
+     * The first instance is the Sunday that starts week 20 under WKST=SU: it
+     * is in ISO week 19, and gives no second instance in the same year.
+     */
+    public function testYearlyByWeekNoFollowsWkstOnItsFirstDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=20;BYDAY=SU;WKST=SU;COUNT=5',
+            '1997-05-11 00:00:00',
+            [
+                '1997-05-11 00:00:00',
+                '1998-05-17 00:00:00',
+                '1999-05-16 00:00:00',
+                '2000-05-14 00:00:00',
+                '2001-05-13 00:00:00',
+            ],
+        );
+    }
+
+    public function testYearlyByWeekNoLastWeekFollowsWkst(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=-1;BYDAY=SU;WKST=SU;COUNT=4',
+            '2023-12-24 10:00:00',
+            [
+                '2023-12-24 10:00:00',
+                '2024-12-22 10:00:00',
+                // Week 1 of 2026 starts on 4 January: 2025 has 53 weeks.
+                '2025-12-28 10:00:00',
+                '2026-12-27 10:00:00',
+            ],
+        );
+    }
+
+    public function testYearlyByWeekNoWithWkstMoIsTheIsoWeek(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=53;BYDAY=MO;WKST=MO;COUNT=3',
+            '2020-12-28 10:00:00',
+            [
+                '2020-12-28 10:00:00',
+                '2026-12-28 10:00:00',
+                '2032-12-27 10:00:00',
+            ],
         );
     }
 }

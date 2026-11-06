@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Property\ICalendar;
 
 use Sabre\VObject\DateTimeParser;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Property;
 use Sabre\Xml;
 
@@ -22,30 +23,24 @@ class Period extends Property
     /**
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
-     *
-     * @var string|null
      */
-    public $delimiter = ',';
+    public string $delimiter = ',';
 
     /**
      * Sets a raw value coming from a mimedir (iCalendar/vCard) file.
      *
      * This has been 'unfolded', so only 1 line will be passed. Unescaping is
      * not yet done, but parameters are not included.
-     *
-     * @param string $val
      */
-    public function setRawMimeDirValue($val)
+    public function setRawMimeDirValue(string $val): void
     {
         $this->setValue(explode($this->delimiter, $val));
     }
 
     /**
      * Returns a raw mime-dir representation of the value.
-     *
-     * @return string
      */
-    public function getRawMimeDirValue()
+    public function getRawMimeDirValue(): string
     {
         return implode($this->delimiter, $this->getParts());
     }
@@ -55,10 +50,8 @@ class Period extends Property
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'PERIOD';
     }
@@ -67,18 +60,24 @@ class Period extends Property
      * Sets the json value, as it would appear in a jCard or jCal object.
      *
      * The value must always be an array.
-     *
-     * @param array $value
      */
-    public function setJsonValue(array $value)
+    public function setJsonValue(array $value): void
     {
+        // Only the date-times lose their jCal separators: a duration has
+        // none, and is kept as it is.
         $value = array_map(
-            function ($item) {
-                return strtr(implode('/', $item), [':' => '', '-' => '']);
-            },
+            fn ($item) => implode('/', array_map(
+                fn ($part) => preg_match('/^[+-]?P/', (string) $part) ? $part : strtr((string) $part, [':' => '', '-' => '']),
+                $item
+            )),
             $value
         );
         parent::setJsonValue($value);
+    }
+
+    public function appendUtc(string $strDate)
+    {
+        return !str_ends_with($strDate, 'Z') ? '' : 'Z';
     }
 
     /**
@@ -86,27 +85,30 @@ class Period extends Property
      *
      * This method must always return an array.
      *
-     * @return array
+     * @throws InvalidDataException
      */
-    public function getJsonValue()
+    public function getJsonValue(): array
     {
         $return = [];
         foreach ($this->getParts() as $item) {
-            list($start, $end) = explode('/', $item, 2);
+            [$start, $end] = explode('/', (string) $item, 2) + [1 => ''];
+            if ('' === $end) {
+                throw new InvalidDataException('A period must have a start and an end or a duration: '.$item);
+            }
 
-            $start = DateTimeParser::parseDateTime($start);
+            $startDt = DateTimeParser::parseDateTime($start)->format('Y-m-d\\TH:i:s').$this->appendUtc($start);
 
             // This is a duration value.
             if ('P' === $end[0]) {
                 $return[] = [
-                    $start->format('Y-m-d\\TH:i:s'),
+                    $startDt,
                     $end,
                 ];
             } else {
-                $end = DateTimeParser::parseDateTime($end);
+                $endDt = DateTimeParser::parseDateTime($end)->format('Y-m-d\\TH:i:s').$this->appendUtc($end);
                 $return[] = [
-                    $start->format('Y-m-d\\TH:i:s'),
-                    $end->format('Y-m-d\\TH:i:s'),
+                    $startDt,
+                    $endDt,
                 ];
             }
         }
@@ -115,12 +117,59 @@ class Period extends Property
     }
 
     /**
+     * Validates the node for correctness.
+     *
+     * A PERIOD is date-time "/" (date-time / dur-value) (RFC 5545 section
+     * 3.3.9).
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+
+        foreach ($this->getParts() as $value) {
+            $parts = explode('/', (string) $value);
+            try {
+                if (2 !== count($parts)) {
+                    throw new InvalidDataException('A period has a start and an end');
+                }
+                DateTimeParser::parseDateTime($parts[0]);
+                if ('P' === ($parts[1][0] ?? '')) {
+                    DateTimeParser::parseDuration($parts[1]);
+                } else {
+                    DateTimeParser::parseDateTime($parts[1]);
+                }
+            } catch (InvalidDataException) {
+                $messages[] = [
+                    'level' => 3,
+                    'message' => 'The supplied value ('.$value.') is not a correct PERIOD',
+                    'node' => $this,
+                ];
+
+                return $messages;
+            }
+        }
+
+        // getJsonValue() must be able to format any value accepted here.
+        try {
+            $this->getJsonValue();
+        } catch (InvalidDataException) {
+            $messages[] = [
+                'level' => 3,
+                'message' => 'The supplied value ('.$this->getRawMimeDirValue().') is not a correct PERIOD',
+                'node' => $this,
+            ];
+        }
+
+        return $messages;
+    }
+
+    /**
      * This method serializes only the value of a property. This is used to
      * create xCard or xCal documents.
      *
-     * @param Xml\Writer $writer XML writer
+     * @throws InvalidDataException
      */
-    protected function xmlSerializeValue(Xml\Writer $writer)
+    protected function xmlSerializeValue(Xml\Writer $writer): void
     {
         $writer->startElement(strtolower($this->getValueType()));
         $value = $this->getJsonValue();

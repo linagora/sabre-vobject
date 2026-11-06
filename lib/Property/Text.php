@@ -4,6 +4,7 @@ namespace Sabre\VObject\Property;
 
 use Sabre\VObject\Component;
 use Sabre\VObject\Document;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Parser\MimeDir;
 use Sabre\VObject\Property;
 use Sabre\Xml;
@@ -22,17 +23,13 @@ class Text extends Property
     /**
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
-     *
-     * @var string
      */
-    public $delimiter = ',';
+    public string $delimiter = ',';
 
     /**
      * List of properties that are considered 'structured'.
-     *
-     * @var array
      */
-    protected $structuredValues = [
+    protected array $structuredValues = [
         // vCard
         'N',
         'ADR',
@@ -45,14 +42,21 @@ class Text extends Property
     ];
 
     /**
+     * Structured properties whose components may hold several values,
+     * separated by an unescaped comma (RFC 6350 sections 6.2.2 and 6.3.1).
+     */
+    protected array $listComponentValues = [
+        'N',
+        'ADR',
+    ];
+
+    /**
      * Some text components have a minimum number of components.
      *
      * N must for instance be represented as 5 components, separated by ;, even
      * if the last few components are unused.
-     *
-     * @var array
      */
-    protected $minimumPropertyValues = [
+    protected array $minimumPropertyValues = [
         'N' => 5,
         'ADR' => 7,
     ];
@@ -65,19 +69,18 @@ class Text extends Property
      * Parameter objects.
      *
      * @param Component         $root       The root document
-     * @param string            $name
      * @param string|array|null $value
      * @param array             $parameters List of parameters
-     * @param string            $group      The vcard property group
+     * @param string|null       $group      The vcard property group
      */
-    public function __construct(Component $root, $name, $value = null, array $parameters = [], $group = null)
+    public function __construct(Component $root, string $name, $value = null, array $parameters = [], ?string $group = null)
     {
         // There's two types of multi-valued text properties:
         // 1. multivalue properties.
         // 2. structured value properties
         //
-        // The former is always separated by a comma, the latter by semi-colon.
-        if (in_array($name, $this->structuredValues)) {
+        // The former is always separated by a comma, the latter by semicolon.
+        if (in_array($name, $this->structuredValues, true)) {
             $this->delimiter = ';';
         }
 
@@ -90,19 +93,46 @@ class Text extends Property
      * This has been 'unfolded', so only 1 line will be passed. Unescaping is
      * not yet done, but parameters are not included.
      *
-     * @param string $val
+     * @throws InvalidDataException
      */
-    public function setRawMimeDirValue($val)
+    public function setRawMimeDirValue(string $val): void
     {
+        // A bare carriage return is not allowed in a TEXT value, and
+        // getRawMimeDirValue() drops it. Dropping it here as well makes the
+        // parsed value equal to the one that gets serialized.
+        $val = str_replace("\r", '', $val);
+
+        if (in_array($this->name, $this->listComponentValues, true)) {
+            // Split on the unescaped ";" first, then each component on the
+            // unescaped ",". A component with one value stays a string.
+            $components = [];
+            $component = '';
+            foreach (preg_split('/(\\\\.|;)/s', $val, -1, PREG_SPLIT_DELIM_CAPTURE) as $token) {
+                if (';' === $token) {
+                    $components[] = $component;
+                    $component = '';
+                } else {
+                    $component .= $token;
+                }
+            }
+            $components[] = $component;
+
+            $this->setValue(array_map(function (string $component) {
+                $values = MimeDir::unescapeValue($component, ',');
+
+                return 1 === count($values) ? $values[0] : $values;
+            }, $components));
+
+            return;
+        }
+
         $this->setValue(MimeDir::unescapeValue($val, $this->delimiter));
     }
 
     /**
      * Sets the value as a quoted-printable encoded string.
-     *
-     * @param string $val
      */
-    public function setQuotedPrintableValue($val)
+    public function setQuotedPrintableValue(string $val): void
     {
         $val = quoted_printable_decode($val);
 
@@ -111,7 +141,7 @@ class Text extends Property
         // that.
         //
         // We also don't have to unescape \\, so all we need to look for is a ;
-        // that's not preceeded with a \.
+        // that's not preceded with a \.
         $regex = '# (?<!\\\\) ; #x';
         $matches = preg_split($regex, $val);
         $this->setValue($matches);
@@ -119,16 +149,19 @@ class Text extends Property
 
     /**
      * Returns a raw mime-dir representation of the value.
-     *
-     * @return string
      */
-    public function getRawMimeDirValue()
+    public function getRawMimeDirValue(): string
     {
         $val = $this->getParts();
 
         if (isset($this->minimumPropertyValues[$this->name])) {
-            $val = array_pad($val, $this->minimumPropertyValues[$this->name], '');
+            $val = \array_pad($val, $this->minimumPropertyValues[$this->name], '');
         }
+
+        // The values of a component are separated by a comma where the
+        // property allows it, and joined as one value elsewhere, as they
+        // are read back.
+        $listSeparator = ';' !== $this->delimiter || in_array($this->name, $this->listComponentValues, true) ? ',' : '\,';
 
         foreach ($val as &$item) {
             if (!is_array($item)) {
@@ -136,36 +169,36 @@ class Text extends Property
             }
 
             foreach ($item as &$subItem) {
-                $subItem = strtr(
-                    $subItem,
-                    [
-                        '\\' => '\\\\',
-                        ';' => '\;',
-                        ',' => '\,',
-                        "\n" => '\n',
-                        "\r" => '',
-                    ]
-                );
+                if (!\is_null($subItem)) {
+                    $subItem = strtr(
+                        $subItem,
+                        [
+                            '\\' => '\\\\',
+                            ';' => '\;',
+                            ',' => '\,',
+                            "\n" => '\n',
+                            "\r" => '',
+                        ]
+                    );
+                }
             }
-            $item = implode(',', $item);
+            $item = \implode($listSeparator, $item);
         }
 
-        return implode($this->delimiter, $val);
+        return \implode($this->delimiter, $val);
     }
 
     /**
      * Returns the value, in the format it should be encoded for json.
      *
      * This method must always return an array.
-     *
-     * @return array
      */
-    public function getJsonValue()
+    public function getJsonValue(): array
     {
         // Structured text values should always be returned as a single
         // array-item. Multi-value text should be returned as multiple items in
         // the top-array.
-        if (in_array($this->name, $this->structuredValues)) {
+        if (in_array($this->name, $this->structuredValues, true)) {
             return [$this->getParts()];
         }
 
@@ -177,20 +210,16 @@ class Text extends Property
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'TEXT';
     }
 
     /**
      * Turns the object back into a serialized blob.
-     *
-     * @return string
      */
-    public function serialize()
+    public function serialize(): string
     {
         // We need to kick in a special type of encoding, if it's a 2.1 vcard.
         if (Document::VCARD21 !== $this->root->getDocumentType()) {
@@ -202,6 +231,9 @@ class Text extends Property
         if (isset($this->minimumPropertyValues[$this->name])) {
             $val = \array_pad($val, $this->minimumPropertyValues[$this->name], '');
         }
+
+        // A component of N or ADR may hold a list of values.
+        $val = \array_map(static fn ($part) => \is_array($part) ? \implode(',', $part) : $part, $val);
 
         // Imploding multiple parts into a single value, and splitting the
         // values with ;.
@@ -215,7 +247,7 @@ class Text extends Property
         }
 
         $str = $this->name;
-        if ($this->group) {
+        if (null !== $this->group) {
             $str = $this->group.'.'.$this->name;
         }
         foreach ($this->parameters as $param) {
@@ -227,22 +259,22 @@ class Text extends Property
 
         // If the resulting value contains a \n, we must encode it as
         // quoted-printable.
-        if (false !== \strpos($val, "\n")) {
+        if (str_contains((string) $val, "\n")) {
             $str .= ';ENCODING=QUOTED-PRINTABLE:';
             $lastLine = $str;
-            $out = null;
+            $out = '';
 
             // The PHP built-in quoted-printable-encode does not correctly
             // encode newlines for us. Specifically, the \r\n sequence must in
             // vcards be encoded as =0D=OA and we must insert soft-newlines
             // every 75 bytes.
-            for ($ii = 0; $ii < \strlen($val); ++$ii) {
+            for ($ii = 0; $ii < \strlen((string) $val); ++$ii) {
                 $ord = \ord($val[$ii]);
                 // These characters are encoded as themselves.
                 if ($ord >= 32 && $ord <= 126) {
                     $lastLine .= $val[$ii];
                 } else {
-                    $lastLine .= '='.\strtoupper(\bin2hex($val[$ii]));
+                    $lastLine .= '='.\strtoupper(\bin2hex((string) $val[$ii]));
                 }
                 if (\strlen($lastLine) >= 75) {
                     // Soft line break
@@ -255,39 +287,36 @@ class Text extends Property
             }
 
             return $out;
-        } else {
-            $str .= ':'.$val;
+        }
+        $str .= ':'.$val;
 
-            $str = \preg_replace(
-                '/(
+        $str = \preg_replace(
+            '/(
                     (?:^.)?         # 1 additional byte in first line because of missing single space (see next line)
                     .{1,74}         # max 75 bytes per line (1 byte is used for a single space added after every CRLF)
                     (?![\x80-\xbf]) # prevent splitting multibyte characters
                 )/x',
-                "$1\r\n ",
-                $str
-            );
+            "$1\r\n ",
+            $str
+        );
 
-            // remove single space after last CRLF
-            return \substr($str, 0, -1);
-        }
+        // remove single space after last CRLF
+        return \substr((string) $str, 0, -1);
     }
 
     /**
      * This method serializes only the value of a property. This is used to
      * create xCard or xCal documents.
-     *
-     * @param Xml\Writer $writer XML writer
      */
-    protected function xmlSerializeValue(Xml\Writer $writer)
+    protected function xmlSerializeValue(Xml\Writer $writer): void
     {
         $values = $this->getParts();
 
-        $map = function ($items) use ($values, $writer) {
+        $map = function (array $items) use ($values, $writer): void {
             foreach ($items as $i => $item) {
                 $writer->writeElement(
                     $item,
-                    !empty($values[$i]) ? $values[$i] : null
+                    ('' !== $values[$i] && [] !== $values[$i]) ? $values[$i] : null
                 );
             }
         };
@@ -360,26 +389,25 @@ class Text extends Property
      *    * level - (number between 1 and 3 with severity information)
      *    * message - (human readable message)
      *    * node - (reference to the offending node)
-     *
-     * @param int $options
-     *
-     * @return array
      */
-    public function validate($options = 0)
+    public function validate(int $options = 0): array
     {
         $warnings = parent::validate($options);
 
         if (isset($this->minimumPropertyValues[$this->name])) {
             $minimum = $this->minimumPropertyValues[$this->name];
             $parts = $this->getParts();
-            if (count($parts) < $minimum) {
+            if (\count($parts) < $minimum) {
+                // Only a structured TEXT value can be padded: other value
+                // types (e.g. VALUE=uri) serialize a single value.
+                $repair = ($options & self::REPAIR) && 'TEXT' === $this->getValueType();
                 $warnings[] = [
-                    'level' => $options & self::REPAIR ? 1 : 3,
-                    'message' => 'The '.$this->name.' property must have at least '.$minimum.' values. It only has '.count($parts),
+                    'level' => $repair ? 1 : 3,
+                    'message' => 'The '.$this->name.' property must have at least '.$minimum.' values. It only has '.\count($parts),
                     'node' => $this,
                 ];
-                if ($options & self::REPAIR) {
-                    $parts = array_pad($parts, $minimum, '');
+                if ($repair) {
+                    $parts = \array_pad($parts, $minimum, '');
                     $this->setParts($parts);
                 }
             }

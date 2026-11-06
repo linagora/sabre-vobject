@@ -2,13 +2,12 @@
 
 namespace Sabre\VObject\Property;
 
-use
-    Sabre\VObject\Property;
+use Sabre\VObject\Property;
 
 /**
  * Boolean property.
  *
- * This object represents BOOLEAN values. These are always the case-insenstive
+ * This object represents BOOLEAN values. These are always the case-insensitive
  * string TRUE or FALSE.
  *
  * Automatic conversion to PHP's true and false are done.
@@ -24,21 +23,17 @@ class Boolean extends Property
      *
      * This has been 'unfolded', so only 1 line will be passed. Unescaping is
      * not yet done, but parameters are not included.
-     *
-     * @param string $val
      */
-    public function setRawMimeDirValue($val)
+    public function setRawMimeDirValue(string $val): void
     {
-        $val = 'TRUE' === strtoupper($val) ? true : false;
+        $val = 'TRUE' === strtoupper($val);
         $this->setValue($val);
     }
 
     /**
      * Returns a raw mime-dir representation of the value.
-     *
-     * @return string
      */
-    public function getRawMimeDirValue()
+    public function getRawMimeDirValue(): string
     {
         return $this->value ? 'TRUE' : 'FALSE';
     }
@@ -48,26 +43,20 @@ class Boolean extends Property
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'BOOLEAN';
     }
 
     /**
-     * Hydrate data from a XML subtree, as it would appear in a xCard or xCal
+     * Hydrate data from an XML subtree, as it would appear in a xCard or xCal
      * object.
-     *
-     * @param array $value
      */
-    public function setXmlValue(array $value)
+    public function setXmlValue(array $value): void
     {
         $value = array_map(
-            function ($value) {
-                return 'true' === $value;
-            },
+            fn ($value) => 'true' === $value,
             $value
         );
         parent::setXmlValue($value);

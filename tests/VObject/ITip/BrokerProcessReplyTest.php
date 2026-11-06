@@ -2,9 +2,14 @@
 
 namespace Sabre\VObject\ITip;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\Node;
+use Sabre\VObject\Reader;
+
 class BrokerProcessReplyTest extends BrokerTester
 {
-    public function testReplyNoOriginal()
+    public function testReplyNoOriginal(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -22,10 +27,10 @@ ICS;
         $old = null;
         $expected = null;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyAccept()
+    public function testReplyAccept(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -64,10 +69,109 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyRequestStatus()
+    public function testReplyWithTz(): void
+    {
+        $itip = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VTIMEZONE
+TZID:(UTC+01:00) Brussels\, Copenhagen\, Madrid\, Paris
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+SEQUENCE:2
+UID:foobar
+DTSTART;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T120000Z
+DTEND;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T130000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:(UTC+01:00) Brussels\, Copenhagen\, Madrid\, Paris
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+DTSTART;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T120000Z
+DTEND;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T130000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $expected = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:(UTC+01:00) Brussels\, Copenhagen\, Madrid\, Paris
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+ATTENDEE;PARTSTAT=ACCEPTED;SCHEDULE-STATUS=2.0:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+DTSTART;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T120000Z
+DTEND;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T130000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->process($itip, $old, $expected);
+    }
+
+    public function testReplyRequestStatus(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -108,10 +212,10 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyPartyCrasher()
+    public function testReplyPartyCrasher(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -151,10 +255,77 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyNewException()
+    public function testReplyExistingExceptionRecurrenceIdInUTC(): void
+    {
+        $itip = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VEVENT
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+SEQUENCE:2
+RECURRENCE-ID:20140725T040000Z
+UID:foobar
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+RRULE:FREQ=DAILY
+DTSTART;TZID=America/Toronto:20140724T000000
+DTEND;TZID=America/Toronto:20140724T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+END:VEVENT
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+DTSTART;TZID=America/Toronto:20140725T000000
+DTEND;TZID=America/Toronto:20140725T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+RECURRENCE-ID;TZID=America/Toronto:20140725T000000
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $expected = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+RRULE:FREQ=DAILY
+DTSTART;TZID=America/Toronto:20140724T000000
+DTEND;TZID=America/Toronto:20140724T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+END:VEVENT
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+DTSTART;TZID=America/Toronto:20140725T000000
+DTEND;TZID=America/Toronto:20140725T010000
+ATTENDEE;PARTSTAT=ACCEPTED;SCHEDULE-STATUS=2.0:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+RECURRENCE-ID;TZID=America/Toronto:20140725T000000
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->process($itip, $old, $expected);
+    }
+
+    public function testReplyNewException(): void
     {
         // This is a reply to 1 instance of a recurring event. This should
         // automatically create an exception.
@@ -211,10 +382,10 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyNewExceptionTz()
+    public function testReplyNewExceptionTz(): void
     {
         // This is a reply to 1 instance of a recurring event. This should
         // automatically create an exception.
@@ -271,10 +442,130 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyPartyCrashCreateExcepton()
+    public function testReplyNewExceptionRecurrenceIdInDifferentTz(): void
+    {
+        // This is a reply to 1 instance of a recurring event. This should
+        // automatically create an exception.
+        $itip = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VEVENT
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+SEQUENCE:2
+RECURRENCE-ID;TZID=Asia/Ho_Chi_Minh:20140725T110000
+UID:foobar
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+RRULE:FREQ=DAILY
+DTSTART;TZID=America/Toronto:20140724T000000
+DTEND;TZID=America/Toronto:20140724T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $expected = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+RRULE:FREQ=DAILY
+DTSTART;TZID=America/Toronto:20140724T000000
+DTEND;TZID=America/Toronto:20140724T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+END:VEVENT
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+DTSTART;TZID=America/Toronto:20140725T000000
+DTEND;TZID=America/Toronto:20140725T010000
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+RECURRENCE-ID;TZID=America/Toronto:20140725T000000
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->process($itip, $old, $expected);
+    }
+
+    public function testReplyNewExceptionRecurrenceIdInUTC(): void
+    {
+        // This is a reply to 1 instance of a recurring event. This should
+        // automatically create an exception.
+        $itip = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VEVENT
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+SEQUENCE:2
+RECURRENCE-ID:20140725T040000Z
+UID:foobar
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+RRULE:FREQ=DAILY
+DTSTART;TZID=America/Toronto:20140724T000000
+DTEND;TZID=America/Toronto:20140724T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $expected = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+RRULE:FREQ=DAILY
+DTSTART;TZID=America/Toronto:20140724T000000
+DTEND;TZID=America/Toronto:20140724T010000
+ATTENDEE:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+END:VEVENT
+BEGIN:VEVENT
+SEQUENCE:2
+UID:foobar
+DTSTART;TZID=America/Toronto:20140725T000000
+DTEND;TZID=America/Toronto:20140725T010000
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:foo@example.org
+ORGANIZER:mailto:bar@example.org
+RECURRENCE-ID;TZID=America/Toronto:20140725T000000
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->process($itip, $old, $expected);
+    }
+
+    public function testReplyPartyCrashCreateException(): void
     {
         // IN this test there's a recurring event that has an exception. The
         // exception is missing the attendee.
@@ -332,10 +623,10 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyNewExceptionNoMasterEvent()
+    public function testReplyNewExceptionNoMasterEvent(): void
     {
         /**
          * This iTip message would normally create a new exception, but the
@@ -374,13 +665,13 @@ END:VCALENDAR
 ICS;
 
         $expected = null;
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
     /**
      * @depends testReplyAccept
      */
-    public function testReplyAcceptUpdateRSVP()
+    public function testReplyAcceptUpdateRSVP(): void
     {
         $itip = <<<ICS
 BEGIN:VCALENDAR
@@ -419,10 +710,10 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
     }
 
-    public function testReplyNewExceptionFirstOccurence()
+    public function testReplyNewExceptionFirstOccurrence(): void
     {
         // This is a reply to 1 instance of a recurring event. This should
         // automatically create an exception.
@@ -479,6 +770,67 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $result = $this->process($itip, $old, $expected);
+        $this->process($itip, $old, $expected);
+    }
+
+    #[DataProvider('invalidReplyValues')]
+    public function testReplyDoesNotStoreInvalidValues(string $replyLines, string $expectedStatus): void
+    {
+        $stored = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:u1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260106T100000Z\r\nORGANIZER:mailto:o@example.com\r\n"
+            ."ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $message = new Message();
+        $message->uid = 'u1';
+        $message->component = 'VEVENT';
+        $message->method = 'REPLY';
+        $message->sequence = 1;
+        $message->sender = 'mailto:a@example.com';
+        $message->recipient = 'mailto:o@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:u1\r\n".$replyLines."END:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $result = (new Broker())->processMessage($message, $stored);
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        self::assertSame([], array_filter($result->validate(Node::PROFILE_CALDAV), fn ($m) => 3 === $m['level']));
+        self::assertIsString(json_encode($result->jsonSerialize(), JSON_THROW_ON_ERROR));
+        self::assertSame($expectedStatus, (string) $result->VEVENT->ATTENDEE['PARTSTAT']);
+    }
+
+    public static function invalidReplyValues(): array
+    {
+        return [
+            'quoted-printable REQUEST-STATUS' => ["ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nREQUEST-STATUS;ENCODING=QUOTED-PRINTABLE:2=FF0;Success\r\n", 'ACCEPTED'],
+            'raw REQUEST-STATUS' => ["ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nREQUEST-STATUS:2\xFF0;Success\r\n", 'ACCEPTED'],
+            'raw PARTSTAT' => ["ATTENDEE;PARTSTAT=ACC\xFFEPTED:mailto:a@example.com\r\n", 'NEEDS-ACTION'],
+            'PARTSTAT that is not a token' => ["ATTENDEE;PARTSTAT=\"ACCEPTED\$x\":mailto:a@example.com\r\n", 'NEEDS-ACTION'],
+        ];
+    }
+
+    public function testReplyKeepsDefaultScheduleStatusForInvalidRequestStatus(): void
+    {
+        $stored = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTART:20260106T100000Z\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $message = new Message();
+        $message->uid = 'u1';
+        $message->component = 'VEVENT';
+        $message->method = 'REPLY';
+        $message->sender = 'mailto:a@example.com';
+        $message->recipient = 'mailto:o@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:u1\r\n"
+            ."ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nREQUEST-STATUS:nope;x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $result = (new Broker())->processMessage($message, $stored);
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        self::assertSame('2.0', (string) $result->VEVENT->ATTENDEE['SCHEDULE-STATUS']);
     }
 }

@@ -2,7 +2,6 @@
 
 namespace Sabre\VObject\Component;
 
-use DateTimeInterface;
 use Sabre\VObject;
 use Sabre\VObject\Recur\EventIterator;
 use Sabre\VObject\Recur\NoInstancesException;
@@ -15,6 +14,18 @@ use Sabre\VObject\Recur\NoInstancesException;
  * @copyright Copyright (C) fruux GmbH (https://fruux.com/)
  * @author Evert Pot (http://evertpot.com/)
  * @license http://sabre.io/license/ Modified BSD License
+ *
+ * @property VObject\Property\ICalendar\DateTime DTSTART
+ * @property VObject\Property\ICalendar\DateTime DTEND
+ * @property VObject\Property\ICalendar\DateTime DTSTAMP
+ * @property VObject\Property\ICalendar\Duration DURATION
+ * @property VObject\Property\ICalendar\Recur RRULE
+ * @property VObject\Property\ICalendar\DateTime[] EXDATE
+ * @property VObject\Property\ICalendar\DateTime RDATE
+ * @property VObject\Property\ICalendar\Recur EXRULE
+ * @property VObject\Property\ICalendar\DateTime RECURRENCE-ID
+ * @property VObject\Property\FlatText TRANSP
+ * @property VObject\Property\FlatText STATUS
  */
 class VEvent extends VObject\Component
 {
@@ -25,18 +36,22 @@ class VEvent extends VObject\Component
      * The rules used to determine if an event falls within the specified
      * time-range is based on the CalDAV specification.
      *
-     * @param DateTimeInterface $start
-     * @param DateTimeInterface $end
+     * Floating and all-day values are read in the time zone of the window,
+     * which is the only reference zone this method knows. RFC 4791 sections
+     * 7.3 and 9.9 evaluate them in the zone of the calendar: a caller that has
+     * one, or that passes it to VCalendar::expand(), gives the window in that
+     * zone, or the two will disagree.
      *
-     * @return bool
+     * @throws VObject\InvalidDataException
+     * @throws VObject\Recur\MaxInstancesExceededException
      */
-    public function isInTimeRange(DateTimeInterface $start, DateTimeInterface $end)
+    public function isInTimeRange(\DateTimeInterface $start, \DateTimeInterface $end): bool
     {
-        if ($this->RRULE) {
+        if ($this->RRULE || $this->RDATE) {
             try {
                 $it = new EventIterator($this, null, $start->getTimezone());
-            } catch (NoInstancesException $e) {
-                // If we've catched this exception, there are no instances
+            } catch (NoInstancesException) {
+                // If we've caught this exception, there are no instances
                 // for the event that fall into the specified time-range.
                 return false;
             }
@@ -47,14 +62,22 @@ class VEvent extends VObject\Component
             // recurrence instance exceeded the start of the requested
             // time-range.
             //
-            // If the starttime of the recurrence did not exceed the
+            // If the start time of the recurrence did not exceed the
             // end of the time range as well, we have a match.
             return $it->getDTStart() < $end && $it->getDTEnd() > $start;
         }
 
+        // The class of these properties follows their VALUE parameter.
+        if (!$this->DTSTART instanceof VObject\Property\ICalendar\DateTime) {
+            throw new VObject\InvalidDataException('DTSTART must be a date or date-time value');
+        }
+        if (isset($this->DTEND) && !$this->DTEND instanceof VObject\Property\ICalendar\DateTime) {
+            throw new VObject\InvalidDataException('DTEND must be a date or date-time value');
+        }
+
         $effectiveStart = $this->DTSTART->getDateTime($start->getTimezone());
         if (isset($this->DTEND)) {
-            // The DTEND property is considered non inclusive. So for a 3 day
+            // The DTEND property is considered non-inclusive. So for a 3-day
             // event in july, dtstart and dtend would have to be July 1st and
             // July 4th respectively.
             //
@@ -68,6 +91,11 @@ class VEvent extends VObject\Component
         } else {
             $effectiveEnd = $effectiveStart;
         }
+        // An end before the start is invalid (RFC 5545 section 3.8.2.2):
+        // the event is taken as lasting zero seconds, as EventIterator does.
+        if ($effectiveEnd < $effectiveStart) {
+            $effectiveEnd = $effectiveStart;
+        }
 
         return
             ($start < $effectiveEnd) && ($end > $effectiveStart)
@@ -76,10 +104,8 @@ class VEvent extends VObject\Component
 
     /**
      * This method should return a list of default property values.
-     *
-     * @return array
      */
-    protected function getDefaults()
+    protected function getDefaults(): array
     {
         return [
             'UID' => 'sabre-vobject-'.VObject\UUIDUtil::getUUID(),
@@ -99,10 +125,8 @@ class VEvent extends VObject\Component
      *   * + - Must appear at least once.
      *   * * - Can appear any number of times.
      *   * ? - May appear, but not more than once.
-     *
-     * @var array
      */
-    public function getValidationRules()
+    public function getValidationRules(): array
     {
         $hasMethod = isset($this->parent->METHOD);
 

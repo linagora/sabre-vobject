@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Splitter;
 
 use Sabre\VObject;
+use Sabre\VObject\Component;
 use Sabre\VObject\Component\VCalendar;
 
 /**
@@ -23,36 +24,34 @@ class ICalendar implements SplitterInterface
 {
     /**
      * Timezones.
-     *
-     * @var array
      */
-    protected $vtimezones = [];
+    protected array $vtimezones = [];
 
     /**
      * iCalendar objects.
-     *
-     * @var array
      */
-    protected $objects = [];
+    protected array $objects = [];
 
     /**
      * Constructor.
      *
-     * The splitter should receive an readable file stream as it's input.
+     * The splitter should receive a readable file stream as its input.
      *
      * @param resource $input
      * @param int      $options parser options, see the OPTIONS constants
+     *
+     * @throws VObject\ParseException
      */
-    public function __construct($input, $options = 0)
+    public function __construct($input, int $options = 0)
     {
         $data = VObject\Reader::read($input, $options);
 
-        if (!$data instanceof VObject\Component\VCalendar) {
+        if (!$data instanceof VCalendar) {
             throw new VObject\ParseException('Supplied input could not be parsed as VCALENDAR.');
         }
 
         foreach ($data->children() as $component) {
-            if (!$component instanceof VObject\Component) {
+            if (!$component instanceof Component) {
                 continue;
             }
 
@@ -82,10 +81,8 @@ class ICalendar implements SplitterInterface
      * hit the end of the stream.
      *
      * When the end is reached, null will be returned.
-     *
-     * @return \Sabre\VObject\Component|null
      */
-    public function getNext()
+    public function getNext(): ?Component
     {
         if ($object = array_shift($this->objects)) {
             // create our baseobject
@@ -99,8 +96,8 @@ class ICalendar implements SplitterInterface
             }
 
             return $object;
-        } else {
-            return;
         }
+
+        return null;
     }
 }
