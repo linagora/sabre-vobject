@@ -1556,11 +1556,9 @@ class RRuleIteratorTest extends TestCase
     }
 
     /*
-     * Verifies that -366 back in the year is 1 Jan in a leap year
-     * Interestingly, it goes back to 31 Dec of the previous year
-     * when not a leap year. The spec says that -366 is valid, and
-     * makes no mention of it being valid only in a leap year, so
-     * the behavior seems reasonable.
+     * Verifies that -366 back in the year is 1 Jan in a leap year. Other years
+     * have no such day: that is an invalid date, which gives no instance
+     * (RFC 5545 section 3.3.10).
      */
     public function testYearlyByYearDayMaxNegative(): void
     {
@@ -1569,14 +1567,54 @@ class RRuleIteratorTest extends TestCase
             '2001-01-01 14:53:11',
             [
                 '2001-01-01 14:53:11',
-                '2001-12-31 14:53:11',
-                '2002-12-31 14:53:11',
                 '2004-01-01 14:53:11',
-                '2004-12-31 14:53:11',
-                '2005-12-31 14:53:11',
-                '2006-12-31 14:53:11',
                 '2008-01-01 14:53:11',
+                '2012-01-01 14:53:11',
+                '2016-01-01 14:53:11',
+                '2020-01-01 14:53:11',
+                '2024-01-01 14:53:11',
+                '2028-01-01 14:53:11',
             ]
+        );
+    }
+
+    public function testYearlyByYearDay366OnlyInLeapYears(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=4;BYYEARDAY=366',
+            '2028-12-31 00:00:00',
+            [
+                '2028-12-31 00:00:00',
+                '2032-12-31 00:00:00',
+                '2036-12-31 00:00:00',
+                '2040-12-31 00:00:00',
+            ]
+        );
+    }
+
+    public function testYearlyByYearDayBothEndsOfALeapYear(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;COUNT=4;BYYEARDAY=-366,366',
+            '2028-12-31 00:00:00',
+            [
+                '2028-12-31 00:00:00',
+                '2032-01-01 00:00:00',
+                '2032-12-31 00:00:00',
+                '2036-01-01 00:00:00',
+            ]
+        );
+    }
+
+    /**
+     * A year that is never a leap year gives no instance, and the rule ends.
+     */
+    public function testYearlyByYearDay366WithoutALeapYearEnds(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;INTERVAL=400;BYYEARDAY=366',
+            '2001-01-01 00:00:00',
+            ['2001-01-01 00:00:00']
         );
     }
 
