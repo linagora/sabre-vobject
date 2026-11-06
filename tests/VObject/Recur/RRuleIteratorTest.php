@@ -2363,4 +2363,64 @@ class RRuleIteratorTest extends TestCase
         $this->expectException(InvalidDataException::class);
         new RRuleIterator('FREQ=DAILY;UNTIL=P1D', new \DateTimeImmutable('2026-01-01T00:00:00Z'));
     }
+
+    public function testYearlyByWeekNoFollowsWkst(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO;WKST=SU;COUNT=3',
+            '1997-05-12 00:00:00',
+            [
+                '1997-05-12 00:00:00',
+                '1998-05-18 00:00:00',
+                '1999-05-17 00:00:00',
+            ],
+        );
+    }
+
+    /**
+     * The first instance is the Sunday that starts week 20 under WKST=SU: it
+     * is in ISO week 19, and gives no second instance in the same year.
+     */
+    public function testYearlyByWeekNoFollowsWkstOnItsFirstDay(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=20;BYDAY=SU;WKST=SU;COUNT=5',
+            '1997-05-11 00:00:00',
+            [
+                '1997-05-11 00:00:00',
+                '1998-05-17 00:00:00',
+                '1999-05-16 00:00:00',
+                '2000-05-14 00:00:00',
+                '2001-05-13 00:00:00',
+            ],
+        );
+    }
+
+    public function testYearlyByWeekNoLastWeekFollowsWkst(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=-1;BYDAY=SU;WKST=SU;COUNT=4',
+            '2023-12-24 10:00:00',
+            [
+                '2023-12-24 10:00:00',
+                '2024-12-22 10:00:00',
+                // Week 1 of 2026 starts on 4 January: 2025 has 53 weeks.
+                '2025-12-28 10:00:00',
+                '2026-12-27 10:00:00',
+            ],
+        );
+    }
+
+    public function testYearlyByWeekNoWithWkstMoIsTheIsoWeek(): void
+    {
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=53;BYDAY=MO;WKST=MO;COUNT=3',
+            '2020-12-28 10:00:00',
+            [
+                '2020-12-28 10:00:00',
+                '2026-12-28 10:00:00',
+                '2032-12-27 10:00:00',
+            ],
+        );
+    }
 }
