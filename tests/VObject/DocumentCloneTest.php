@@ -147,4 +147,33 @@ ICS;
     {
         return (new \ReflectionProperty(Node::class, 'root'))->getValue($node);
     }
+
+    public function testValidateRepairOnACloneWithARepeatedPropertyWithParameters(): void
+    {
+        $copy = clone Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:u\r\nN;X-A=1:a;;;;\r\nN;X-A=1:a;;;;\r\nEND:VCARD\r\n");
+
+        $messages = $copy->validate(Node::REPAIR);
+
+        self::assertCount(1, $copy->select('N'));
+        self::assertNotContains(3, array_column($messages, 'level'));
+    }
+
+    public function testValidateRepairOnACloneKeepsRepeatedPropertiesThatDiffer(): void
+    {
+        $copy = clone Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:u\r\nN;X-A=1:a;;;;\r\nN;X-A=1:b;;;;\r\nEND:VCARD\r\n");
+
+        $messages = $copy->validate(Node::REPAIR);
+
+        self::assertCount(2, $copy->select('N'));
+        self::assertContains(3, array_column($messages, 'level'));
+    }
+
+    public function testValidateRepairMergesAParsedDuplicateWhateverTheOrderOfItsParameters(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:u\r\nN;X-A=1;X-B=2:a;;;;\r\nN;X-B=2;X-A=1:a;;;;\r\nEND:VCARD\r\n");
+
+        $card->validate(Node::REPAIR);
+
+        self::assertCount(1, $card->select('N'));
+    }
 }

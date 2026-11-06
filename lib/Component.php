@@ -629,7 +629,11 @@ class Component extends Node
                         // We try to repair the same property appearing multiple times with the exact same value
                         // by removing the duplicates and keeping only one property
                         if ($options & self::REPAIR) {
-                            $properties = array_values(array_unique($this->select($propName), SORT_REGULAR));
+                            $properties = [];
+                            foreach ($this->select($propName) as $property) {
+                                $properties[self::duplicateKey($property)] ??= $property;
+                            }
+                            $properties = array_values($properties);
 
                             if (1 === count($properties)) {
                                 $this->remove($propName);
@@ -650,6 +654,23 @@ class Component extends Node
         }
 
         return $messages;
+    }
+
+    /**
+     * Two nodes are duplicates when they are written the same way, whatever
+     * the order of their parameters. Comparing the objects would also compare
+     * the line they were read from, and it cycles through the parent of a
+     * parameter on a clone.
+     */
+    private static function duplicateKey(Node $node): string
+    {
+        if (!$node instanceof Property) {
+            return $node->serialize();
+        }
+        $parameters = array_map(static fn (Parameter $parameter) => $parameter->serialize(), $node->parameters);
+        sort($parameters);
+
+        return implode(';', [(string) $node->group, (string) $node->name, ...$parameters]).':'.$node->getRawMimeDirValue();
     }
 
     /**
