@@ -559,4 +559,54 @@ HI;
 
         self::assertSame(date_default_timezone_get(), TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
     }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function offsetsWithSeconds(): array
+    {
+        return [
+            'east' => ['+010030', 3630],
+            'west' => ['-053015', -19815],
+            'less than a minute' => ['-000030', -30],
+        ];
+    }
+
+    #[DataProvider('offsetsWithSeconds')]
+    public function testUnknownTzidWithSecondsInItsOffset(string $offset, int $seconds): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:16010101T030000\r\nTZOFFSETFROM:$offset\r\nTZOFFSETTO:$offset\r\nEND:STANDARD\r\n");
+
+        $timeZone = TimeZoneUtil::getTimeZone('Custom', $vcal, true);
+
+        self::assertSame($seconds, $timeZone->getOffset(new \DateTimeImmutable('2026-01-15T12:00:00Z')));
+    }
+
+    /**
+     * setDateTime() writes the name of the zone as the TZID.
+     */
+    public function testOffsetZoneWithSecondsResolvesBack(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260115T120000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertInstanceOf(Component\VCalendar::class, $vcal);
+        $date = new \DateTimeImmutable('2026-01-15T12:00:00', new \DateTimeZone('+01:00:30'));
+
+        $vcal->VEVENT->DTSTART->setDateTime($date);
+        $read = Reader::read($vcal->serialize());
+
+        self::assertSame('+01:00:30', (string) $read->VEVENT->DTSTART['TZID']);
+        self::assertSame($date->getTimestamp(), $read->VEVENT->DTSTART->getDateTime()->getTimestamp());
+    }
+
+    public function testEventInAZoneWithSecondsInItsOffset(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\n"
+            ."DTSTART:16010101T030000\r\nTZOFFSETFROM:+010030\r\nTZOFFSETTO:+010030\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Custom:20260115T120000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-15T10:59:30Z'))->getTimestamp(),
+            $vcal->VEVENT->DTSTART->getDateTime()->getTimestamp()
+        );
+    }
 }

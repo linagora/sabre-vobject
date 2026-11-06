@@ -386,16 +386,14 @@ class GuessFromObservances implements TimezoneGuesser
     }
 
     /**
-     * The name of a fixed-offset zone ("+01:00"), which TimeZoneUtil
-     * resolves back.
+     * The name of a fixed-offset zone ("+01:00", or "+01:00:30" with seconds,
+     * which RFC 5545 section 3.3.14 allows), which TimeZoneUtil resolves back.
      */
-    private function offsetName(int $offset): ?string
+    private function offsetName(int $offset): string
     {
-        if (0 !== $offset % 60) {
-            return null;
-        }
-        $minutes = intdiv(abs($offset), 60);
+        $seconds = abs($offset);
+        $name = sprintf('%s%02d:%02d', $offset < 0 ? '-' : '+', intdiv($seconds, 3600), intdiv($seconds % 3600, 60));
 
-        return sprintf('%s%02d:%02d', $offset < 0 ? '-' : '+', intdiv($minutes, 60), $minutes % 60);
+        return 0 === $seconds % 60 ? $name : sprintf('%s:%02d', $name, $seconds % 60);
     }
 }
