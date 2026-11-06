@@ -840,4 +840,15 @@ VCF;
             'native twice' => [['ANNIVERSARY:20200202', 'ANNIVERSARY:20100601'], 'X-ANNIVERSARY'],
         ];
     }
+
+    public function testNativeAnniversaryKeptThroughVCard3(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nX-ANNIVERSARY:20000101\r\nANNIVERSARY:20090808\r\nEND:VCARD\r\n");
+
+        $back = Reader::read($v4->convert(Document::VCARD30)->serialize())->convert(Document::VCARD40);
+
+        self::assertCount(1, $back->select('ANNIVERSARY'));
+        self::assertSame('20090808', (string) $back->ANNIVERSARY);
+        self::assertSame('20000101', (string) current($back->select('X-ANNIVERSARY')));
+    }
 }

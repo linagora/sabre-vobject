@@ -245,7 +245,10 @@ class VCardConverter
                         || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())) {
                         return;
                     }
-                    if (!isset($output->ANNIVERSARY) && !isset($input->ANNIVERSARY)) {
+                    // The date labelled as the anniversary is the one, if any.
+                    $labelled = self::labelledAnniversaries($input);
+                    if (!isset($output->ANNIVERSARY) && !isset($input->ANNIVERSARY)
+                        && ([] === $labelled || in_array((string) $newProperty->getValue(), $labelled, true))) {
                         $newProperty->name = 'ANNIVERSARY';
                     }
                     break;
@@ -381,6 +384,24 @@ class VCardConverter
         $newProperty->setValue('data:'.$mimeType.';base64,'.base64_encode((string) $value));
 
         return $newProperty;
+    }
+
+    /**
+     * Returns the values of the X-ABDATE properties labelled as an anniversary.
+     *
+     * @return string[]
+     */
+    private static function labelledAnniversaries(Component\VCard $card): array
+    {
+        $values = [];
+        foreach ($card->select('X-ABDATE') as $date) {
+            $label = $date->group ? $card->{$date->group.'.X-ABLABEL'} : null;
+            if ($label && '_$!<Anniversary>!$_' === $label->getValue()) {
+                $values[] = (string) $date->getValue();
+            }
+        }
+
+        return $values;
     }
 
     /**
