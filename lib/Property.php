@@ -479,6 +479,73 @@ abstract class Property extends Node implements \Stringable
     }
 
     /**
+     * Returns the valid name of this property, or null if it has none.
+     */
+    private function repairedName(): ?string
+    {
+        // Uppercasing and converting underscores to dashes, then removing
+        // every other invalid character.
+        $newName = \preg_replace('/([^A-Z0-9-])/u', '', strtoupper(
+            str_replace('_', '-', (string) $this->name)
+        ));
+
+        // An empty name cannot be written, and BEGIN / END would be read back
+        // as a component boundary: these cannot be repaired.
+        return in_array($newName, ['', 'BEGIN', 'END'], true) ? null : $newName;
+    }
+
+    /**
+     * Under REPAIR, replaces a property of a component whose name is invalid
+     * by one created for the valid name: the class of a property depends on
+     * its name, and the parent files it under that name.
+     *
+     * Returns the node to validate, null if the repair failed, and the
+     * messages of the repair. A name that needs no repair, or has none, is left
+     * for validate() to report.
+     *
+     * @return array{0: ?Property, 1: array<int, array{level: int, message: string, node: Node}>}
+     */
+    public function repairName(int $options): array
+    {
+        if (!($options & self::REPAIR) || !$this->parent instanceof Component || preg_match('/^([A-Z0-9-]+)$/', (string) $this->name)) {
+            return [$this, []];
+        }
+        $newName = $this->repairedName();
+        if (null === $newName) {
+            return [$this, []];
+        }
+
+        $message = 'The property name: '.$this->name.' contains invalid characters. Only A-Z, 0-9 and - are allowed';
+        $valueType = isset($this->parameters['VALUE']) ? (string) $this->parameters['VALUE'] : null;
+        $replacement = $this->root->createProperty($newName, null, null, $valueType, $this->lineIndex ?? null, $this->lineString ?? null);
+        $replacement->group = $this->group;
+        $replacement->parameters = $this->parameters;
+        // A text value is written escaped, which a class that is not text
+        // would keep: it gets the value itself.
+        $rawValue = $this instanceof Property\Text && !$replacement instanceof Property\Text
+            ? (string) $this->getValue()
+            : $this->getRawMimeDirValue();
+        try {
+            $replacement->setRawMimeDirValue($rawValue);
+        } catch (InvalidDataException $e) {
+            return [null, [
+                ['level' => 1, 'message' => $message, 'node' => $this],
+                [
+                    'level' => 3,
+                    'message' => 'The property '.$this->name.' cannot be repaired into '.$newName.': '.$e->getMessage(),
+                    'node' => $this,
+                ],
+            ]];
+        }
+
+        $parent = $this->parent;
+        $parent->remove($this);
+        $parent->add($replacement);
+
+        return [$replacement, [['level' => 1, 'message' => $message, 'node' => $replacement]]];
+    }
+
+    /**
      * Validates the node for correctness.
      *
      * The following options are supported:
@@ -521,18 +588,11 @@ abstract class Property extends Node implements \Stringable
 
         // Checking if the property name does not contain any invalid bytes.
         if (!preg_match('/^([A-Z0-9-]+)$/', (string) $this->name)) {
-            $newName = null;
-            if ($options & self::REPAIR) {
-                // Uppercasing and converting underscores to dashes, then
-                // removing every other invalid character.
-                $newName = \preg_replace('/([^A-Z0-9-])/u', '', strtoupper(
-                    str_replace('_', '-', (string) $this->name)
-                ));
-                // An empty name cannot be written, and BEGIN / END would be
-                // read back as a component boundary: these cannot be repaired.
-                if (in_array($newName, ['', 'BEGIN', 'END'], true)) {
-                    $newName = null;
-                }
+            $newName = $options & self::REPAIR ? $this->repairedName() : null;
+            if (null !== $newName && $this->parent instanceof Component) {
+                [$node, $messages] = $this->repairName($options);
+
+                return array_merge($warnings, $messages, $node?->validate($options) ?? []);
             }
             $warnings[] = [
                 'level' => null !== $newName ? 1 : 3,
@@ -540,40 +600,7 @@ abstract class Property extends Node implements \Stringable
                 'node' => $this,
             ];
             if (null !== $newName) {
-                if (!$this->parent instanceof Component) {
-                    $this->name = $newName;
-                } else {
-                    // The class of a property depends on its name: replace
-                    // this property by one created for the new name, so its
-                    // value is validated as such, and so the parent files it
-                    // under its new name.
-                    $valueType = isset($this->parameters['VALUE']) ? (string) $this->parameters['VALUE'] : null;
-                    $replacement = $this->root->createProperty($newName, null, null, $valueType, $this->lineIndex ?? null, $this->lineString ?? null);
-                    $replacement->group = $this->group;
-                    $replacement->parameters = $this->parameters;
-                    // A text value is written escaped, which a class that is
-                    // not text would keep: it gets the value itself.
-                    $rawValue = $this instanceof Property\Text && !$replacement instanceof Property\Text
-                        ? (string) $this->getValue()
-                        : $this->getRawMimeDirValue();
-                    try {
-                        $replacement->setRawMimeDirValue($rawValue);
-                    } catch (InvalidDataException $e) {
-                        $warnings[] = [
-                            'level' => 3,
-                            'message' => 'The property '.$this->name.' cannot be repaired into '.$newName.': '.$e->getMessage(),
-                            'node' => $this,
-                        ];
-
-                        return $warnings;
-                    }
-
-                    $parent = $this->parent;
-                    $parent->remove($this);
-                    $parent->add($replacement);
-
-                    return array_merge($warnings, $replacement->validate($options));
-                }
+                $this->name = $newName;
             }
         }
 
