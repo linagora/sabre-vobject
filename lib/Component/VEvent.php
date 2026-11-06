@@ -36,6 +36,12 @@ class VEvent extends VObject\Component
      * The rules used to determine if an event falls within the specified
      * time-range is based on the CalDAV specification.
      *
+     * Floating and all-day values are read in the time zone of the window,
+     * which is the only reference zone this method knows. RFC 4791 sections
+     * 7.3 and 9.9 evaluate them in the zone of the calendar: a caller that has
+     * one, or that passes it to VCalendar::expand(), gives the window in that
+     * zone, or the two will disagree.
+     *
      * @throws VObject\InvalidDataException
      * @throws VObject\Recur\MaxInstancesExceededException
      */
