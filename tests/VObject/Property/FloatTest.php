@@ -61,4 +61,16 @@ class FloatTest extends TestCase
         self::assertStringContainsString("X-D;VALUE=FLOAT:1.5\r\n", $out);
         self::assertSame([48.85836123456789, -0.00005], VObject\Reader::read($out)->VEVENT->GEO->getParts());
     }
+
+    public function testInfiniteFloatSurvivesARoundTrip(): void
+    {
+        $first = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nGEO:1e999;-1e999\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $serialized = $first->serialize();
+        $second = VObject\Reader::read($serialized);
+
+        self::assertSame([INF, -INF], $first->VEVENT->GEO->getParts());
+        self::assertSame($first->VEVENT->GEO->getParts(), $second->VEVENT->GEO->getParts());
+        self::assertSame($serialized, $second->serialize());
+    }
 }
