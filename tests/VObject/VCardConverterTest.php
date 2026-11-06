@@ -851,4 +851,26 @@ VCF;
         self::assertSame('20090808', (string) $back->ANNIVERSARY);
         self::assertSame('20000101', (string) current($back->select('X-ANNIVERSARY')));
     }
+
+    #[DataProvider('omitYearWithoutADay')]
+    public function testOmitYearWithoutDayTo40(string $stored, string $expected): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nBDAY;X-APPLE-OMIT-YEAR=1604:$stored\r\nEND:VCARD\r\n");
+        $v4 = Reader::read($v3->convert(Document::VCARD40)->serialize());
+
+        self::assertSame($expected, (string) $v4->BDAY);
+        self::assertFalse(isset($v4->BDAY['X-APPLE-OMIT-YEAR']));
+        foreach ($v4->validate() as $message) {
+            self::assertLessThan(3, $message['level'], $message['message']);
+        }
+    }
+
+    public static function omitYearWithoutADay(): array
+    {
+        return [
+            'month' => ['1604-04', '--04'],
+            'year only' => ['1604', '1604'],
+            'full date' => ['1604-04-12', '--04-12'],
+        ];
+    }
 }
