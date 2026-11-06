@@ -255,4 +255,32 @@ VCF;
         self::assertSame('a=41', (string) $card->NOTE);
         self::assertSame('a=41', (string) Reader::read($card->serialize())->NOTE);
     }
+
+    #[DataProvider('foldedVersionCards')]
+    public function testAFoldedLineDoesNotChangeTheVersionOfTheCard(string $card): void
+    {
+        $vcard = Reader::read($card);
+        self::assertSame(VCard::VCARD30, $vcard->getDocumentType());
+        self::assertSame(['a,b', 'c'], Reader::read($vcard->serialize())->CATEGORIES->getParts());
+    }
+
+    public static function foldedVersionCards(): array
+    {
+        return [
+            'parameter' => ["BEGIN:VCARD\r\nFN:a\r\nVERSION;X=\"y:2.1\r\n \":3.0\r\nCATEGORIES:a\\,b,c\r\nEND:VCARD\r\n"],
+            'nested component' => ["BEGIN:VCARD\r\nFN:a\r\nBEG\r\n IN:X\r\nVERSION:2.1\r\nEND:X\r\nVERSION:3.0\r\nCATEGORIES:a\\,b,c\r\nEND:VCARD\r\n"],
+        ];
+    }
+
+    public function testAVersionValueFoldedInTheMiddleIsFound(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nPHOTO:http://example.com/a.png\r\nVERSION:4\r\n .0\r\nFN:a\r\nEND:VCARD\r\n");
+        self::assertInstanceOf(Property\Uri::class, $vcard->PHOTO);
+    }
+
+    public function testAFoldedVersionValueThatIsNotAVersionCachesNothing(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nFN:a\r\nVERSION:2.1\r\n x\r\nNOTE:b\r\nEND:VCARD\r\n");
+        self::assertSame(VCard::UNKNOWN, $vcard->getDocumentType());
+    }
 }

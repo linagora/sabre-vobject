@@ -190,6 +190,12 @@ class MimeDir extends Parser
             }
         }
 
+        // The look-ahead only served to read the properties: from now on, the
+        // type of the document comes from its VERSION property.
+        if ($this->root instanceof VCard) {
+            $this->root->forgetDocumentVersion();
+        }
+
         $name = strtoupper(\substr((string) $line, 4));
         if ($name !== $this->root->name) {
             throw new ParseException('Invalid MimeDir file. expected: "END:'.$this->root->name.'" got: "END:'.$name.'"');
@@ -206,8 +212,9 @@ class MimeDir extends Parser
      */
     private function findVCardVersion(VCard $vcard): void
     {
-        // A line without a colon is read as an empty VERSION.
-        $versionRegex = '/^(?:[^.:;]+\.)?VERSION(?:;[^:]*)?(?::(.*))?$/i';
+        // A line without a colon is read as an empty VERSION, and a colon in a
+        // quoted parameter value does not start the value.
+        $versionRegex = '/^(?:[^.:;"]+\.)?VERSION(?:;(?:[^":]|"[^"]*")*)?(?::(.*))?$/i';
         if (null === $this->lineBuffer || 1 === preg_match($versionRegex, $this->lineBuffer)) {
             // VERSION comes first, as nearly always.
             return;
@@ -218,9 +225,8 @@ class MimeDir extends Parser
         }
 
         // A VERSION inside a nested component is not the version of the card.
-        $depth = 'BEGIN:' === strtoupper(substr($this->lineBuffer, 0, 6)) ? 1 : 0;
-        while (false !== ($line = fgets($this->input))) {
-            $line = rtrim($line, "\r\n");
+        $depth = 0;
+        foreach ($this->readUnfoldedLines($this->lineBuffer) as $line) {
             $keyword = strtoupper(substr($line, 0, 6));
             if ('BEGIN:' === $keyword) {
                 ++$depth;
@@ -235,6 +241,26 @@ class MimeDir extends Parser
             }
         }
         fseek($this->input, $position);
+    }
+
+    /**
+     * Yields the lines that follow in the input, joined with their
+     * continuation lines, as readLine() reads them.
+     *
+     * @return \Generator<string>
+     */
+    private function readUnfoldedLines(string $line): \Generator
+    {
+        while (false !== ($next = fgets($this->input))) {
+            $next = rtrim($next, "\r\n");
+            if ('' !== $next && (' ' === $next[0] || "\t" === $next[0])) {
+                $line .= substr($next, 1);
+                continue;
+            }
+            yield $line;
+            $line = $next;
+        }
+        yield $line;
     }
 
     /**

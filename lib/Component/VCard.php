@@ -147,6 +147,14 @@ class VCard extends VObject\Document
     }
 
     /**
+     * Makes the next getDocumentType() read the VERSION property again.
+     */
+    public function forgetDocumentVersion(): void
+    {
+        $this->version = null;
+    }
+
+    /**
      * Sets the document type from a VERSION value. A parser calls this when it
      * finds that value after other properties, whose class and decoding depend
      * on it. An unknown version is ignored.
