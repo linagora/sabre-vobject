@@ -178,4 +178,11 @@ class JCalTest extends TestCase
         self::assertSame([], $cal->validate());
         self::assertIsString(json_encode($cal->jsonSerialize(), JSON_THROW_ON_ERROR));
     }
+
+    public function testTimeHourMinuteKeepsItsMinutes(): void
+    {
+        $calendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTODO\r\nUID:a\r\nX-A;VALUE=TIME:00:30\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        self::assertSame('00:30', $calendar->VTODO->{'X-A'}->jsonSerialize()[3]);
+    }
 }

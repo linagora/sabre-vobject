@@ -871,4 +871,53 @@ class DateTimeParserTest extends TestCase
             )
         );
     }
+
+    /**
+     * @return array<string, array{string, string|null, string|null, string|null, string|null}>
+     */
+    public static function vcardTimes(): array
+    {
+        return [
+            'HH:MM' => ['10:22', '10', '22', null, null],
+            'HH:MM in UTC' => ['10:22Z', '10', '22', null, 'Z'],
+            'HH:MM with an offset' => ['10:22+01:00', '10', '22', null, '+01:00'],
+            'HH:MM:SS' => ['10:22:33', '10', '22', '33', null],
+            'HH:MM:SS with an offset' => ['10:22:33-05:00', '10', '22', '33', '-05:00'],
+            'HH with an offset' => ['10+01:00', '10', null, null, '+01:00'],
+            '-MM:SS' => ['-22:33', null, '22', '33', null],
+            '-MM with an offset' => ['-22+01:00', null, '22', null, '+01:00'],
+            '--SS with an offset' => ['--33+01:00', null, null, '33', '+01:00'],
+            'basic HHMM' => ['1022', '10', '22', null, null],
+            'basic HH-SS' => ['10-22', '10', null, '22', null],
+            'basic --SS' => ['--33', null, null, '33', null],
+        ];
+    }
+
+    #[DataProvider('vcardTimes')]
+    public function testVCardTimeForms(string $input, ?string $hour, ?string $minute, ?string $second, ?string $timezone): void
+    {
+        self::assertSame(
+            ['hour' => $hour, 'minute' => $minute, 'second' => $second, 'timezone' => $timezone],
+            DateTimeParser::parseVCardTime($input)
+        );
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function badVCardTimes(): array
+    {
+        return [
+            'no minute after the colon' => ['10:'],
+            'no second after the colon' => ['10:22:'],
+            'three digits' => ['10:223'],
+        ];
+    }
+
+    #[DataProvider('badVCardTimes')]
+    public function testBadVCardTimeForms(string $input): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseVCardTime($input);
+    }
 }
