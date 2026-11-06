@@ -559,6 +559,14 @@ class Component extends Node
         $messages = [];
 
         foreach ($this->children() as $child) {
+            if ($child instanceof Property) {
+                // Done here, so that only the node in the tree is validated.
+                [$child, $nameMessages] = $child->repairName($options);
+                $messages = array_merge($messages, $nameMessages);
+                if (null === $child) {
+                    continue;
+                }
+            }
             $messages = array_merge($messages, $child->validate($options));
         }
 

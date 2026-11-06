@@ -506,4 +506,30 @@ class PropertyTest extends TestCase
         self::assertNotContains(3, array_column($messages, 'level'));
         self::assertSame(['FREQ' => 'DAILY', 'COUNT' => '2'], $calendar->VEVENT->RRULE->getParts());
     }
+
+    #[DataProvider('repairedNameProvider')]
+    public function testRepairedNameDoesNotValidateTheReplacedProperty(string $line): void
+    {
+        $calendar = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$line\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $messages = $calendar->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+
+        self::assertNotContains(3, array_column($messages, 'level'));
+        foreach ($messages as $message) {
+            if ($message['node'] instanceof Property) {
+                self::assertNotSame('.', ((string) $message['node']->name)[0] ?? '');
+            }
+        }
+    }
+
+    public static function repairedNameProvider(): array
+    {
+        return [
+            ["DTSTART:20260101T000000Z\r\nX..Y;VALUE=RECUR:BYDAY=MO"],
+            ['X..DTSTART;VALUE=DATE:20260101T090000Z'],
+        ];
+    }
 }
