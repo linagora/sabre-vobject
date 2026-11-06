@@ -703,6 +703,21 @@ class RRuleIterator implements \Iterator
     }
 
     /**
+     * Returns the day of January on which week 1 of a year starts, 0 or less
+     * when that is in December of the year before.
+     *
+     * Week 1 is the first with at least four days in the year, so the one that
+     * holds 4 January, whichever day starts the week.
+     */
+    private function firstDayOfWeekOne(int $year): int
+    {
+        $weekday = (int) (clone $this->currentDate)->setDate($year, 1, 4)->format('N');
+
+        // ISO days run from 1 (Monday) to 7 (Sunday).
+        return 4 - ($weekday - $this->dayMap[$this->weekStart] + 7) % 7;
+    }
+
+    /**
      * Does the processing for advancing the iterator for yearly frequency.
      */
     protected function nextYearly(): void
@@ -756,14 +771,16 @@ class RRuleIterator implements \Iterator
                     $checkDates = [];
 
                     // loop through all WeekNo and Days to check all the combinations
-                    // 28 December is always in the last ISO week of its year.
-                    $weeksInYear = (int) (clone $this->currentDate)->setDate((int) $currentYear, 12, 28)->format('W');
+                    // Weeks are counted from the day WKST names, as RFC 5545
+                    // section 3.3.10 says for a YEARLY rule with BYWEEKNO.
+                    $weekStart = 0 === $this->dayMap[$this->weekStart] ? 7 : $this->dayMap[$this->weekStart];
+                    $weekOne = $this->firstDayOfWeekOne((int) $currentYear);
+                    $daysInYear = 365 + (int) (clone $this->currentDate)->setDate((int) $currentYear, 1, 1)->format('L');
+                    $weeksInYear = intdiv($daysInYear - $weekOne + $this->firstDayOfWeekOne((int) $currentYear + 1), 7);
 
                     foreach ($this->byWeekNo as $byWeekNo) {
-                        // setISODate() takes a week out of range as an offset
-                        // from week 1: a negative value counts from the end
-                        // of the year, and a week the year does not have
-                        // gives no instance.
+                        // A negative value counts from the end of the year,
+                        // and a week the year does not have gives no instance.
                         $week = $byWeekNo > 0 ? $byWeekNo : $weeksInYear + 1 + $byWeekNo;
                         if ($week < 1 || $week > $weeksInYear) {
                             continue;
@@ -771,7 +788,9 @@ class RRuleIterator implements \Iterator
 
                         foreach ($dayOffsets as $dayOffset) {
                             $date = clone $this->currentDate;
-                            $date = $date->setISODate((int) $currentYear, $week, $dayOffset);
+                            // setDate() takes a day out of range as an offset
+                            // from the start of the month.
+                            $date = $date->setDate((int) $currentYear, 1, $weekOne + ($week - 1) * 7 + ($dayOffset - $weekStart + 7) % 7);
 
                             if ($date > $this->currentDate) {
                                 $checkDates[] = $date;
