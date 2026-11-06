@@ -1161,6 +1161,11 @@ class Broker
                         isset($attendee['PARTSTAT']) ?
                             strtoupper($attendee['PARTSTAT']) :
                             'NEEDS-ACTION';
+                    // An empty value is no status (RFC 5545 section 3.2.12): the
+                    // default applies, and it is not a response.
+                    if ('' === $partStat) {
+                        $partStat = 'NEEDS-ACTION';
+                    }
 
                     $forceSend =
                         isset($attendee['SCHEDULE-FORCE-SEND']) ?
