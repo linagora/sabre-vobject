@@ -488,9 +488,14 @@ class DateTimeParser
         if (!preg_match($regex, $date, $matches)) {
             // Attempting to parse the extended format.
             $regex = '/^
-                (?: (?<hour> [0-9]{2}) : | -)
-                (?: (?<minute> [0-9]{2}) : | -)?
-                (?<second> [0-9]{2})?
+                (?|
+                    (?<hour> [0-9]{2}) : (?<minute> [0-9]{2}) : (?<second> [0-9]{2}) # HH:MM:SS
+                    | ([0-9]{2}) : ([0-9]{2}) () # HH:MM
+                    | ([0-9]{2}) () () # HH
+                    | () - ([0-9]{2}) : ([0-9]{2}) # -MM:SS
+                    | () - ([0-9]{2}) () # -MM
+                    | () -- () ([0-9]{2}) # --SS
+                )
 
                 (?: \.[0-9]{3})? # milliseconds
                 (?P<timezone> # timezone offset

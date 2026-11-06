@@ -307,4 +307,11 @@ class JCardTest extends TestCase
 
         self::assertSame('0', $again->NOTE->group);
     }
+
+    public function testTimeHourMinuteKeepsItsMinutes(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nX-A;VALUE=TIME:10:22\r\nEND:VCARD\r\n");
+
+        self::assertSame('10:22', $card->{'X-A'}->jsonSerialize()[3]);
+    }
 }
