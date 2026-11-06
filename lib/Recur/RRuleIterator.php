@@ -833,7 +833,14 @@ class RRuleIterator implements \Iterator
                     $checkDates = [];
 
                     // loop through all YearDay and Days to check all the combinations
+                    $daysInYear = 365 + (int) (clone $this->currentDate)->setDate((int) $currentYear, 1, 1)->format('L');
                     foreach ($this->byYearDay as $byYearDay) {
+                        // A day the year does not have is an invalid date,
+                        // which gives no instance (RFC 5545 section 3.3.10).
+                        if (abs($byYearDay) > $daysInYear) {
+                            continue;
+                        }
+
                         $date = clone $this->currentDate;
                         if ($byYearDay > 0) {
                             $date = $date->setDate($currentYear, 1, 1);
