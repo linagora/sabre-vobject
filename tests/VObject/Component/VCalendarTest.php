@@ -1043,4 +1043,40 @@ ICS);
         self::assertSame($instances > 0, $vcal->VEVENT->isInTimeRange($start->setTimezone($timeZone), $end->setTimezone($timeZone)));
         self::assertCount($instances, $vcal->expand($start, $end, $timeZone)->select('VEVENT'));
     }
+
+    /**
+     * @return array<string, array{string, string, int}>
+     */
+    public static function nonRecurringEventsAtTheEdgeOfTheWindow(): array
+    {
+        return [
+            // 17:30 in New York is 22:30Z, after the end of the window.
+            'floating, after the window in the zone' => ["DTSTART:20261126T173000\r\nDURATION:PT10M", 'America/New_York', 0],
+            // 18:30 in Paris is 17:30Z, inside the window.
+            'floating, in the window in the zone' => ["DTSTART:20261126T183000\r\nDURATION:PT10M", 'Europe/Paris', 1],
+            // This day starts on 11-26 at 10:00Z in Kiritimati, inside the window.
+            'all-day, in the window in the zone' => ['DTSTART;VALUE=DATE:20261127', 'Pacific/Kiritimati', 1],
+            // This day ends on 04-11 at 10:00Z in Kiritimati, before the window.
+            'all-day, before the window in the zone' => ['DTSTART;VALUE=DATE:20260411', 'Pacific/Kiritimati', 0],
+            'with a time zone, whatever the zone' => ["DTSTART:20261126T173000Z\r\nDURATION:PT10M", 'America/New_York', 1],
+        ];
+    }
+
+    #[DataProvider('nonRecurringEventsAtTheEdgeOfTheWindow')]
+    public function testExpandSelectsNonRecurringEventInTheReferenceZone(string $lines, string $zone, int $instances): void
+    {
+        $utc = new \DateTimeZone('UTC');
+        $vcal = VObject\Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//y//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$lines\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $result = $vcal->expand(
+            new \DateTimeImmutable('2026-04-11T18:00:00', $utc),
+            new \DateTimeImmutable('2026-11-26T18:00:00', $utc),
+            new \DateTimeZone($zone)
+        );
+
+        self::assertCount($instances, $result->select('VEVENT'));
+    }
 }

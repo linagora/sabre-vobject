@@ -363,7 +363,12 @@ class VCalendar extends VObject\Document
                         $series[$uid] = array_key_last($recurringEvents);
                     }
                     $recurringEvents[$series[$uid]][] = clone $child;
-                } elseif ('VEVENT' === $child->name && $child->isInTimeRange($start, $end)) {
+                } elseif ('VEVENT' === $child->name && $child->isInTimeRange(
+                    // Floating values are read in the zone of the window: the
+                    // reference zone, as for the recurring events below.
+                    \DateTimeImmutable::createFromInterface($start)->setTimezone($timeZone),
+                    \DateTimeImmutable::createFromInterface($end)->setTimezone($timeZone)
+                )) {
                     $newChildren[] = self::withoutInvertedEnd($stripTimezones(clone $child));
                 }
             }
