@@ -1010,4 +1010,37 @@ ICS);
             'thirty minutes, end read before its start' => ['20261030T014500', '20261030T021500', '20261101T054500Z', '20261101T061500Z'],
         ];
     }
+
+    /**
+     * @return array<string, array{string, string, string, string, int}>
+     */
+    public static function windowsInTheReferenceZone(): array
+    {
+        return [
+            'an all-day instance that has ended in the zone' => ['DTSTART;VALUE=DATE:20260411', 'Europe/Paris', '2026-04-11T23:00:00', '2026-09-01T23:00:00', 0],
+            'a floating instance at the end of the window' => ["DTSTART:20261126T183000\r\nDURATION:PT10M", 'Europe/Paris', '2026-04-11T23:00:00', '2026-11-26T18:00:00', 1],
+        ];
+    }
+
+    /**
+     * What a CalDAV server has to do to answer a calendar-query with expand:
+     * with the window in the zone of the calendar, the filter and the
+     * expansion agree (RFC 4791 sections 7.3 and 9.9).
+     */
+    #[DataProvider('windowsInTheReferenceZone')]
+    public function testTimeRangeFilterAgreesWithExpandInTheReferenceZone(string $lines, string $zone, string $start, string $end, int $instances): void
+    {
+        $utc = new \DateTimeZone('UTC');
+        $timeZone = new \DateTimeZone($zone);
+        $start = new \DateTimeImmutable($start, $utc);
+        $end = new \DateTimeImmutable($end, $utc);
+        $vcal = VObject\Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//y//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$lines\r\nRRULE:FREQ=DAILY;COUNT=1\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        self::assertSame($instances > 0, $vcal->VEVENT->isInTimeRange($start->setTimezone($timeZone), $end->setTimezone($timeZone)));
+        self::assertCount($instances, $vcal->expand($start, $end, $timeZone)->select('VEVENT'));
+    }
 }
