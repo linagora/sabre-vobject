@@ -299,7 +299,7 @@ OUT;
         $output = <<<OUT
 BEGIN:VCARD
 VERSION:4.0
-BDAY:--04-16
+BDAY:--0416
 END:VCARD
 
 OUT;
@@ -870,7 +870,7 @@ VCF;
         return [
             'month' => ['1604-04', '--04'],
             'year only' => ['1604', '1604'],
-            'full date' => ['1604-04-12', '--04-12'],
+            'full date' => ['1604-04-12', '--0412'],
         ];
     }
 
@@ -884,11 +884,11 @@ VCF;
         return [
             'X-ANNIVERSARY' => ["X-ANNIVERSARY:2009-08-08\r\n", '2009-08-08'],
             'labelled X-ABDATE' => ["item1.X-ABDATE:2009-08-08\r\n$label", '2009-08-08'],
-            'omitted year' => ["item1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n$label", '--02-03'],
-            'omitted year on X-ANNIVERSARY' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n", '--02-03'],
+            'omitted year' => ["item1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n$label", '--0203'],
+            'omitted year on X-ANNIVERSARY' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n", '--0203'],
             'another year is not omitted' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1980-02-03\r\n", '1980-02-03'],
-            'both, the date first' => ["item1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n{$label}X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n", '--02-03'],
-            'both, the extension first' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\nitem1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n$label", '--02-03'],
+            'both, the date first' => ["item1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n{$label}X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n", '--0203'],
+            'both, the extension first' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\nitem1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n$label", '--0203'],
         ];
     }
 
@@ -943,5 +943,26 @@ VCF;
         self::assertNull(DateTimeParser::parseVCardDateTime((string) $back->ANNIVERSARY)['year'], $serialized);
         self::assertSame([], $back->select('X-ANNIVERSARY'), $serialized);
         self::assertSame([], $back->select('X-ABDATE'), $serialized);
+    }
+
+    /**
+     * The form of RFC 6350 section 4.3.1 in vCard, and of RFC 7095 section
+     * 3.5.3 in jCard.
+     */
+    public function testOmitYearIsWrittenInTheRfc6350Form(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nBDAY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\nEND:VCARD\r\n");
+        $v4 = $v3->convert(Document::VCARD40);
+
+        self::assertSame('--0203', (string) $v4->BDAY);
+        self::assertSame('--02-03', $v4->BDAY->jsonSerialize()[3]);
+    }
+
+    public function testOmitYearIsStableThroughVCard3(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nBDAY:--0203\r\nEND:VCARD\r\n");
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+
+        self::assertSame('--0203', (string) $v3->convert(Document::VCARD40)->BDAY);
     }
 }

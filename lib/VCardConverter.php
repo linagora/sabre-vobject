@@ -335,9 +335,7 @@ class VCardConverter
         // Without a month, the year is all the value says: it is kept. Without
         // a day, only --MM has no year (RFC 6350 section 4.3.1).
         if (!is_null($parts['month']) && !is_null($parts['date'])) {
-            return '' === $time
-                ? '--'.$parts['month'].'-'.$parts['date']
-                : '--'.$parts['month'].$parts['date'].$time;
+            return '--'.$parts['month'].$parts['date'].$time;
         }
 
         return !is_null($parts['month']) && '' === $time ? '--'.$parts['month'] : $value;
