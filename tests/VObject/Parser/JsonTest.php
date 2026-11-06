@@ -599,4 +599,54 @@ VCF;
         self::assertSame('Customized Time Zone', (string) $vcal->VEVENT->{'X-A'}['TZID']);
         self::assertSame('20261103T110000', $vcal->VEVENT->{'X-A'}->getValue());
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function overflowingNumbers(): array
+    {
+        return [
+            'text value' => ['["note",{},"text",1e999]'],
+            'negative text value' => ['["note",{},"text",-1e999]'],
+            'text list' => ['["categories",{},"text",["a",1e999]]'],
+            'structured text' => ['["n",{},"text",["a",1e999,"","",""]]'],
+            'parameter' => ['["note",{"x-a":1e999},"text","a"]'],
+            'parameter list' => ['["note",{"x-a":["b",1e999]},"text","a"]'],
+            'unknown value' => ['["x-a",{},"unknown",1e999]'],
+            'integer value' => ['["x-a",{},"integer",1e999]'],
+            'date value' => ['["bday",{},"date",1e999]'],
+        ];
+    }
+
+    #[DataProvider('overflowingNumbers')]
+    public function testOverflowingJsonNumberIsRefused(string $property): void
+    {
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],'.$property.']]');
+    }
+
+    public function testOverflowingJsonNumberIsRefusedInARecurrenceRule(): void
+    {
+        foreach (['{"freq":"daily","until":1e999}', '{"freq":"daily","count":1e999}'] as $rule) {
+            try {
+                VObject\Reader::readJson('["vcalendar",[["version",{},"text","2.0"]],[["vevent",[["uid",{},"text","a"],["rrule",{},"recur",'.$rule.']]]]]');
+                self::fail('Not refused: '.$rule);
+            } catch (ParseException) {
+                self::addToAssertionCount(1);
+            }
+        }
+    }
+
+    public function testLargeFiniteJsonNumberIsKept(): void
+    {
+        $card = VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],["note",{},"text",1e9]]]');
+
+        self::assertNotFalse(json_encode($card->jsonSerialize()));
+    }
+
+    public function testNullUntilIsStillRefused(): void
+    {
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcalendar",[["version",{},"text","2.0"]],[["vevent",[["uid",{},"text","a"],["rrule",{},"recur",{"freq":"daily","until":null}]]]]]');
+    }
 }

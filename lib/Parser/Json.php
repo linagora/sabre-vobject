@@ -250,7 +250,7 @@ class Json extends Parser
                 // A recurrence rule is an object of (lists of) scalars.
                 $prop instanceof Property\ICalendar\Recur => 1 === count($values) && (is_string($value) || (
                     (is_array($value) || $value instanceof \stdClass)
-                    && self::all((array) $value, fn ($part, $key) => 'until' === $key ? is_scalar($part) : self::isScalarOrList($part))
+                    && self::all((array) $value, fn ($part, $key) => 'until' === $key ? null !== $part && self::isScalar($part) : self::isScalarOrList($part))
                 )),
                 // A period is a [start, end or duration] pair.
                 $prop instanceof Property\ICalendar\Period => is_array($value) && array_is_list($value) && self::all($value, self::isScalar(...)),
@@ -325,7 +325,9 @@ class Json extends Parser
 
     private static function isScalar(mixed $value): bool
     {
-        return null === $value || is_scalar($value);
+        // A number too large for a float (1e999) decodes as INF, which has no
+        // JSON representation, and would be written as the text "INF".
+        return null === $value || (is_scalar($value) && (!is_float($value) || is_finite($value)));
     }
 
     private static function isScalarOrList(mixed $value): bool
