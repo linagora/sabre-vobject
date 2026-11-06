@@ -182,20 +182,7 @@ class VCardConverter
             } elseif ($property instanceof Property\VCard\DateAndOrTime && isset($parameters['X-APPLE-OMIT-YEAR'])) {
                 // If a property such as BDAY contained 'X-APPLE-OMIT-YEAR',
                 // then we're stripping the year from the vcard 4 value.
-                $parts = DateTimeParser::parseVCardDateTime($property->getValue());
-                if ($parts['year'] === $property['X-APPLE-OMIT-YEAR']->getValue()) {
-                    $time = $this->getTimePart($property->getValue());
-                    // Without a month, the year is all the value says: it is
-                    // kept. Without a day, only --MM has no year (RFC 6350
-                    // section 4.3.1).
-                    if (!is_null($parts['month']) && !is_null($parts['date'])) {
-                        $newProperty->setValue('' === $time
-                            ? '--'.$parts['month'].'-'.$parts['date']
-                            : '--'.$parts['month'].$parts['date'].$time);
-                    } elseif (!is_null($parts['month']) && '' === $time) {
-                        $newProperty->setValue('--'.$parts['month']);
-                    }
-                }
+                $newProperty->setValue($this->withoutOmittedYear($property->getValue(), (string) $parameters['X-APPLE-OMIT-YEAR']->getValue()));
 
                 // Regardless if the year matched or not, we do need to strip
                 // X-APPLE-OMIT-YEAR.
@@ -248,14 +235,15 @@ class VCardConverter
                     // as an extension.
                     // A native ANNIVERSARY wins, whatever the order of the lines.
                     if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
+                        || self::hasValue($output, 'ANNIVERSARY', $this->anniversaryValue($newProperty, $parameters))
                         || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())) {
                         return;
                     }
                     // The date labelled as the anniversary is the one, if any.
                     $labelled = self::labelledAnniversaries($input);
                     if (!isset($output->ANNIVERSARY) && !isset($input->ANNIVERSARY)
-                        && ([] === $labelled || in_array((string) $newProperty->getValue(), $labelled, true))) {
-                        $newProperty->name = 'ANNIVERSARY';
+                        && ([] === $labelled || in_array((string) $property->getValue(), $labelled, true))) {
+                        $newProperty = $this->renameToAnniversary($output, $newProperty, $parameters);
                     }
                     break;
                 case 'ANNIVERSARY':
@@ -282,6 +270,7 @@ class VCardConverter
                     // value, ignore. X-ANNIVERSARY holds the same anniversary
                     // with its own group, whichever is converted first.
                     if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
+                        || self::hasValue($output, 'ANNIVERSARY', $this->anniversaryValue($newProperty, $parameters))
                         || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())
                         || self::hasValue($input, 'X-ANNIVERSARY', (string) $newProperty->getValue())) {
                         return;
@@ -292,7 +281,7 @@ class VCardConverter
                         $output->add($output->createProperty($property->group.'.X-ABLABEL', $label->getValue()));
                         break;
                     }
-                    $newProperty->name = 'ANNIVERSARY';
+                    $newProperty = $this->renameToAnniversary($output, $newProperty, $parameters);
                     break;
                     // Apple's per-property label system.
                 case 'X-ABLABEL':
@@ -327,6 +316,81 @@ class VCardConverter
         foreach ($extraProperties as $extraProperty) {
             $output->add($extraProperty);
         }
+    }
+
+    /**
+     * Removes the year of a date when it is the one X-APPLE-OMIT-YEAR marks as
+     * a placeholder.
+     *
+     * @throws InvalidDataException
+     */
+    private function withoutOmittedYear(string $value, string $omittedYear): string
+    {
+        $parts = DateTimeParser::parseVCardDateTime($value);
+        if ($parts['year'] !== $omittedYear) {
+            return $value;
+        }
+
+        $time = $this->getTimePart($value);
+        // Without a month, the year is all the value says: it is kept. Without
+        // a day, only --MM has no year (RFC 6350 section 4.3.1).
+        if (!is_null($parts['month']) && !is_null($parts['date'])) {
+            return '' === $time
+                ? '--'.$parts['month'].'-'.$parts['date']
+                : '--'.$parts['month'].$parts['date'].$time;
+        }
+
+        return !is_null($parts['month']) && '' === $time ? '--'.$parts['month'] : $value;
+    }
+
+    /**
+     * Returns the value an extension of an unknown type has as an ANNIVERSARY:
+     * without the year marked as omitted.
+     */
+    private function anniversaryValue(Property $property, array $parameters): string
+    {
+        $value = (string) $property->getValue();
+        if (!$property instanceof Property\Unknown || !isset($parameters['X-APPLE-OMIT-YEAR'])) {
+            return $value;
+        }
+
+        try {
+            return $this->withoutOmittedYear($value, (string) $parameters['X-APPLE-OMIT-YEAR']->getValue());
+        } catch (InvalidDataException) {
+            return $value;
+        }
+    }
+
+    /**
+     * Turns X-ANNIVERSARY or X-ABDATE into an ANNIVERSARY.
+     *
+     * Without a VALUE parameter these extensions have no known type, which an
+     * ANNIVERSARY cannot have: RFC 6350 section 6.2.6 only allows a date and/or
+     * time, or a text.
+     *
+     * @param array $parameters list of parameters that will eventually be added to
+     *                          the new property
+     */
+    private function renameToAnniversary(Component\VCard $output, Property $newProperty, array &$parameters): Property
+    {
+        if (!$newProperty instanceof Property\Unknown) {
+            $newProperty->name = 'ANNIVERSARY';
+
+            return $newProperty;
+        }
+
+        $value = $this->anniversaryValue($newProperty, $parameters);
+        unset($parameters['VALUE'], $parameters['X-APPLE-OMIT-YEAR']);
+        try {
+            DateTimeParser::parseVCardDateTime($value);
+        } catch (InvalidDataException) {
+            $text = $output->createProperty('ANNIVERSARY', null, [], 'TEXT');
+            $text->setRawMimeDirValue($value);
+
+            return $text;
+        }
+
+        return $output->createProperty('ANNIVERSARY', $value);
     }
 
     /**

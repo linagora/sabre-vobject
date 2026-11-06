@@ -873,4 +873,75 @@ VCF;
             'full date' => ['1604-04-12', '--04-12'],
         ];
     }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function anniversaryExtensionsWithoutValue(): array
+    {
+        $label = "item1.X-ABLABEL:_\$!<Anniversary>!\$_\r\n";
+
+        return [
+            'X-ANNIVERSARY' => ["X-ANNIVERSARY:2009-08-08\r\n", '2009-08-08'],
+            'labelled X-ABDATE' => ["item1.X-ABDATE:2009-08-08\r\n$label", '2009-08-08'],
+            'omitted year' => ["item1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n$label", '--02-03'],
+            'omitted year on X-ANNIVERSARY' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n", '--02-03'],
+            'another year is not omitted' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1980-02-03\r\n", '1980-02-03'],
+            'both, the date first' => ["item1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n{$label}X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n", '--02-03'],
+            'both, the extension first' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\nitem1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-02-03\r\n$label", '--02-03'],
+        ];
+    }
+
+    #[DataProvider('anniversaryExtensionsWithoutValue')]
+    public function testAnniversaryExtensionWithoutValueIsADate(string $lines, string $expected): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\n{$lines}END:VCARD\r\n");
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        $v4 = Reader::read($serialized);
+
+        self::assertCount(1, $v4->select('ANNIVERSARY'), $serialized);
+        self::assertInstanceOf(Property\VCard\DateAndOrTime::class, $v4->ANNIVERSARY);
+        self::assertFalse(isset($v4->ANNIVERSARY['VALUE']), $serialized);
+        self::assertFalse(isset($v4->ANNIVERSARY['X-APPLE-OMIT-YEAR']), $serialized);
+        self::assertSame($expected, (string) $v4->ANNIVERSARY);
+        self::assertSame([], $v4->select('X-ANNIVERSARY'), $serialized);
+        self::assertSame([], $v4->validate(Node::PROFILE_CARDDAV), $serialized);
+    }
+
+    public function testAnniversaryExtensionThatIsNotADateIsAText(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nX-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:in june\\, I think\r\nEND:VCARD\r\n");
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        $v4 = Reader::read($serialized);
+
+        self::assertSame('TEXT', (string) $v4->ANNIVERSARY['VALUE'], $serialized);
+        self::assertSame('in june, I think', (string) $v4->ANNIVERSARY, $serialized);
+        self::assertFalse(isset($v4->ANNIVERSARY['X-APPLE-OMIT-YEAR']), $serialized);
+    }
+
+    public function testUnlabelledDateExtensionKeepsItsType(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nitem1.X-ABDATE:2009-08-08\r\nEND:VCARD\r\n");
+
+        self::assertStringContainsString(
+            "\r\nITEM1.X-ABDATE:2009-08-08\r\n",
+            $v3->convert(Document::VCARD40)->serialize()
+        );
+    }
+
+    /**
+     * What the converter writes for a yearless anniversary converts back.
+     */
+    public function testYearlessAnniversarySurvivesVCard3(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nANNIVERSARY:--0203\r\nEND:VCARD\r\n");
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        $back = Reader::read($serialized);
+
+        self::assertCount(1, $back->select('ANNIVERSARY'), $serialized);
+        self::assertNull(DateTimeParser::parseVCardDateTime((string) $back->ANNIVERSARY)['year'], $serialized);
+        self::assertSame([], $back->select('X-ANNIVERSARY'), $serialized);
+        self::assertSame([], $back->select('X-ABDATE'), $serialized);
+    }
 }
