@@ -15,6 +15,11 @@ use Sabre\VObject\Property\Uri;
 class VCardConverter
 {
     /**
+     * A type or subtype name of a media type (RFC 6838 section 4.2).
+     */
+    private const MEDIA_TYPE_TOKEN = '[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}';
+
+    /**
      * Converts a vCard object to a new version.
      *
      * targetVersion must be one of:
@@ -425,18 +430,19 @@ class VCardConverter
             'URI' // Forcing the BINARY type
         );
 
-        $mimeType = 'application/octet-stream';
+        $mimeType = null;
 
-        // See if we can find a better mimetype.
+        // See if we can find a better mimetype. TYPE names the format (RFC
+        // 2426 sections 3.1.4, 3.5.3 and 3.6.6): an IANA subtype of the
+        // image, or of the sound, or a whole media type.
         if (isset($parameters['TYPE'])) {
             $newTypes = [];
             foreach ($parameters['TYPE']->getParts() as $typePart) {
-                if (in_array(
-                    strtoupper((string) $typePart),
-                    ['JPEG', 'PNG', 'GIF'],
-                    true
-                )) {
-                    $mimeType = 'image/'.strtolower((string) $typePart);
+                $typePart = (string) $typePart;
+                if (null === $mimeType && preg_match('/^'.self::MEDIA_TYPE_TOKEN.'\/'.self::MEDIA_TYPE_TOKEN.'\z/', $typePart)) {
+                    $mimeType = strtolower($typePart);
+                } elseif (null === $mimeType && preg_match('/^'.self::MEDIA_TYPE_TOKEN.'\z/', $typePart)) {
+                    $mimeType = ('SOUND' === $newProperty->name ? 'audio/' : 'image/').strtolower($typePart);
                 } else {
                     $newTypes[] = $typePart;
                 }
@@ -451,7 +457,7 @@ class VCardConverter
             }
         }
 
-        $newProperty->setValue('data:'.$mimeType.';base64,'.base64_encode((string) $value));
+        $newProperty->setValue('data:'.($mimeType ?? 'application/octet-stream').';base64,'.base64_encode((string) $value));
 
         return $newProperty;
     }
@@ -540,16 +546,14 @@ class VCardConverter
         unset($value);
 
         $newProperty['ENCODING'] = 'b';
-        switch ($mimeType) {
-            case 'image/jpeg':
-                $newProperty['TYPE'] = 'JPEG';
-                break;
-            case 'image/png':
-                $newProperty['TYPE'] = 'PNG';
-                break;
-            case 'image/gif':
-                $newProperty['TYPE'] = 'GIF';
-                break;
+        // The format goes into TYPE: the subtype for the image of a PHOTO or
+        // a LOGO, or the sound of a SOUND, else the whole media type.
+        $mimeType = strtolower($mimeType);
+        if (preg_match('/^('.self::MEDIA_TYPE_TOKEN.')\/('.self::MEDIA_TYPE_TOKEN.')\z/', $mimeType, $matches)
+            && 'application/octet-stream' !== $mimeType) {
+            $newProperty['TYPE'] = ('SOUND' === $newProperty->name ? 'audio' : 'image') === $matches[1]
+                ? strtoupper($matches[2])
+                : $mimeType;
         }
 
         return $newProperty;
