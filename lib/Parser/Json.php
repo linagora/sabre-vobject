@@ -262,7 +262,9 @@ class Json extends Parser
                 $prop instanceof Property\Binary,
                 $prop instanceof Property\Boolean,
                 $prop instanceof Property\IntegerValue => $single && self::isScalar($value),
-                $prop instanceof Property\Time,
+                // TIME has one value: several would be written as one
+                // string (RFC 5545 and RFC 6350 define no list of times).
+                $prop instanceof Property\Time => $single && self::isScalar($value),
                 $prop instanceof Property\UtcOffset,
                 $prop instanceof Property\VCard\TimeStamp => self::isScalar($value),
                 // Structured text (N, ADR, ...) is a single list of
