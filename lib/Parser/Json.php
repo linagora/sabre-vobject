@@ -265,6 +265,9 @@ class Json extends Parser
                 // TIME has one value: several would be written as one
                 // string (RFC 5545 and RFC 6350 define no list of times).
                 $prop instanceof Property\Time => $single && self::isScalar($value),
+                // A URI has one value: its commas are escaped, and the
+                // others would be dropped when it is serialized.
+                $prop instanceof Property\Uri => $single && self::isScalar($value),
                 $prop instanceof Property\UtcOffset,
                 $prop instanceof Property\VCard\TimeStamp => self::isScalar($value),
                 // Structured text (N, ADR, ...) is a single list of
