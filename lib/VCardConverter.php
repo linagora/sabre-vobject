@@ -382,8 +382,10 @@ class VCardConverter
         try {
             DateTimeParser::parseVCardDateTime($value);
         } catch (InvalidDataException) {
+            // getValue() is already unescaped: the text is read again from
+            // what the extension holds.
             $text = $output->createProperty('ANNIVERSARY', null, [], 'TEXT');
-            $text->setRawMimeDirValue($value);
+            $text->setRawMimeDirValue($newProperty->getRawMimeDirValue());
 
             return $text;
         }
