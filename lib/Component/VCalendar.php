@@ -344,7 +344,7 @@ class VCalendar extends VObject\Document
                 if ('VEVENT' === $child->name && (isset($child->{'RECURRENCE-ID'}) || isset($child->RRULE) || isset($child->RDATE) || isset($recurringUids[(string) $child->UID]))) {
                     // Handle these a bit later.
                     $uid = (string) $child->UID;
-                    if (!$uid) {
+                    if ('' === $uid) {
                         throw new InvalidDataException('Every VEVENT object must have a UID property');
                     }
                     // A second master for a UID (two objects merged, as an

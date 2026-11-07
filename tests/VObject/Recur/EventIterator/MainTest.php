@@ -7,6 +7,7 @@ use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Property\ICalendar\DateTime;
+use Sabre\VObject\Reader;
 use Sabre\VObject\Recur\EventIterator;
 use Sabre\VObject\Recur\MaxInstancesExceededException;
 use Sabre\VObject\Recur\NoInstancesException;
@@ -1472,7 +1473,7 @@ class MainTest extends TestCase
      */
     public function testNoMasterEveryOverrideIsYielded(): void
     {
-        $vcal = \Sabre\VObject\Reader::read(<<<ICS
+        $vcal = Reader::read(<<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -1509,7 +1510,7 @@ ICS);
 
     public function testNoMasterSingleOverride(): void
     {
-        $vcal = \Sabre\VObject\Reader::read(<<<ICS
+        $vcal = Reader::read(<<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -1526,5 +1527,14 @@ ICS);
         self::assertSame('20261110T090000Z', (string) $it->getEventObject()->{'RECURRENCE-ID'});
         $it->next();
         self::assertFalse($it->valid());
+    }
+
+    public function testUidZero(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:0\r\nDTSTART:20260106T080000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $iterator = new EventIterator($vcal, '0');
+
+        self::assertEquals(new \DateTimeImmutable('20260106T080000Z'), $iterator->getDtStart());
     }
 }

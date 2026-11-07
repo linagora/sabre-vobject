@@ -104,7 +104,8 @@ class EventIterator implements \Iterator
             $events = [$input];
         } else {
             // Calendar + UID mode.
-            if (!$uid) {
+            // "0" is a UID like any other.
+            if (null === $uid || '' === $uid) {
                 throw new \InvalidArgumentException('The UID argument is required when a VCALENDAR is passed to this constructor');
             }
             if (!isset($input->VEVENT)) {
