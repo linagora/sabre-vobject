@@ -972,6 +972,29 @@ class Broker
     }
 
     /**
+     * Returns the values of an EXDATE as instance ids, which are read back in
+     * the time zone of the event: a value with another TZID, or in UTC, is
+     * converted to it.
+     *
+     * @return string[]
+     */
+    private static function exdateIds(Property $exDate, \DateTimeZone $timezone, Property\ICalendar\DateTime $start): array
+    {
+        $parts = $exDate->getParts();
+        if (!$exDate instanceof Property\ICalendar\DateTime || !$exDate->hasTime() || $exDate->isFloating()) {
+            return $parts;
+        }
+        try {
+            $dateTimes = $exDate->getDateTimes();
+        } catch (InvalidDataException) {
+            return $parts;
+        }
+        $format = 'UTC' === $timezone->getName() && !$start->isFloating() ? 'Ymd\\THis\\Z' : 'Ymd\\THis';
+
+        return array_map(fn (\DateTimeImmutable $dateTime) => $dateTime->setTimezone($timezone)->format($format), $dateTimes);
+    }
+
+    /**
      * Excludes the instances of these RECURRENCE-ID properties from an event.
      *
      * An EXDATE declares the type of its values, and holds them as instants in
@@ -1096,9 +1119,18 @@ class Broker
             if (is_null($sequence) && isset($vevent->SEQUENCE)) {
                 $sequence = $vevent->SEQUENCE->getValue();
             }
+            $recurId = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getValue() : 'master';
+            if (is_null($timezone)) {
+                if ('master' === $recurId) {
+                    $timezone = $vevent->DTSTART->getDateTime()->getTimeZone();
+                } else {
+                    $timezone = self::recurrenceId($vevent)->getTimeZone();
+                }
+            }
+
             if (isset($vevent->EXDATE)) {
                 foreach ($vevent->select('EXDATE') as $val) {
-                    $exdate = array_merge($exdate, $val->getParts());
+                    $exdate = array_merge($exdate, self::exdateIds($val, $timezone, $vevent->DTSTART));
                 }
                 sort($exdate);
             }
@@ -1131,15 +1163,6 @@ class Broker
             }
             if (isset($vevent->STATUS)) {
                 $status = strtoupper((string) $vevent->STATUS->getValue());
-            }
-
-            $recurId = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getValue() : 'master';
-            if (is_null($timezone)) {
-                if ('master' === $recurId) {
-                    $timezone = $vevent->DTSTART->getDateTime()->getTimeZone();
-                } else {
-                    $timezone = self::recurrenceId($vevent)->getTimeZone();
-                }
             }
 
             $instances[$recurId] = $vevent;
