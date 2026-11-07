@@ -662,4 +662,17 @@ VCF;
 
         self::assertSame("X-T;VALUE=TIME:100000\r\n", $calendar->VEVENT->{'X-T'}->serialize());
     }
+
+    public function testSeveralUriValuesAreRefused(): void
+    {
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcalendar",[],[["vevent",[["location",{},"uri","https://a.example/","https://b.example/"]],[]]]]');
+    }
+
+    public function testOneUriValueIsKept(): void
+    {
+        $calendar = VObject\Reader::readJson('["vcalendar",[],[["vevent",[["url",{},"uri","https://a.example/a,b"]],[]]]]');
+
+        self::assertSame('https://a.example/a,b', (string) VObject\Reader::read($calendar->serialize())->VEVENT->URL);
+    }
 }
