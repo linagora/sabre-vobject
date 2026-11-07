@@ -5,6 +5,7 @@ namespace Sabre\VObject\Component;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\InvalidDataException;
+use Sabre\VObject\Node;
 use Sabre\VObject\Reader;
 
 class VAlarmTest extends TestCase
@@ -252,5 +253,37 @@ BLA;
             ."ACTION:DISPLAY\r\nDESCRIPTION:x\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
 
         self::assertEquals(new \DateTimeImmutable('2026-01-05T09:45:00Z'), $vcal->VEVENT->VALARM->getEffectiveTriggerTime());
+    }
+
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function alarmAnchors(): array
+    {
+        $alarm = static fn (string $trigger) => "BEGIN:VALARM\r\n$trigger\r\nACTION:DISPLAY\r\nDESCRIPTION:x\r\nEND:VALARM\r\n";
+        $todo = static fn (string $lines, string $trigger) => "BEGIN:VTODO\r\nUID:t1\r\nDTSTAMP:20260101T000000Z\r\n$lines".$alarm($trigger)."END:VTODO\r\n";
+        $event = "BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260310T100000Z\r\nEND:VEVENT\r\n";
+
+        return [
+            'VTODO without DTSTART' => [$todo('', 'TRIGGER:-PT15M'), false],
+            'VTODO without DUE nor DTSTART, related to the end' => [$todo('', 'TRIGGER;RELATED=END:-PT15M'), false],
+            'VALARM under VCALENDAR' => [$alarm('TRIGGER:-PT15M').$event, false],
+            'VTODO with DUE, related to the end' => [$todo("DUE:20260310T100000Z\r\n", 'TRIGGER;RELATED=END:-PT15M'), true],
+            'VTODO with DTSTART' => [$todo("DTSTART:20260310T100000Z\r\n", 'TRIGGER:-PT15M'), true],
+            'VTODO without DTSTART, absolute trigger' => [$todo('', 'TRIGGER;VALUE=DATE-TIME:20260310T100000Z'), true],
+        ];
+    }
+
+    /**
+     * validate() does not accept what isInTimeRange() refuses.
+     */
+    #[DataProvider('alarmAnchors')]
+    public function testValidateRefusesUnanchoredAlarm(string $components, bool $valid): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n{$components}END:VCALENDAR\r\n");
+
+        $levels = array_column($vcal->validate(Node::PROFILE_CALDAV | Node::REPAIR), 'level');
+
+        self::assertSame(!$valid, in_array(3, $levels, true));
     }
 }
