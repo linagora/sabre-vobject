@@ -427,6 +427,12 @@ class DateTimeParser
             }
         }
 
+        // A time has an hour, a minute or a second (RFC 6350 section 4.3.2):
+        // "T-" or "T--0500" has none of them.
+        if (str_contains($date, 'T') && null === $result['hour'] && null === $result['minute'] && null === $result['second']) {
+            throw new InvalidDataException('Invalid vCard date-time string: '.$date);
+        }
+
         return $result;
     }
 
