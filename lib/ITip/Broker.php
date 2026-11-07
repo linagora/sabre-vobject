@@ -1137,6 +1137,12 @@ class Broker
             if (isset($vevent->RRULE)) {
                 foreach ($vevent->select('RRULE') as $rr) {
                     foreach ($rr->getParts() as $key => $val) {
+                        // COUNT and INTERVAL are 1*DIGIT (RFC 5545 section
+                        // 3.3.10): 05 is 5. No cast to int, which would
+                        // saturate a very large value.
+                        if (('COUNT' === $key || 'INTERVAL' === $key) && is_string($val)) {
+                            $val = preg_replace('/^0+(?=\d)/', '', $val);
+                        }
                         // ignore default values (https://github.com/sabre-io/vobject/issues/126)
                         if ('INTERVAL' === $key && '1' === (string) $val) {
                             continue;
