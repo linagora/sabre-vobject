@@ -649,4 +649,17 @@ VCF;
         $this->expectException(ParseException::class);
         VObject\Reader::readJson('["vcalendar",[["version",{},"text","2.0"]],[["vevent",[["uid",{},"text","a"],["rrule",{},"recur",{"freq":"daily","until":null}]]]]]');
     }
+
+    public function testSeveralTimeValuesAreRefused(): void
+    {
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcalendar",[],[["vevent",[["x-t",{},"time","10:00:00","11:00:00"]],[]]]]');
+    }
+
+    public function testOneTimeValueIsKept(): void
+    {
+        $calendar = VObject\Reader::readJson('["vcalendar",[],[["vevent",[["x-t",{},"time","10:00:00"]],[]]]]');
+
+        self::assertSame("X-T;VALUE=TIME:100000\r\n", $calendar->VEVENT->{'X-T'}->serialize());
+    }
 }
