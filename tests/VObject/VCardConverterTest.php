@@ -989,4 +989,40 @@ VCF;
         self::assertSame(['Wedding, Paris; see C:\\new'], Reader::read($v4->serialize())->ANNIVERSARY->getParts());
         self::assertSame(['Wedding, Paris; see C:\\new'], Reader::read($v4->convert(Document::VCARD30)->convert(Document::VCARD40)->serialize())->ANNIVERSARY->getParts());
     }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function dataUriMediaTypes(): array
+    {
+        return [
+            'webp logo' => ['LOGO', 'image/webp', 'WEBP'],
+            'svg photo' => ['PHOTO', 'image/svg+xml', 'SVG+XML'],
+            'png photo' => ['PHOTO', 'image/png', 'PNG'],
+            'another kind of media' => ['LOGO', 'application/pdf', 'application/pdf'],
+        ];
+    }
+
+    #[DataProvider('dataUriMediaTypes')]
+    public function testDataUriMediaTypeSurvivesVCard3(string $name, string $mediaType, string $type): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:u1\r\n$name:data:$mediaType;base64,UklGRg==\r\nEND:VCARD\r\n");
+
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+        $back = $v3->convert(Document::VCARD40);
+
+        self::assertSame($type, (string) $v3->select($name)[0]['TYPE']);
+        self::assertSame("data:$mediaType;base64,UklGRg==", (string) $back->select($name)[0]);
+    }
+
+    public function testVCard3FormatKeywordBecomesAMediaType(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:u1\r\nPHOTO;ENCODING=b;TYPE=BMP:UklGRg==\r\nLOGO;ENCODING=b;TYPE=image/x-icon:UklGRg==\r\nEND:VCARD\r\n");
+
+        $v4 = $v3->convert(Document::VCARD40);
+
+        self::assertSame('data:image/bmp;base64,UklGRg==', (string) $v4->PHOTO);
+        self::assertSame('data:image/x-icon;base64,UklGRg==', (string) $v4->LOGO);
+        self::assertFalse(isset($v4->PHOTO['TYPE']));
+    }
 }
