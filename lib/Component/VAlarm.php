@@ -147,6 +147,32 @@ class VAlarm extends VObject\Component
     }
 
     /**
+     * Validates the node for correctness.
+     *
+     * A TRIGGER relative to the start or the end needs that date in the parent
+     * VEVENT or VTODO (RFC 5545 sections 3.6.6 and 3.8.6.3), which
+     * getEffectiveTriggerTime() reads: without it, every time-range query on
+     * the alarm would fail.
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+        if ($this->TRIGGER instanceof VObject\Property\ICalendar\Duration) {
+            try {
+                $this->getEffectiveTriggerTime();
+            } catch (InvalidDataException $e) {
+                $messages[] = [
+                    'level' => 3,
+                    'message' => $e->getMessage(),
+                    'node' => $this,
+                ];
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
      * A simple list of validation rules.
      *
      * This is simply a list of properties, and how many times they either
