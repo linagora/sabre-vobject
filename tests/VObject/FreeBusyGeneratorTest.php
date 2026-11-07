@@ -1115,4 +1115,25 @@ ICS;
             'date' => ['RDATE;VALUE=DATE:20260109'],
         ];
     }
+
+    public function testRecurringEventWithUidZero(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\nBEGIN:VEVENT\r\nUID:0\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260106T080000Z\r\nDURATION:PT30M\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('20260101T000000Z'),
+            new \DateTimeImmutable('20260303T000000Z'),
+            $vcal,
+            new \DateTimeZone('UTC')
+        );
+
+        $periods = array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY'));
+
+        self::assertSame([
+            '20260106T080000Z/20260106T083000Z',
+            '20260107T080000Z/20260107T083000Z',
+            '20260108T080000Z/20260108T083000Z',
+        ], array_values($periods));
+    }
 }

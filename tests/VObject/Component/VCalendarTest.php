@@ -1079,4 +1079,16 @@ ICS);
 
         self::assertCount($instances, $result->select('VEVENT'));
     }
+
+    public function testExpandRecurringEventWithUidZero(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\nBEGIN:VEVENT\r\nUID:0\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260106T080000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:0\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID:20260107T080000Z\r\nDTSTART:20260107T090000Z\r\nEND:VEVENT\r\n"
+            ."END:VCALENDAR\r\n");
+
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-02-01T00:00:00Z'));
+
+        self::assertSame(['20260106T080000Z', '20260107T090000Z'], array_map(fn ($event) => (string) $event->DTSTART, $expanded->select('VEVENT')));
+    }
 }
