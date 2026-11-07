@@ -915,7 +915,7 @@ VCF;
         $v4 = Reader::read($serialized);
 
         self::assertSame('TEXT', (string) $v4->ANNIVERSARY['VALUE'], $serialized);
-        self::assertSame('in june, I think', (string) $v4->ANNIVERSARY, $serialized);
+        self::assertSame(['in june, I think'], $v4->ANNIVERSARY->getParts(), $serialized);
         self::assertFalse(isset($v4->ANNIVERSARY['X-APPLE-OMIT-YEAR']), $serialized);
     }
 
@@ -964,5 +964,29 @@ VCF;
         $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
 
         self::assertSame('--0203', (string) $v3->convert(Document::VCARD40)->BDAY);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function textAnniversaryExtensions(): array
+    {
+        return [
+            'X-ANNIVERSARY' => ['X-ANNIVERSARY:Wedding\\, Paris\; see C:\\\\new'],
+            'labelled X-ABDATE' => ["item1.X-ABDATE:Wedding\\, Paris\; see C:\\\\new\r\nitem1.X-ABLABEL:_\$!<Anniversary>!\$_"],
+        ];
+    }
+
+    #[DataProvider('textAnniversaryExtensions')]
+    public function testTextAnniversaryExtensionKeepsItsEscapedCharacters(string $lines): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nUID:u1\r\n$lines\r\nEND:VCARD\r\n");
+
+        $v4 = $v3->convert(Document::VCARD40);
+
+        self::assertSame(['Wedding, Paris; see C:\\new'], $v4->ANNIVERSARY->getParts());
+        self::assertSame('TEXT', $v4->ANNIVERSARY->getValueType());
+        self::assertSame(['Wedding, Paris; see C:\\new'], Reader::read($v4->serialize())->ANNIVERSARY->getParts());
+        self::assertSame(['Wedding, Paris; see C:\\new'], Reader::read($v4->convert(Document::VCARD30)->convert(Document::VCARD40)->serialize())->ANNIVERSARY->getParts());
     }
 }
