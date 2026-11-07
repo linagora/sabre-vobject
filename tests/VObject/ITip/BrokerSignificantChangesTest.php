@@ -2,6 +2,8 @@
 
 namespace Sabre\VObject\ITip;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 class BrokerSignificantChangesTest extends BrokerTester
 {
     /**
@@ -212,5 +214,62 @@ ICS;
         $expected = [['significantChange' => false]];
 
         $this->parse($old, $new, $expected, 'mailto:martin@fruux.com');
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function rruleNumberSpellings(): array
+    {
+        return [
+            'COUNT' => ['FREQ=WEEKLY;COUNT=05', 'FREQ=WEEKLY;COUNT=5'],
+            'INTERVAL' => ['FREQ=WEEKLY;INTERVAL=02', 'FREQ=WEEKLY;INTERVAL=2'],
+            'default INTERVAL' => ['FREQ=WEEKLY;INTERVAL=01', 'FREQ=WEEKLY'],
+        ];
+    }
+
+    #[DataProvider('rruleNumberSpellings')]
+    public function testSignificantChangesRRuleNumberSpellingNoChange(string $oldRule, string $newRule): void
+    {
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:number-spelling
+DTSTAMP:20140813T142829Z
+DTSTART;TZID=America/Toronto:20140815T110000
+SEQUENCE:2
+SUMMARY:Meeting
+RRULE:$oldRule
+ORGANIZER:MAILTO:martin@fruux.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION:MAILTO:dominik@fruux.com
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $new = str_replace("RRULE:$oldRule", "RRULE:$newRule", $old);
+
+        $this->parse($old, $new, [['significantChange' => false]], 'mailto:martin@fruux.com');
+    }
+
+    public function testSignificantChangesRRuleOtherCount(): void
+    {
+        $old = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:number-spelling
+DTSTAMP:20140813T142829Z
+DTSTART;TZID=America/Toronto:20140815T110000
+SEQUENCE:2
+SUMMARY:Meeting
+RRULE:FREQ=WEEKLY;COUNT=05
+ORGANIZER:MAILTO:martin@fruux.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION:MAILTO:dominik@fruux.com
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $new = str_replace('COUNT=05', 'COUNT=50', $old);
+
+        $this->parse($old, $new, [['significantChange' => true]], 'mailto:martin@fruux.com');
     }
 }
