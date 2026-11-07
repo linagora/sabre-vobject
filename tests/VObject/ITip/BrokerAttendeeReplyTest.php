@@ -2,6 +2,8 @@
 
 namespace Sabre\VObject\ITip;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 class BrokerAttendeeReplyTest extends BrokerTester
 {
     public function testAccepted(): void
@@ -1592,5 +1594,70 @@ ICS,
 
         self::assertCount(1, $messages);
         self::assertSame('NEEDS-ACTION', (string) $messages[0]->message->VEVENT->ATTENDEE['PARTSTAT']);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function exdatesInAnotherZone(): array
+    {
+        // 04:00 in New York and 09:00 UTC are 10:00 in Paris: the second instance.
+        return [
+            'another TZID' => ['EXDATE;TZID=America/New_York:20260106T040000'],
+            'UTC' => ['EXDATE:20260106T090000Z'],
+            'the zone of the master' => ['EXDATE;TZID=Europe/Paris:20260106T100000'],
+        ];
+    }
+
+    #[DataProvider('exdatesInAnotherZone')]
+    public function testCreateReplyByExceptionInAnotherZone(string $exdate): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART;TZID=Europe/Paris:20260105T100000
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = str_replace("ATTENDEE:mailto:one@example.org\n", "ATTENDEE:mailto:one@example.org\n$exdate\n", $oldMessage);
+
+        $messages = (new Broker())->parseEvent($newMessage, 'mailto:one@example.org', $oldMessage);
+
+        self::assertCount(1, $messages);
+        $vevent = $messages[0]->message->VEVENT;
+        $expected = new \DateTimeImmutable('2026-01-06T10:00:00', new \DateTimeZone('Europe/Paris'));
+        self::assertSame($expected->getTimestamp(), $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp());
+        self::assertSame($expected->getTimestamp(), $vevent->DTSTART->getDateTime()->getTimestamp());
+        self::assertSame('DECLINED', (string) $vevent->ATTENDEE['PARTSTAT']);
+    }
+
+    /**
+     * The same EXDATE written in another zone is not a new deleted instance.
+     */
+    public function testExdateRewrittenInAnotherZoneSendsNothing(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART;TZID=Europe/Paris:20260105T100000
+RRULE:FREQ=DAILY;COUNT=5
+EXDATE;TZID=Europe/Paris:20260106T100000
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = str_replace('EXDATE;TZID=Europe/Paris:20260106T100000', 'EXDATE:20260106T090000Z', $oldMessage);
+
+        self::assertSame([], (new Broker())->parseEvent($newMessage, 'mailto:one@example.org', $oldMessage));
     }
 }

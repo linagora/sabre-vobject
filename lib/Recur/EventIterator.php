@@ -104,7 +104,8 @@ class EventIterator implements \Iterator
             $events = [$input];
         } else {
             // Calendar + UID mode.
-            if (!$uid) {
+            // "0" is a UID like any other.
+            if (null === $uid || '' === $uid) {
                 throw new \InvalidArgumentException('The UID argument is required when a VCALENDAR is passed to this constructor');
             }
             if (!isset($input->VEVENT)) {
@@ -149,10 +150,19 @@ class EventIterator implements \Iterator
 
         $this->startDate = $this->masterEvent->DTSTART->getDateTime($this->timeZone);
         $this->allDay = !$this->masterEvent->DTSTART->hasTime();
+        // A VALUE=DATE property may still hold a date-time (an object stored
+        // without validate() repairing it): the instance is the whole day, as
+        // getEventObject() writes it.
+        if ($this->allDay) {
+            $this->startDate = $this->startDate->setTime(0, 0);
+        }
 
         if (isset($this->masterEvent->EXDATE)) {
             foreach ($this->masterEvent->EXDATE as $exDate) {
                 foreach ($exDate->getDateTimes($this->timeZone) as $dt) {
+                    if (!$exDate->hasTime()) {
+                        $dt = $dt->setTime(0, 0);
+                    }
                     $this->exceptions[$dt->getTimeStamp()] = true;
                 }
             }
@@ -163,10 +173,15 @@ class EventIterator implements \Iterator
         // timezone does not shorten or lengthen it.
         $durationTimeZone = $this->allDay ? new \DateTimeZone('UTC') : $this->timeZone;
         $durationStart = $this->masterEvent->DTSTART->getDateTime($durationTimeZone);
+        if ($this->allDay) {
+            $durationStart = $durationStart->setTime(0, 0);
+        }
         if (isset($this->masterEvent->DTEND)) {
-            $this->eventDuration =
-                $this->masterEvent->DTEND->getDateTime($durationTimeZone)->getTimeStamp() -
-                $durationStart->getTimeStamp();
+            $durationEnd = $this->masterEvent->DTEND->getDateTime($durationTimeZone);
+            if (!$this->masterEvent->DTEND->hasTime()) {
+                $durationEnd = $durationEnd->setTime(0, 0);
+            }
+            $this->eventDuration = $durationEnd->getTimeStamp() - $durationStart->getTimeStamp();
         } elseif (isset($this->masterEvent->DURATION)) {
             $duration = $this->masterEvent->DURATION->getDateInterval();
             $end = $durationStart->add($duration);

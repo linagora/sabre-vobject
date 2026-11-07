@@ -920,4 +920,39 @@ class DateTimeParserTest extends TestCase
         $this->expectException(InvalidDataException::class);
         DateTimeParser::parseVCardTime($input);
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function emptyTimeParts(): array
+    {
+        return [
+            'T-' => ['T-'],
+            'T--' => ['T--'],
+            'T-- with an offset' => ['1404T--0500'],
+            'after a date' => ['245404T-'],
+            'in UTC' => ['19850412T-Z'],
+            'extended format' => ['1985-04-12T--+05:00'],
+        ];
+    }
+
+    #[DataProvider('emptyTimeParts')]
+    public function testVCardDateTimeWithEmptyTimePartIsRefused(string $value): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseVCardDateTime($value);
+    }
+
+    public function testVCardDateTimeWithOnlyASecondIsKept(): void
+    {
+        self::assertSame('33', DateTimeParser::parseVCardDateTime('19850412T--33')['second']);
+        self::assertSame('22', DateTimeParser::parseVCardDateTime('T-22')['minute']);
+    }
+
+    public function testTimeStampWithEmptyTimePartIsInvalid(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nUID:u1\r\nREV:T-\r\nEND:VCARD\r\n");
+
+        self::assertContains(3, array_column($card->validate(), 'level'));
+    }
 }
