@@ -296,6 +296,8 @@ class Broker
      *
      * This is message from an organizer, and is either a new event
      * invite, or an update to an existing one.
+     *
+     * @throws ITipException when an existing object is not organized by the sender
      */
     protected function processMessageRequest(Message $itipMessage, ?VCalendar $existingObject = null): ?VCalendar
     {
@@ -307,6 +309,8 @@ class Broker
                 $existingObject->add(clone $component);
             }
         } else {
+            $this->assertSenderOrganizesExistingObject($itipMessage, $existingObject);
+
             // We need to update an existing object with all the new information.
             // We start by removing all non-VEVENT components (VTIMEZONE, etc.)
             foreach ($existingObject->getComponents() as $component) {
@@ -353,6 +357,8 @@ class Broker
      * This is a message from an organizer, and means that either an
      * attendee got removed from an event, or an event got cancelled
      * altogether.
+     *
+     * @throws ITipException when the existing object is not organized by the sender
      */
     protected function processMessageCancel(Message $itipMessage, ?VCalendar $existingObject = null): ?VCalendar
     {
@@ -360,6 +366,8 @@ class Broker
             // The event didn't exist in the first place, so we're just
             // ignoring this message.
         } else {
+            $this->assertSenderOrganizesExistingObject($itipMessage, $existingObject);
+
             $instancesToCancel = [];
 
             $cancelWholeEvent = false;
@@ -1300,6 +1308,48 @@ class Broker
         }
 
         return $dateTime;
+    }
+
+    /**
+     * An organizer message (REQUEST or CANCEL) may only change a stored copy
+     * that its sender organizes: otherwise anyone knowing the UID of an event
+     * could rewrite or cancel someone else's copy of it.
+     *
+     * @throws ITipException
+     */
+    private function assertSenderOrganizesExistingObject(Message $itipMessage, VCalendar $existingObject): void
+    {
+        $sender = self::normalizedAddressString($itipMessage->sender);
+        foreach ($existingObject->select('VEVENT') as $vevent) {
+            if (!isset($vevent->ORGANIZER) || self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()) !== $sender) {
+                throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
+            }
+        }
+        foreach ($itipMessage->message->select('VEVENT') as $vevent) {
+            if (isset($vevent->ORGANIZER) && self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()) !== $sender) {
+                throw new ITipException('The ORGANIZER of the '.$itipMessage->method.' is not its sender.');
+            }
+        }
+    }
+
+    /**
+     * Normalizes a calendar address for comparison: a missing scheme is
+     * taken as mailto:, the scheme is lowercased and so is a mailto: address,
+     * as CalAddress::getNormalizedValue() does.
+     */
+    private static function normalizedAddressString(string $address): string
+    {
+        $address = trim($address);
+        if (!strpos($address, ':')) {
+            $address = 'mailto:'.$address;
+        }
+        [$scheme, $rest] = explode(':', $address, 2);
+        $scheme = strtolower($scheme);
+        if ('mailto' === $scheme) {
+            $rest = strtolower($rest);
+        }
+
+        return $scheme.':'.$rest;
     }
 
     /**

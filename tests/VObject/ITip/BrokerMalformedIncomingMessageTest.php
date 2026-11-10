@@ -43,8 +43,9 @@ class BrokerMalformedIncomingMessageTest extends TestCase
         $message->component = 'VEVENT';
         $message->method = $method;
         $message->uid = 'meeting-1';
-        $message->sender = 'mailto:att@x.com';
-        $message->recipient = 'mailto:org@x.com';
+        // A REPLY comes from the attendee, a REQUEST or CANCEL from the organizer.
+        $message->sender = 'REPLY' === $method ? 'mailto:att@x.com' : 'mailto:org@x.com';
+        $message->recipient = 'REPLY' === $method ? 'mailto:org@x.com' : 'mailto:att@x.com';
         $message->message = Reader::read(
             "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:$method\r\n".$body."END:VCALENDAR\r\n"
         );
