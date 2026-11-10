@@ -53,7 +53,7 @@ abstract class BrokerTester extends TestCase
      * @throws NoInstancesException
      * @throws InvalidDataException
      */
-    public function process($input, $existingObject = null, $expected = false): void
+    public function process($input, $existingObject = null, $expected = false, ?Broker $broker = null): void
     {
         $version = Version::VERSION;
 
@@ -84,7 +84,7 @@ abstract class BrokerTester extends TestCase
             $message->sender = $mainComponent->ORGANIZER->getValue();
         }
 
-        $broker = new Broker();
+        $broker ??= new Broker();
 
         if (is_string($existingObject)) {
             $existingObject = str_replace(

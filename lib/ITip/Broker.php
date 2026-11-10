@@ -60,6 +60,16 @@ class Broker
     public bool $scheduleAgentServerRules = true;
 
     /**
+     * Whether a REPLY from someone who is not an attendee of the event adds
+     * them as an attendee (the "party crasher" of RFC 5546).
+     *
+     * Off by default: such a REPLY throws an ITipException and leaves the
+     * stored object untouched. Otherwise anyone knowing the UID of an event
+     * could add themselves to it, and receive its later updates.
+     */
+    public bool $acceptPartyCrashers = false;
+
+    /**
      * The broker will try during 'parseEvent' figure out whether the change
      * was significant.
      *
@@ -467,6 +477,7 @@ class Broker
      * The message is a reply. This is for example an attendee telling
      * an organizer he accepted the invite, or declined it.
      *
+     * @throws ITipException                 when the sender is not an attendee and party crashers are refused
      * @throws InvalidDataException
      * @throws MaxInstancesExceededException
      * @throws NoInstancesException
@@ -512,6 +523,10 @@ class Broker
             }
         }
 
+        if (!$this->acceptPartyCrashers) {
+            $this->assertSenderAttendsRepliedInstances($itipMessage, $existingObject, array_keys($instances));
+        }
+
         // Now we need to loop through the original organizer event, to find
         // all the instances where we have a reply for.
         $masterObject = null;
@@ -525,7 +540,7 @@ class Broker
                 $attendeeFound = false;
                 if (isset($vevent->ATTENDEE)) {
                     foreach ($vevent->ATTENDEE as $attendee) {
-                        if ($attendee->getValue() === $itipMessage->sender) {
+                        if (self::isSameAddress($attendee, $itipMessage->sender)) {
                             $attendeeFound = true;
                             $attendee['PARTSTAT'] = $instances[$recurIdTimestamp]['partstat'];
                             $attendee['SCHEDULE-STATUS'] = $requestStatus;
@@ -586,7 +601,7 @@ class Broker
             $attendeeFound = false;
             if (isset($newObject->ATTENDEE)) {
                 foreach ($newObject->ATTENDEE as $attendee) {
-                    if ($attendee->getValue() === $itipMessage->sender) {
+                    if (self::isSameAddress($attendee, $itipMessage->sender)) {
                         $attendeeFound = true;
                         $attendee['PARTSTAT'] = $instance['partstat'];
                         break;
@@ -1330,6 +1345,50 @@ class Broker
                 throw new ITipException('The ORGANIZER of the '.$itipMessage->method.' is not its sender.');
             }
         }
+    }
+
+    /**
+     * A REPLY may only change the PARTSTAT of an attendee of the organizer's
+     * copy: an instance not overridden yet is checked against the master,
+     * whose attendees its expansion carries.
+     *
+     * @param array<int|string> $recurIdTimestamps the replied instances, 'master' for the master
+     *
+     * @throws ITipException
+     * @throws InvalidDataException
+     */
+    private function assertSenderAttendsRepliedInstances(Message $itipMessage, VCalendar $existingObject, array $recurIdTimestamps): void
+    {
+        $stored = [];
+        foreach ($existingObject->select('VEVENT') as $vevent) {
+            $recurrenceId = self::recurrenceId($vevent);
+            $stored[$recurrenceId ? $recurrenceId->getTimestamp() : 'master'] = $vevent;
+        }
+        foreach ($recurIdTimestamps as $recurIdTimestamp) {
+            $vevent = $stored[$recurIdTimestamp] ?? ('master' !== $recurIdTimestamp ? ($stored['master'] ?? null) : null);
+            if (!$vevent) {
+                // Nothing to update for this instance.
+                continue;
+            }
+            $attendeeFound = false;
+            foreach ($vevent->select('ATTENDEE') as $attendee) {
+                if (self::isSameAddress($attendee, $itipMessage->sender)) {
+                    $attendeeFound = true;
+                    break;
+                }
+            }
+            if (!$attendeeFound) {
+                throw new ITipException('The sender of the REPLY is not an attendee of the event.');
+            }
+        }
+    }
+
+    /**
+     * Whether an ORGANIZER or ATTENDEE property holds this address.
+     */
+    private static function isSameAddress(Property $property, string $address): bool
+    {
+        return self::normalizedAddressString((string) $property->getValue()) === self::normalizedAddressString($address);
     }
 
     /**
