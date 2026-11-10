@@ -50,6 +50,21 @@ class Boolean extends Property
     }
 
     /**
+     * Sets the JSON value, as it would appear in a jCard or jCal object.
+     *
+     * jCal and jCard write a BOOLEAN as a JSON true or false (RFC 7265
+     * section 3.6.4). Any other value is read as the text form is: TRUE,
+     * in any case, is true, anything else false.
+     */
+    public function setJsonValue(array $value): void
+    {
+        parent::setJsonValue(array_map(
+            static fn ($value): bool => is_bool($value) ? $value : (is_string($value) && 'TRUE' === strtoupper($value)),
+            $value
+        ));
+    }
+
+    /**
      * Hydrate data from an XML subtree, as it would appear in a xCard or xCal
      * object.
      */
