@@ -199,7 +199,8 @@ class VCardConverter
                         if (self::hasValue($output, 'KIND', 'ORG')) {
                             return;
                         }
-                        if (!isset($output->KIND)) {
+                        // A native KIND wins, whatever the order of the lines.
+                        if (!isset($output->KIND) && !isset($input->KIND)) {
                             $newProperty = $output->createProperty('KIND', 'ORG');
                         }
                     }
@@ -209,7 +210,8 @@ class VCardConverter
                         if (self::hasValue($output, 'KIND', 'GROUP')) {
                             return;
                         }
-                        if (!isset($output->KIND)) {
+                        // A native KIND wins, whatever the order of the lines.
+                        if (!isset($output->KIND) && !isset($input->KIND)) {
                             $newProperty = $output->createProperty('KIND', 'GROUP');
                         }
                     }
