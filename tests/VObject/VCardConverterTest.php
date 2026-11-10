@@ -1025,4 +1025,29 @@ VCF;
         self::assertSame('data:image/x-icon;base64,UklGRg==', (string) $v4->LOGO);
         self::assertFalse(isset($v4->PHOTO['TYPE']));
     }
+
+    /**
+     * A native KIND wins over an Apple extension listed before it, as it
+     * does over one listed after it.
+     */
+    #[DataProvider('appleKindsBeforeNativeKind')]
+    public function testNativeKindWinsOverAppleExtensions(string $extension): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\n$extension\r\nKIND:location\r\nEND:VCARD\r\n");
+
+        $v4 = $v3->convert(Document::VCARD40);
+
+        self::assertCount(1, $v4->select('KIND'));
+        self::assertSame('location', (string) $v4->KIND);
+        self::assertFalse(isset($v4->{'X-KIND'}));
+        self::assertStringContainsString($extension."\r\n", $v4->serialize());
+    }
+
+    public static function appleKindsBeforeNativeKind(): array
+    {
+        return [
+            'X-ABSHOWAS' => ['X-ABSHOWAS:COMPANY'],
+            'X-ADDRESSBOOKSERVER-KIND' => ['X-ADDRESSBOOKSERVER-KIND:group'],
+        ];
+    }
 }
