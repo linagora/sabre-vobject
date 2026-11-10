@@ -441,7 +441,10 @@ class VCardConverter
             $newTypes = [];
             foreach ($parameters['TYPE']->getParts() as $typePart) {
                 $typePart = (string) $typePart;
-                if (null === $mimeType && preg_match('/^'.self::MEDIA_TYPE_TOKEN.'\/'.self::MEDIA_TYPE_TOKEN.'\z/', $typePart)) {
+                if ('PREF' === strtoupper($typePart)) {
+                    // A preference, not a format: it becomes PREF=1.
+                    $newTypes[] = $typePart;
+                } elseif (null === $mimeType && preg_match('/^'.self::MEDIA_TYPE_TOKEN.'\/'.self::MEDIA_TYPE_TOKEN.'\z/', $typePart)) {
                     $mimeType = strtolower($typePart);
                 } elseif (null === $mimeType && preg_match('/^'.self::MEDIA_TYPE_TOKEN.'\z/', $typePart)) {
                     $mimeType = ('SOUND' === $newProperty->name ? 'audio/' : 'image/').strtolower($typePart);
