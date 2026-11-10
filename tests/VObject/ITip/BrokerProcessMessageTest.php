@@ -41,6 +41,7 @@ METHOD:REQUEST
 BEGIN:VEVENT
 SEQUENCE:2
 UID:foobar
+ORGANIZER:mailto:org@example.org
 END:VEVENT
 END:VCALENDAR
 ICS;
@@ -50,6 +51,7 @@ BEGIN:VCALENDAR
 BEGIN:VEVENT
 SEQUENCE:1
 UID:foobar
+ORGANIZER:mailto:org@example.org
 END:VEVENT
 END:VCALENDAR
 ICS;
@@ -59,6 +61,7 @@ BEGIN:VCALENDAR
 BEGIN:VEVENT
 SEQUENCE:2
 UID:foobar
+ORGANIZER:mailto:org@example.org
 END:VEVENT
 END:VCALENDAR
 ICS;
@@ -75,6 +78,7 @@ METHOD:CANCEL
 BEGIN:VEVENT
 SEQUENCE:2
 UID:foobar
+ORGANIZER:mailto:org@example.org
 END:VEVENT
 END:VCALENDAR
 ICS;
@@ -84,6 +88,7 @@ BEGIN:VCALENDAR
 BEGIN:VEVENT
 SEQUENCE:1
 UID:foobar
+ORGANIZER:mailto:org@example.org
 END:VEVENT
 END:VCALENDAR
 ICS;
@@ -92,6 +97,7 @@ ICS;
 BEGIN:VCALENDAR
 BEGIN:VEVENT
 UID:foobar
+ORGANIZER:mailto:org@example.org
 STATUS:CANCELLED
 SEQUENCE:2
 END:VEVENT
@@ -458,5 +464,107 @@ ICS;
 
         self::assertSame('DATE', (string) $result->VEVENT->EXDATE['VALUE']);
         self::assertSame(['20260106', '20260107', '20260108'], $result->VEVENT->EXDATE->getParts());
+    }
+
+    private const STORED_BY_ORGANIZER = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\n"
+        ."DTSTART:20260105T100000Z\r\nSUMMARY:Board meeting\r\nORGANIZER:mailto:o@example.com\r\n"
+        ."ATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+    private static function organizerMessage(string $method, string $sender, string $organizer = 'mailto:o@example.com'): Message
+    {
+        $message = new Message();
+        $message->method = $method;
+        $message->component = 'VEVENT';
+        $message->uid = 'u1';
+        $message->sequence = 2;
+        $message->sender = $sender;
+        $message->recipient = 'mailto:a@example.com';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:$method\r\nBEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260102T000000Z\r\nSEQUENCE:2\r\n"
+            ."DTSTART:20260106T100000Z\r\nSUMMARY:Moved\r\nORGANIZER:$organizer\r\nATTENDEE:mailto:a@example.com\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        return $message;
+    }
+
+    public static function organizerMethods(): array
+    {
+        return ['REQUEST' => ['REQUEST'], 'CANCEL' => ['CANCEL']];
+    }
+
+    /**
+     * Anyone knowing the UID of an event must not rewrite or cancel the copy
+     * of it that someone else organizes.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('organizerMethods')]
+    public function testOrganizerMessageFromAnotherSenderIsRefused(string $method): void
+    {
+        $stored = Reader::read(self::STORED_BY_ORGANIZER);
+        $before = $stored->serialize();
+
+        try {
+            (new Broker())->processMessage(self::organizerMessage($method, 'mailto:m@example.com', 'mailto:m@example.com'), $stored);
+            self::fail('The '.$method.' of a sender who is not the organizer was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('organizerMethods')]
+    public function testOrganizerMessageOntoAStoredEventWithoutOrganizerIsRefused(string $method): void
+    {
+        $stored = Reader::read(str_replace("ORGANIZER:mailto:o@example.com\r\n", '', self::STORED_BY_ORGANIZER));
+        $before = $stored->serialize();
+
+        try {
+            (new Broker())->processMessage(self::organizerMessage($method, 'mailto:o@example.com'), $stored);
+            self::fail('The '.$method.' onto an event without organizer was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('organizerMethods')]
+    public function testOrganizerMessageWhoseOrganizerIsNotItsSenderIsRefused(string $method): void
+    {
+        $stored = Reader::read(self::STORED_BY_ORGANIZER);
+        $before = $stored->serialize();
+
+        try {
+            (new Broker())->processMessage(self::organizerMessage($method, 'mailto:o@example.com', 'mailto:m@example.com'), $stored);
+            self::fail('The '.$method.' whose ORGANIZER is not its sender was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('organizerMethods')]
+    public function testOrganizerMessageFromTheOrganizerInAnotherCaseIsApplied(string $method): void
+    {
+        $result = (new Broker())->processMessage(
+            self::organizerMessage($method, 'MAILTO:O@Example.com'),
+            Reader::read(self::STORED_BY_ORGANIZER)
+        );
+
+        self::assertInstanceOf(\Sabre\VObject\Component\VCalendar::class, $result);
+        if ('REQUEST' === $method) {
+            self::assertSame('Moved', (string) $result->VEVENT->SUMMARY);
+        } else {
+            self::assertSame('CANCELLED', (string) $result->VEVENT->STATUS);
+        }
+    }
+
+    public function testRequestFromASenderWithoutSchemeIsApplied(): void
+    {
+        $result = (new Broker())->processMessage(
+            self::organizerMessage('REQUEST', 'o@example.com'),
+            Reader::read(self::STORED_BY_ORGANIZER)
+        );
+
+        self::assertSame('Moved', (string) $result->VEVENT->SUMMARY);
     }
 }
