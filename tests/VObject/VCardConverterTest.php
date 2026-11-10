@@ -1050,4 +1050,32 @@ VCF;
             'X-ADDRESSBOOKSERVER-KIND' => ['X-ADDRESSBOOKSERVER-KIND:group'],
         ];
     }
+
+    /**
+     * TYPE=PREF marks the preferred value: it is not the format of a binary
+     * PHOTO or LOGO, and becomes PREF=1.
+     */
+    public function testTypePrefIsNotAMediaType(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:u1\r\n"
+            ."PHOTO;ENCODING=b;TYPE=PREF:UklGRg==\r\nLOGO;ENCODING=b;TYPE=pref,PNG:UklGRg==\r\nEND:VCARD\r\n");
+
+        $v4 = $v3->convert(Document::VCARD40);
+
+        self::assertSame('data:application/octet-stream;base64,UklGRg==', (string) $v4->PHOTO);
+        self::assertSame('1', (string) $v4->PHOTO['PREF']);
+        self::assertSame('data:image/png;base64,UklGRg==', (string) $v4->LOGO);
+        self::assertSame('1', (string) $v4->LOGO['PREF']);
+        self::assertFalse(isset($v4->PHOTO['TYPE']));
+    }
+
+    public function testPreferredPhotoWithoutFormatSurvivesARoundTrip(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:J\r\nUID:u1\r\nPHOTO;PREF=1:data:application/octet-stream;base64,PA==\r\nEND:VCARD\r\n");
+
+        $back = $v4->convert(Document::VCARD30)->convert(Document::VCARD40);
+
+        self::assertSame((string) $v4->PHOTO, (string) $back->PHOTO);
+        self::assertSame('1', (string) $back->PHOTO['PREF']);
+    }
 }
