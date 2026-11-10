@@ -255,7 +255,9 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->process($itip, $old, $expected);
+        $broker = new Broker();
+        $broker->acceptPartyCrashers = true;
+        $this->process($itip, $old, $expected, $broker);
     }
 
     public function testReplyExistingExceptionRecurrenceIdInUTC(): void
@@ -623,7 +625,9 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->process($itip, $old, $expected);
+        $broker = new Broker();
+        $broker->acceptPartyCrashers = true;
+        $this->process($itip, $old, $expected, $broker);
     }
 
     public function testReplyNewExceptionNoMasterEvent(): void
@@ -832,5 +836,75 @@ ICS;
 
         self::assertInstanceOf(VCalendar::class, $result);
         self::assertSame('2.0', (string) $result->VEVENT->ATTENDEE['SCHEDULE-STATUS']);
+    }
+
+    private const CRASHED = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSEQUENCE:2\r\nUID:foobar\r\n"
+        ."RRULE:FREQ=DAILY;COUNT=5\r\nDTSTART:20140724T000000Z\r\nDTEND:20140724T010000Z\r\n"
+        ."ORGANIZER:mailto:bar@example.org\r\nATTENDEE:mailto:foo@example.org\r\nEND:VEVENT\r\n"
+        ."BEGIN:VEVENT\r\nSEQUENCE:2\r\nUID:foobar\r\nRECURRENCE-ID:20140726T000000Z\r\n"
+        ."DTSTART:20140726T000000Z\r\nDTEND:20140726T010000Z\r\n"
+        ."ORGANIZER:mailto:bar@example.org\r\nATTENDEE:mailto:foo@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+    private static function reply(string $sender, string $recurrenceId): Message
+    {
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->component = 'VEVENT';
+        $message->uid = 'foobar';
+        $message->sender = $sender;
+        $message->senderName = 'Foo';
+        $message->recipient = 'mailto:bar@example.org';
+        $message->message = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:foobar\r\nSEQUENCE:2\r\n$recurrenceId"
+            ."ORGANIZER:mailto:bar@example.org\r\nATTENDEE;PARTSTAT=ACCEPTED;CN=Foo:$sender\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        return $message;
+    }
+
+    public static function crashedInstances(): array
+    {
+        return [
+            'master' => [''],
+            'existing override' => ["RECURRENCE-ID:20140726T000000Z\r\n"],
+            'new override' => ["RECURRENCE-ID:20140725T000000Z\r\n"],
+        ];
+    }
+
+    /**
+     * By default a REPLY from someone who is not an attendee must not add
+     * them to the organizer's copy.
+     */
+    #[DataProvider('crashedInstances')]
+    public function testReplyFromAPartyCrasherIsRefusedByDefault(string $recurrenceId): void
+    {
+        $stored = Reader::read(self::CRASHED);
+        $before = $stored->serialize();
+
+        try {
+            (new Broker())->processMessage(self::reply('mailto:crasher@example.org', $recurrenceId), $stored);
+            self::fail('The REPLY of a party crasher was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    #[DataProvider('crashedInstances')]
+    public function testReplyFromAnAttendeeInAnotherCaseIsApplied(string $recurrenceId): void
+    {
+        $result = (new Broker())->processMessage(self::reply('MAILTO:Foo@Example.org', $recurrenceId), Reader::read(self::CRASHED));
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        $attendees = [];
+        foreach ($result->select('VEVENT') as $vevent) {
+            foreach ($vevent->select('ATTENDEE') as $attendee) {
+                $attendees[] = $attendee->getValue().' '.$attendee['PARTSTAT'];
+            }
+        }
+        self::assertContains('mailto:foo@example.org ACCEPTED', $attendees);
+        foreach ($attendees as $attendee) {
+            self::assertStringStartsWith('mailto:foo@example.org', $attendee);
+        }
     }
 }
