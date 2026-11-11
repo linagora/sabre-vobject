@@ -173,6 +173,20 @@ class VCardConverter
                 }
             } elseif ('MEMBER' === $property->name) {
                 $newProperty = $output->createProperty('X-ADDRESSBOOKSERVER-MEMBER', $property->getValue());
+            } elseif (isset($input->KIND) && in_array($property->name, ['X-ABSHOWAS', 'X-ADDRESSBOOKSERVER-KIND'], true)) {
+                // A native KIND wins. KIND:individual is implicit, and
+                // KIND:org or group are written as one of these extensions:
+                // another one that says otherwise would become the KIND of
+                // the card when converted back to vCard 4.0.
+                $kind = strtolower((string) $input->KIND->getValue());
+                $extensionKind = match (strtoupper($property->name.':'.$property->getValue())) {
+                    'X-ABSHOWAS:COMPANY' => 'org',
+                    'X-ADDRESSBOOKSERVER-KIND:GROUP' => 'group',
+                    default => null,
+                };
+                if (null !== $extensionKind && $extensionKind !== $kind && in_array($kind, ['individual', 'org', 'group'], true)) {
+                    return;
+                }
             }
         } elseif (Document::VCARD40 === $targetVersion) {
             // These properties were removed in vCard 4.0
