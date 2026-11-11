@@ -1100,6 +1100,50 @@ VCF;
         self::assertStringContainsString($extension."\r\n", $v4->serialize());
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function nativeKindsWithAnotherAppleKind(): array
+    {
+        return [
+            'individual, company' => ['individual', 'X-ABSHOWAS:COMPANY'],
+            'individual, group' => ['individual', 'X-ADDRESSBOOKSERVER-KIND:group'],
+            'org, group' => ['org', 'X-ADDRESSBOOKSERVER-KIND:group'],
+            'group, company' => ['group', 'X-ABSHOWAS:COMPANY'],
+        ];
+    }
+
+    /**
+     * The native KIND of a vCard 4.0 card survives vCard 3.0, where an Apple
+     * kind extension that says otherwise is dropped.
+     */
+    #[DataProvider('nativeKindsWithAnotherAppleKind')]
+    public function testNativeKindSurvivesVCard3(string $kind, string $extension): void
+    {
+        foreach (["KIND:$kind\r\n$extension", "$extension\r\nKIND:$kind"] as $lines) {
+            $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:x\r\n$lines\r\nEND:VCARD\r\n");
+
+            $v3 = $v4->convert(Document::VCARD30);
+            self::assertStringNotContainsString($extension, $v3->serialize());
+            $back = Reader::read($v3->serialize())->convert(Document::VCARD40);
+            self::assertSame(
+                'individual' === $kind ? [] : [strtoupper($kind)],
+                array_map(fn ($property) => strtoupper((string) $property), $back->select('KIND')),
+                $back->serialize()
+            );
+        }
+    }
+
+    public function testUnmappedNativeKindKeepsAppleKindInVCard3(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:x\r\nKIND:location\r\nX-ABSHOWAS:COMPANY\r\nEND:VCARD\r\n");
+
+        $back = Reader::read($v4->convert(Document::VCARD30)->serialize())->convert(Document::VCARD40);
+
+        self::assertSame('location', (string) $back->KIND);
+        self::assertSame('COMPANY', (string) $back->{'X-ABSHOWAS'});
+    }
+
     public static function appleKindsBeforeNativeKind(): array
     {
         return [
