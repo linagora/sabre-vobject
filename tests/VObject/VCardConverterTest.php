@@ -1023,6 +1023,31 @@ VCF;
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function dataUrisWithParameters(): array
+    {
+        return [
+            'base64' => ['data:image/png;name=a.png;base64,iVBORw=='],
+            'base64, malformed parameter' => ['data:image/png;bO:x;base64,iVBORw=='],
+            'percent-encoded' => ['data:text/plain;charset=utf-8,a%20b'],
+        ];
+    }
+
+    /**
+     * The parameters of the media type stay in the uri, which vCard 3 allows.
+     */
+    #[DataProvider('dataUrisWithParameters')]
+    public function testDataUriWithParametersKeepsThem(string $uri): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:x\r\nPHOTO:$uri\r\nEND:VCARD\r\n");
+
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+        self::assertSame($uri, (string) $v3->PHOTO);
+        self::assertSame($uri, (string) $v3->convert(Document::VCARD40)->PHOTO);
+    }
+
+    /**
      * @return array<string, array{string, string, string}>
      */
     public static function dataUriMediaTypes(): array
