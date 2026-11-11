@@ -558,6 +558,37 @@ ICS;
         }
     }
 
+    /**
+     * esn-sabre transfers the ORGANIZER of a team calendar event: the new
+     * organizer sends the REQUEST and keeps the former one as an attendee.
+     */
+    public function testRequestHandingTheEventOverToANewOrganizerIsApplied(): void
+    {
+        $message = self::organizerMessage('REQUEST', 'mailto:m@example.com', 'mailto:m@example.com');
+        $message->message->VEVENT->add('ATTENDEE', 'mailto:O@example.com');
+
+        $result = (new Broker())->processMessage($message, Reader::read(self::STORED_BY_ORGANIZER));
+
+        self::assertSame('mailto:m@example.com', (string) $result->VEVENT->ORGANIZER);
+        self::assertSame('Moved', (string) $result->VEVENT->SUMMARY);
+    }
+
+    public function testCancelFromANewOrganizerIsRefusedEvenWithTheFormerOneAsAttendee(): void
+    {
+        $stored = Reader::read(self::STORED_BY_ORGANIZER);
+        $before = $stored->serialize();
+        $message = self::organizerMessage('CANCEL', 'mailto:m@example.com', 'mailto:m@example.com');
+        $message->message->VEVENT->add('ATTENDEE', 'mailto:o@example.com');
+
+        try {
+            (new Broker())->processMessage($message, $stored);
+            self::fail('The CANCEL of a sender who is not the organizer was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
     public function testRequestFromASenderWithoutSchemeIsApplied(): void
     {
         $result = (new Broker())->processMessage(
