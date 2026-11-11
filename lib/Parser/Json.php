@@ -284,6 +284,13 @@ class Json extends Parser
             }
         }
 
+        // Only a BOOLEAN is a JSON boolean (RFC 7265 section 3.6): in a
+        // value of another type, true would be written as "1" and false as
+        // an empty value.
+        if (!$prop instanceof Property\Boolean && self::containsBoolean($values)) {
+            throw new ParseException('Invalid value for property '.$prop->name);
+        }
+
         // Only TEXT values are escaped when serialized to MimeDir: a line
         // break (or another control character) in a value of another type
         // would be written as-is and start a new line.
@@ -312,6 +319,19 @@ class Json extends Parser
         }
 
         return is_string($value) && 1 === preg_match($regex, $value);
+    }
+
+    /**
+     * Returns true if $value is, or (as a nested list or object) holds, a
+     * boolean.
+     */
+    private static function containsBoolean(mixed $value): bool
+    {
+        if (is_array($value) || $value instanceof \stdClass) {
+            return !self::all((array) $value, fn ($item) => !self::containsBoolean($item));
+        }
+
+        return is_bool($value);
     }
 
     /**
