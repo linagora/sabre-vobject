@@ -500,6 +500,14 @@ VCF;
             'integer is an object' => '["vcalendar",[],[["vevent",[["sequence",{},"integer",{"a":1}]]]]]',
             'float is an object' => '["vcalendar",[],[["vevent",[["geo",{},"float",{"a":1}]]]]]',
             'language-tag is an object' => '["vcard",[["lang",{},"language-tag",{"a":1}]]]',
+            // Only a BOOLEAN is a JSON boolean (RFC 7265 section 3.6): another
+            // value would be written as "1" or as an empty value.
+            'uri is a boolean' => '["vcalendar",[],[["vevent",[["url",{},"uri",true]],[]]]]',
+            'text is a boolean' => '["vcalendar",[],[["vevent",[["description",{},"text",false]],[]]]]',
+            'unknown is a boolean' => '["vcalendar",[],[["vevent",[["x-foo",{},"unknown",true]],[]]]]',
+            'integer is a boolean' => '["vcalendar",[],[["vevent",[["sequence",{},"integer",true]]]]]',
+            'structured text has a boolean' => '["vcard",[["n",{},"text",["a",[true]]]]]',
+            'recur has a boolean part' => '["vcalendar",[],[["vevent",[["rrule",{},"recur",{"freq":"daily","count":true}]]]]]',
         ];
 
         return array_map(fn (string $document) => [$document], $documents);
