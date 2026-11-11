@@ -537,12 +537,15 @@ class VCardConverter
         $metadata = substr((string) $value, 5, $comma - 5);
         $payload = substr((string) $value, $comma + 1);
         if (str_ends_with(strtolower($metadata), ';base64')) {
+            $mimeType = substr($metadata, 0, -7);
+            if (str_contains($mimeType, ';')) {
+                return $newProperty;
+            }
             $data = base64_decode($payload, true);
             if (false === $data) {
                 // Not valid base64: keep the uri rather than an empty value.
                 return $newProperty;
             }
-            $mimeType = substr($metadata, 0, (int) strpos($metadata, ';'));
         } elseif (str_contains($metadata, ';')) {
             return $newProperty;
         } else {
