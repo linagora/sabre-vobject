@@ -1091,4 +1091,36 @@ ICS);
 
         self::assertSame(['20260106T080000Z', '20260107T090000Z'], array_map(fn ($event) => (string) $event->DTSTART, $expanded->select('VEVENT')));
     }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function instancesEndingAfterYear9999(): array
+    {
+        return [
+            'UTC, by RRULE' => ["DTSTART:20260105T100000Z\r\nDTEND:99991231T000000Z\r\nRRULE:FREQ=MONTHLY;COUNT=2", '99991231T235959Z'],
+            'UTC, by RDATE' => ["DTSTART:20260105T100000Z\r\nDTEND:99991231T000000Z\r\nRDATE:20260301T100000Z", '99991231T235959Z'],
+            'all-day' => ["DTSTART;VALUE=DATE:20260105\r\nDTEND;VALUE=DATE:99991231\r\nRRULE:FREQ=MONTHLY;COUNT=2", '99991231'],
+            // 9999-12-31T23:59:59 in Paris is 22:59:59Z.
+            'in a zone east of UTC' => ["DTSTART;TZID=Europe/Paris:20260105T100000\r\nDTEND;TZID=Europe/Paris:99991231T000000\r\nRRULE:FREQ=MONTHLY;COUNT=2", '99991231T225959Z'],
+            'in a zone west of UTC' => ["DTSTART;TZID=America/New_York:20260105T100000\r\nDTEND;TZID=America/New_York:99991231T000000\r\nRRULE:FREQ=MONTHLY;COUNT=2", '99991231T235959Z'],
+        ];
+    }
+
+    #[DataProvider('instancesEndingAfterYear9999')]
+    public function testExpandInstanceEndingAfterYear9999(string $lines, string $end): void
+    {
+        $vcal = VObject\Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//y//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$lines\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+
+        $expanded = $vcal->expand(new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2027-01-01T00:00:00Z'));
+
+        $events = $expanded->select('VEVENT');
+        self::assertCount(2, $events);
+        // An end after 9999 cannot be written in iCalendar: it is clamped.
+        self::assertSame($end, (string) $events[1]->DTEND);
+        VObject\Reader::read($expanded->serialize());
+    }
 }

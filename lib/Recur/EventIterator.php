@@ -447,13 +447,32 @@ class EventIterator implements \Iterator
             if ($event->DTEND->hasTime() && $floating) {
                 $dtEnd = $dtEnd->setTimezone($this->timeZone);
             }
-            $event->DTEND->setDateTime($dtEnd, $floating);
+            $event->DTEND->setDateTime(self::notAfterYear9999($dtEnd), $floating);
         }
         $recurid = clone $event->DTSTART;
         $recurid->name = 'RECURRENCE-ID';
         $event->add($recurid);
 
         return $event;
+    }
+
+    /**
+     * The duration added to a later instance can take its end past
+     * 9999-12-31, which iCalendar cannot write (the year has 4 digits, RFC
+     * 5545 section 3.3.4): such an end is the last second of 9999, both in
+     * UTC and in its own time zone.
+     */
+    private static function notAfterYear9999(\DateTimeImmutable $dateTime): \DateTimeImmutable
+    {
+        $last = new \DateTimeImmutable('9999-12-31 23:59:59', new \DateTimeZone('UTC'));
+        if ($dateTime > $last) {
+            $dateTime = $last->setTimezone($dateTime->getTimezone());
+        }
+        if ((int) $dateTime->format('Y') > 9999) {
+            $dateTime = $dateTime->setDate(9999, 12, 31)->setTime(23, 59, 59);
+        }
+
+        return $dateTime;
     }
 
     /**
