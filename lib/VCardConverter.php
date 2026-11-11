@@ -369,30 +369,41 @@ class VCardConverter
     /**
      * Turns X-ANNIVERSARY or X-ABDATE into an ANNIVERSARY.
      *
-     * Without a VALUE parameter these extensions have no known type, which an
-     * ANNIVERSARY cannot have: RFC 6350 section 6.2.6 only allows a date and/or
-     * time, or a text.
+     * Without a VALUE parameter these extensions have no known type, and with
+     * one they may have any type (a uri, an integer...), which an ANNIVERSARY
+     * cannot have: RFC 6350 section 6.2.6 only allows a date and/or time, or a
+     * text.
      *
      * @param array $parameters list of parameters that will eventually be added to
      *                          the new property
      */
     private function renameToAnniversary(Component\VCard $output, Property $newProperty, array &$parameters): Property
     {
-        if (!$newProperty instanceof Property\Unknown) {
+        if ($newProperty instanceof Property\VCard\DateAndOrTime || 'TEXT' === $newProperty->getValueType()) {
             $newProperty->name = 'ANNIVERSARY';
 
             return $newProperty;
         }
 
-        $value = $this->anniversaryValue($newProperty, $parameters);
+        // A boolean is read as written: TRUE, not 1.
+        $value = $newProperty instanceof Property\Text
+            ? $this->anniversaryValue($newProperty, $parameters)
+            : implode(',', array_map(
+                fn ($part) => is_bool($part) ? ($part ? 'TRUE' : 'FALSE') : (string) $part,
+                $newProperty->getParts()
+            ));
         unset($parameters['VALUE'], $parameters['X-APPLE-OMIT-YEAR']);
         try {
             DateTimeParser::parseVCardDateTime($value);
         } catch (InvalidDataException) {
-            // getValue() is already unescaped: the text is read again from
-            // what the extension holds.
             $text = $output->createProperty('ANNIVERSARY', null, [], 'TEXT');
-            $text->setRawMimeDirValue($newProperty->getRawMimeDirValue());
+            if ($newProperty instanceof Property\Unknown) {
+                // getValue() is already unescaped: the text is read again
+                // from what the extension holds.
+                $text->setRawMimeDirValue($newProperty->getRawMimeDirValue());
+            } else {
+                $text->setValue($value);
+            }
 
             return $text;
         }
