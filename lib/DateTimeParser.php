@@ -432,6 +432,11 @@ class DateTimeParser
         if (str_contains($date, 'T') && null === $result['hour'] && null === $result['minute'] && null === $result['second']) {
             throw new InvalidDataException('Invalid vCard date-time string: '.$date);
         }
+        // The date of a date-time has a day (RFC 6350 section 4.3.3,
+        // date-noreduc): "2018-08T1026" or "--08T1026" is not a date-time.
+        if (0 < (int) strpos($date, 'T') && null === $result['date']) {
+            throw new InvalidDataException('Invalid vCard date-time string: '.$date);
+        }
 
         return $result;
     }

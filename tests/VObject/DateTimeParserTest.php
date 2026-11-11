@@ -955,4 +955,44 @@ class DateTimeParserTest extends TestCase
 
         self::assertContains(3, array_column($card->validate(), 'level'));
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function reducedDatesWithTime(): array
+    {
+        return [
+            'year and month' => ['4018-08T1026'],
+            'year and month, basic format' => ['401808T1026'],
+            'year' => ['4018T1026'],
+            'year and a dash' => ['4008-T8021'],
+            'month' => ['--08T1026'],
+            'no date field' => ['--T1026'],
+        ];
+    }
+
+    #[DataProvider('reducedDatesWithTime')]
+    public function testVCardDateTimeWithReducedDateIsRefused(string $value): void
+    {
+        $this->expectException(InvalidDataException::class);
+        DateTimeParser::parseVCardDateTime($value);
+    }
+
+    public function testVCardDateTimeWithADayIsKept(): void
+    {
+        self::assertSame('12', DateTimeParser::parseVCardDateTime('--0412T1026')['date']);
+        self::assertSame('12', DateTimeParser::parseVCardDateTime('---12T1026')['date']);
+        self::assertSame('10', DateTimeParser::parseVCardDateTime('T1026')['hour']);
+    }
+
+    /**
+     * A BDAY with a reduced date and a time is invalid, so that its jCard
+     * value, which the parser cannot read back, is never written.
+     */
+    public function testDateAndOrTimeWithReducedDateAndTimeIsInvalid(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nBDAY:4018-08T1026\r\nEND:VCARD\r\n");
+
+        self::assertContains(3, array_column($card->validate(), 'level'));
+    }
 }
