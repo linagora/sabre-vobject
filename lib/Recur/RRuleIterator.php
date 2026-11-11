@@ -765,7 +765,16 @@ class RRuleIterator implements \Iterator
                     $dayOffsets[] = (int) $this->startDate->format('N');
                 }
 
-                $currentYear = $this->currentDate->format('Y');
+                // The year of the current instance is the one whose weeks
+                // hold it: a week 1 can start in December of the year
+                // before, and a last week can end in January of the year
+                // after. INTERVAL counts these years.
+                $currentYear = (int) $this->currentDate->format('Y');
+                if ($this->currentDate >= (clone $this->currentDate)->setDate($currentYear + 1, 1, $this->firstDayOfWeekOne($currentYear + 1))) {
+                    ++$currentYear;
+                } elseif ($this->currentDate < (clone $this->currentDate)->setDate($currentYear, 1, $this->firstDayOfWeekOne($currentYear))) {
+                    --$currentYear;
+                }
 
                 while (true) {
                     $checkDates = [];
@@ -774,9 +783,9 @@ class RRuleIterator implements \Iterator
                     // Weeks are counted from the day WKST names, as RFC 5545
                     // section 3.3.10 says for a YEARLY rule with BYWEEKNO.
                     $weekStart = 0 === $this->dayMap[$this->weekStart] ? 7 : $this->dayMap[$this->weekStart];
-                    $weekOne = $this->firstDayOfWeekOne((int) $currentYear);
-                    $daysInYear = 365 + (int) (clone $this->currentDate)->setDate((int) $currentYear, 1, 1)->format('L');
-                    $weeksInYear = intdiv($daysInYear - $weekOne + $this->firstDayOfWeekOne((int) $currentYear + 1), 7);
+                    $weekOne = $this->firstDayOfWeekOne($currentYear);
+                    $daysInYear = 365 + (int) (clone $this->currentDate)->setDate($currentYear, 1, 1)->format('L');
+                    $weeksInYear = intdiv($daysInYear - $weekOne + $this->firstDayOfWeekOne($currentYear + 1), 7);
 
                     foreach ($this->byWeekNo as $byWeekNo) {
                         // A negative value counts from the end of the year,
@@ -790,7 +799,7 @@ class RRuleIterator implements \Iterator
                             $date = clone $this->currentDate;
                             // setDate() takes a day out of range as an offset
                             // from the start of the month.
-                            $date = $date->setDate((int) $currentYear, 1, $weekOne + ($week - 1) * 7 + ($dayOffset - $weekStart + 7) % 7);
+                            $date = $date->setDate($currentYear, 1, $weekOne + ($week - 1) * 7 + ($dayOffset - $weekStart + 7) % 7);
 
                             if ($date > $this->currentDate) {
                                 $checkDates[] = $date;
