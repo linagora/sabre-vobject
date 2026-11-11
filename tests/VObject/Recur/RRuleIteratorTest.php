@@ -1912,6 +1912,40 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testYearlyByWeekNoKeepsItsYearWhenWeekOneStartsInDecember(): void
+    {
+        // 1 January 2030 is a Tuesday: ISO week 1 of 2030 starts on Monday
+        // 2029-12-31, and 2030 has 52 weeks (week -52 is week 1).
+        $this->parse(
+            'FREQ=YEARLY;BYWEEKNO=-52,20;INTERVAL=33;COUNT=5',
+            '1997-05-12 00:00:00',
+            [
+                '1997-05-12 00:00:00',
+                '2029-12-31 00:00:00', // 2030-W01-1
+                '2030-05-13 00:00:00', // 2030-W20-1
+                '2063-01-01 00:00:00', // 2063-W01-1
+                '2063-05-14 00:00:00', // 2063-W20-1
+            ],
+            null,
+            'Europe/Paris'
+        );
+    }
+
+    public function testYearlyByWeekNoKeepsItsYearWhenTheLastWeekEndsInJanuary(): void
+    {
+        // 1 January 2027 is a Friday, in ISO week 2026-W53.
+        $this->parse(
+            'FREQ=YEARLY;INTERVAL=2;BYWEEKNO=53;BYDAY=FR,MO;COUNT=4',
+            '2026-12-28 09:00:00',
+            [
+                '2026-12-28 09:00:00', // 2026-W53-1
+                '2027-01-01 09:00:00', // 2026-W53-5
+                '2032-12-27 09:00:00', // 2032-W53-1
+                '2032-12-31 09:00:00', // 2032-W53-5
+            ]
+        );
+    }
+
     public function testYearlyByWeekNoSkipsAYearWithoutThatWeek(): void
     {
         $this->parse(
