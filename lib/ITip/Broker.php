@@ -1333,13 +1333,22 @@ class Broker
      * that its sender organizes: otherwise anyone knowing the UID of an event
      * could rewrite or cancel someone else's copy of it.
      *
+     * A REQUEST may still hand the event over to a new organizer (RFC 5546
+     * 2.1.5) when it keeps the stored organizer as an attendee: the former
+     * organizer then receives the update too.
+     *
      * @throws ITipException
      */
     private function assertSenderOrganizesExistingObject(Message $itipMessage, VCalendar $existingObject): void
     {
         $sender = self::normalizedAddressString($itipMessage->sender);
         foreach ($existingObject->select('VEVENT') as $vevent) {
-            if (!isset($vevent->ORGANIZER) || self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()) !== $sender) {
+            if (!isset($vevent->ORGANIZER)) {
+                throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
+            }
+            $storedOrganizer = (string) $vevent->ORGANIZER->getValue();
+            if (self::normalizedAddressString($storedOrganizer) !== $sender
+                && !('REQUEST' === $itipMessage->method && self::keepsAsAttendee($itipMessage->message, $storedOrganizer))) {
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
         }
@@ -1384,6 +1393,31 @@ class Broker
                 throw new ITipException('The sender of the REPLY is not an attendee of the event.');
             }
         }
+    }
+
+    /**
+     * Whether every VEVENT of a message lists this address as an attendee.
+     */
+    private static function keepsAsAttendee(VCalendar $message, string $address): bool
+    {
+        $vevents = $message->select('VEVENT');
+        if (!$vevents) {
+            return false;
+        }
+        foreach ($vevents as $vevent) {
+            $found = false;
+            foreach ($vevent->select('ATTENDEE') as $attendee) {
+                if (self::isSameAddress($attendee, $address)) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
