@@ -329,14 +329,18 @@ class Recur extends Property
             }
         }
         if (!isset($values['FREQ'])) {
-            $warnings[] = [
+            $warning = [
                 'level' => $repair ? 1 : 3,
                 'message' => 'FREQ is required in '.$this->name,
                 'node' => $this,
             ];
             if ($repair) {
+                // The other problems of the rule are gone with it.
                 $this->parent->remove($this);
+
+                return [$warning];
             }
+            $warnings[] = $warning;
         }
         if ($repair) {
             $this->setValue($values);

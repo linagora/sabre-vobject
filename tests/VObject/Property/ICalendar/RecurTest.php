@@ -484,4 +484,19 @@ END:VCALENDAR
         $copy->setJsonValue($rrule->getJsonValue());
         self::assertSame('20261231', $copy->getParts()['UNTIL']);
     }
+
+    public function testRepairRemovingRuleWithoutFreqDropsItsSevereMessages(): void
+    {
+        $calendar = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\n"
+            ."UID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260101T100000Z\r\n"
+            ."RRULE;ENCODING=X:\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        self::assertInstanceOf(VCalendar::class, $calendar);
+        $messages = $calendar->validate(Node::PROFILE_CALDAV | Node::REPAIR);
+
+        self::assertNull($calendar->VEVENT->RRULE);
+        self::assertSame(['FREQ is required in RRULE'], array_column($messages, 'message'));
+        self::assertSame([1], array_column($messages, 'level'));
+    }
 }
