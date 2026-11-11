@@ -907,4 +907,54 @@ ICS;
             self::assertStringStartsWith('mailto:foo@example.org', $attendee);
         }
     }
+
+    public function testReplyToSeriesWithoutInstances(): void
+    {
+        $stored = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260101T000000Z
+DTSTART:20260105T090000Z
+DTEND:20260105T100000Z
+RRULE:FREQ=DAILY;COUNT=2
+EXDATE:20260105T090000Z,20260106T090000Z
+SUMMARY:Daily
+ORGANIZER:mailto:o@example.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com
+END:VEVENT
+END:VCALENDAR
+ICS);
+        self::assertInstanceOf(VCalendar::class, $stored);
+        $before = $stored->serialize();
+
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->component = 'VEVENT';
+        $message->uid = 'u1';
+        $message->sender = 'mailto:a@example.com';
+        $message->recipient = 'mailto:o@example.com';
+        $message->message = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+METHOD:REPLY
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260101T000000Z
+RECURRENCE-ID:20260105T090000Z
+ORGANIZER:mailto:o@example.com
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com
+END:VEVENT
+END:VCALENDAR
+ICS);
+
+        $result = (new Broker())->processMessage($message, $stored);
+
+        // The replied instance does not exist: it is skipped, nothing changes.
+        self::assertInstanceOf(VCalendar::class, $result);
+        self::assertSame($before, $result->serialize());
+    }
 }

@@ -129,7 +129,6 @@ class Broker
      *
      * @throws InvalidDataException
      * @throws MaxInstancesExceededException
-     * @throws NoInstancesException
      */
     public function processMessage(Message $itipMessage, ?VCalendar $existingObject = null)
     {
@@ -480,7 +479,6 @@ class Broker
      * @throws ITipException                 when the sender is not an attendee and party crashers are refused
      * @throws InvalidDataException
      * @throws MaxInstancesExceededException
-     * @throws NoInstancesException
      */
     protected function processMessageReply(Message $itipMessage, ?VCalendar $existingObject = null): ?VCalendar
     {
@@ -572,7 +570,12 @@ class Broker
         // If we got replies to instances that did not exist in the
         // original list, it means that new exceptions must be created.
         foreach ($instances as $recurIdTimestamp => $instance) {
-            $recurrenceIterator = new EventIterator($existingObject, $itipMessage->uid);
+            try {
+                $recurrenceIterator = new EventIterator($existingObject, $itipMessage->uid);
+            } catch (NoInstancesException) {
+                // The series has no instance the reply could be about.
+                continue;
+            }
             $found = false;
             $iterations = 1000;
             do {
