@@ -210,7 +210,7 @@ class VCardConverter
             switch ($property->name) {
                 case 'X-ABSHOWAS':
                     if ('COMPANY' === strtoupper((string) $property->getValue())) {
-                        if (self::hasValue($output, 'KIND', 'ORG')) {
+                        if (self::hasValue($output, 'KIND', 'ORG', true)) {
                             return;
                         }
                         // A native KIND wins, whatever the order of the lines.
@@ -221,7 +221,7 @@ class VCardConverter
                     break;
                 case 'X-ADDRESSBOOKSERVER-KIND':
                     if ('GROUP' === strtoupper((string) $property->getValue())) {
-                        if (self::hasValue($output, 'KIND', 'GROUP')) {
+                        if (self::hasValue($output, 'KIND', 'GROUP', true)) {
                             return;
                         }
                         // A native KIND wins, whatever the order of the lines.
@@ -233,7 +233,7 @@ class VCardConverter
                 case 'KIND':
                     // KIND appears at most once in a vCard 4.0 (RFC 6350
                     // section 6.1.4): another value stays as an extension.
-                    if (self::hasValue($output, 'KIND', (string) $property->getValue())) {
+                    if (self::hasValue($output, 'KIND', (string) $property->getValue(), true)) {
                         return;
                     }
                     if (isset($output->KIND)) {
@@ -511,12 +511,16 @@ class VCardConverter
     }
 
     /**
-     * Returns true if a card has a property with that value, whatever its case.
+     * Returns true if a card has a property with that value.
+     *
+     * A KIND is compared whatever its case (RFC 6350 section 6.1.4); an
+     * ANNIVERSARY may be a text, compared exactly (RFC 6350 section 6.2.6).
      */
-    private static function hasValue(Component\VCard $card, string $name, string $value): bool
+    private static function hasValue(Component\VCard $card, string $name, string $value, bool $caseInsensitive = false): bool
     {
         foreach ($card->select($name) as $property) {
-            if (0 === strcasecmp((string) $property->getValue(), $value)) {
+            $stored = (string) $property->getValue();
+            if ($caseInsensitive ? 0 === strcasecmp($stored, $value) : $stored === $value) {
                 return true;
             }
         }

@@ -1023,6 +1023,22 @@ VCF;
     }
 
     /**
+     * A text anniversary is case-sensitive: only the same value is merged.
+     */
+    public function testAnniversaryTextDifferingInCaseIsKept(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:foo\r\nFN:Jane Doe\r\nX-ANNIVERSARY:Wedding\r\nX-ANNIVERSARY:wedding\r\nEND:VCARD\r\n");
+
+        $v4 = $v3->convert(Document::VCARD40);
+
+        $values = array_map(
+            fn ($p) => $p->getValue(),
+            array_merge($v4->select('ANNIVERSARY'), $v4->select('X-ANNIVERSARY'))
+        );
+        self::assertSame(['Wedding', 'wedding'], $values);
+    }
+
+    /**
      * @return array<string, array{string}>
      */
     public static function dataUrisWithParameters(): array
