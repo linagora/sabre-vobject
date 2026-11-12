@@ -589,6 +589,40 @@ ICS;
         self::assertSame($before, $stored->serialize());
     }
 
+    public static function storedObjectsThatAreNotEvents(): array
+    {
+        $cases = [];
+        foreach (['REQUEST', 'CANCEL'] as $method) {
+            $cases[$method.' onto a VTODO'] = [$method, "BEGIN:VTODO\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nSUMMARY:My task\r\nEND:VTODO\r\n"];
+            $cases[$method.' onto a VJOURNAL'] = [$method, "BEGIN:VJOURNAL\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nSUMMARY:My notes\r\nEND:VJOURNAL\r\n"];
+            $cases[$method.' onto a VEVENT and a VTODO'] = [$method, "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\n"
+                ."DTSTART:20260105T100000Z\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE:mailto:a@example.com\r\nEND:VEVENT\r\n"
+                ."BEGIN:VTODO\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nSUMMARY:My task\r\nEND:VTODO\r\n", ];
+        }
+
+        return $cases;
+    }
+
+    /**
+     * The stored copy is looked up by UID alone: a task or journal sharing the
+     * UID of a forged event must not be replaced by it (security review SEV-1
+     * on 6c2091f9).
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('storedObjectsThatAreNotEvents')]
+    public function testOrganizerMessageOntoAStoredObjectThatIsNotOnlyEventsIsRefused(string $method, string $components): void
+    {
+        $stored = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n".$components."END:VCALENDAR\r\n");
+        $before = $stored->serialize();
+
+        try {
+            (new Broker())->processMessage(self::organizerMessage($method, 'mailto:o@example.com'), $stored);
+            self::fail('The '.$method.' onto a stored object that is not only events was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
     public function testRequestFromASenderWithoutSchemeIsApplied(): void
     {
         $result = (new Broker())->processMessage(

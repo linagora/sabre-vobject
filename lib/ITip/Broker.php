@@ -1342,7 +1342,19 @@ class Broker
     private function assertSenderOrganizesExistingObject(Message $itipMessage, VCalendar $existingObject): void
     {
         $sender = self::normalizedAddressString($itipMessage->sender);
-        foreach ($existingObject->select('VEVENT') as $vevent) {
+        // The stored copy is found by UID alone: a task or journal sharing
+        // the UID would be replaced by the event (or lose its other
+        // components), with no organizer to check.
+        $storedEvents = $existingObject->select('VEVENT');
+        if (!$storedEvents) {
+            throw new ITipException('The stored object of a '.$itipMessage->method.' is not an event.');
+        }
+        foreach ($existingObject->getComponents() as $component) {
+            if ('VEVENT' !== $component->name && 'VTIMEZONE' !== $component->name) {
+                throw new ITipException('The stored object of a '.$itipMessage->method.' holds a '.$component->name.' besides its events.');
+            }
+        }
+        foreach ($storedEvents as $vevent) {
             if (!isset($vevent->ORGANIZER)) {
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
