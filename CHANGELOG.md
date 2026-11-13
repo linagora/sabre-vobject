@@ -1077,7 +1077,7 @@ This release supports PHP 8.2 and up.
 * A vCard 2.1 with N or ADR lists serializes without "Array to string" (#141)
 
 ### Security
-* A REQUEST or CANCEL is refused unless its sender organizes the stored event, or hands it over to a new organizer; it is also refused onto a stored object that is not only events
+* A REQUEST or CANCEL is refused unless its sender organizes the stored event; it is also refused onto a stored object that is not only events
 * A REPLY from someone who is not an attendee no longer adds them to the event
 * jCal/jCard names and values can no longer inject properties or break the stored object with CR/LF or other separators
 * Parsing and serializing no longer exhaust memory or CPU on crafted input: parameter tokens are read one at a time, parameter value lists serialize in linear time, and RRULE scans stop after a 400-year cycle

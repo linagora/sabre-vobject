@@ -1333,9 +1333,8 @@ class Broker
      * that its sender organizes: otherwise anyone knowing the UID of an event
      * could rewrite or cancel someone else's copy of it.
      *
-     * A REQUEST may still hand the event over to a new organizer (RFC 5546
-     * 2.1.5) when it keeps the stored organizer as an attendee: the former
-     * organizer then receives the update too.
+     * The message cannot authorize an organizer change by itself: its sender
+     * writes its ATTENDEE list too.
      *
      * @throws ITipException
      */
@@ -1358,9 +1357,7 @@ class Broker
             if (!isset($vevent->ORGANIZER)) {
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
-            $storedOrganizer = (string) $vevent->ORGANIZER->getValue();
-            if (self::normalizedAddressString($storedOrganizer) !== $sender
-                && !('REQUEST' === $itipMessage->method && self::keepsAsAttendee($itipMessage->message, $storedOrganizer))) {
+            if (self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()) !== $sender) {
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
         }
@@ -1405,31 +1402,6 @@ class Broker
                 throw new ITipException('The sender of the REPLY is not an attendee of the event.');
             }
         }
-    }
-
-    /**
-     * Whether every VEVENT of a message lists this address as an attendee.
-     */
-    private static function keepsAsAttendee(VCalendar $message, string $address): bool
-    {
-        $vevents = $message->select('VEVENT');
-        if (!$vevents) {
-            return false;
-        }
-        foreach ($vevents as $vevent) {
-            $found = false;
-            foreach ($vevent->select('ATTENDEE') as $attendee) {
-                if (self::isSameAddress($attendee, $address)) {
-                    $found = true;
-                    break;
-                }
-            }
-            if (!$found) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
