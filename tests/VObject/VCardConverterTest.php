@@ -745,12 +745,6 @@ VCF;
         self::assertCount(0, $v4->select('EMAIL'));
     }
 
-    public function testDataUriWithoutMediaTypeIsDecodedOnce(): void
-    {
-        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nLOGO:data:;base64,QUJD\r\nEND:VCARD\r\n");
-        self::assertSame('ABC', $v4->convert(Document::VCARD30)->LOGO->getValue());
-    }
-
     public function testDataUriWithAParameterIsKept(): void
     {
         $uri = 'data:text/plain;charset=utf-8,test';
@@ -1194,5 +1188,29 @@ VCF;
 
         self::assertSame((string) $v4->PHOTO, (string) $back->PHOTO);
         self::assertSame('1', (string) $back->PHOTO['PREF']);
+    }
+
+    /**
+     * A data: URI without a media type is text/plain (RFC 2397), not
+     * application/octet-stream (#205).
+     */
+    #[DataProvider('dataUrisWithoutMediaType')]
+    public function testDataUriWithoutMediaTypeRoundTrip(string $uri): void
+    {
+        $input = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nFN:Jane Doe\r\nPHOTO:$uri\r\nEND:VCARD\r\n";
+
+        $vcard3 = Reader::read($input)->convert(Document::VCARD30);
+        $back = Reader::read($vcard3->serialize())->convert(Document::VCARD40);
+
+        self::assertSame($uri, (string) $vcard3->PHOTO->getValue());
+        self::assertSame($uri, (string) $back->PHOTO->getValue());
+    }
+
+    public static function dataUrisWithoutMediaType(): array
+    {
+        return [
+            'base64' => ['data:;base64,QUJD'],
+            'percent-encoded' => ['data:,abc%20d'],
+        ];
     }
 }
