@@ -558,19 +558,33 @@ ICS;
         }
     }
 
-    /**
-     * esn-sabre transfers the ORGANIZER of a team calendar event: the new
-     * organizer sends the REQUEST and keeps the former one as an attendee.
-     */
-    public function testRequestHandingTheEventOverToANewOrganizerIsApplied(): void
+    public static function storedCopiesOfTheOrganizer(): array
     {
+        return [
+            'attendee copy' => [self::STORED_BY_ORGANIZER],
+            'organizer copy' => [str_replace('ATTENDEE:mailto:a@example.com', "ATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nATTENDEE:mailto:b@example.com", self::STORED_BY_ORGANIZER)],
+        ];
+    }
+
+    /**
+     * Anyone may list the stored organizer as an attendee of their own
+     * REQUEST: that does not let them take the event over.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('storedCopiesOfTheOrganizer')]
+    public function testRequestListingTheStoredOrganizerAsAttendeeIsRefused(string $storedData): void
+    {
+        $stored = Reader::read($storedData);
+        $before = $stored->serialize();
         $message = self::organizerMessage('REQUEST', 'mailto:m@example.com', 'mailto:m@example.com');
         $message->message->VEVENT->add('ATTENDEE', 'mailto:O@example.com');
 
-        $result = (new Broker())->processMessage($message, Reader::read(self::STORED_BY_ORGANIZER));
+        try {
+            (new Broker())->processMessage($message, $stored);
+            self::fail('The REQUEST of a sender who is not the organizer was accepted.');
+        } catch (ITipException) {
+        }
 
-        self::assertSame('mailto:m@example.com', (string) $result->VEVENT->ORGANIZER);
-        self::assertSame('Moved', (string) $result->VEVENT->SUMMARY);
+        self::assertSame($before, $stored->serialize());
     }
 
     public function testCancelFromANewOrganizerIsRefusedEvenWithTheFormerOneAsAttendee(): void
