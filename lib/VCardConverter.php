@@ -273,6 +273,10 @@ class VCardConverter
                     }
                     if (isset($output->ANNIVERSARY)) {
                         $newProperty->name = 'X-ANNIVERSARY';
+                    } else {
+                        // A date-and-or-time or a text (RFC 6350 section
+                        // 6.2.6), as for the extensions.
+                        $newProperty = $this->renameToAnniversary($output, $newProperty, $parameters);
                     }
                     break;
                 case 'X-ABDATE':

@@ -1213,4 +1213,28 @@ VCF;
             'percent-encoded' => ['data:,abc%20d'],
         ];
     }
+
+    /**
+     * A native ANNIVERSARY of another type becomes a date or a text, as the
+     * extensions do (#206).
+     */
+    #[DataProvider('nativeAnniversariesOfAnotherType')]
+    public function testNativeAnniversaryOfAnotherTypeBecomesDateOrText(string $line, string $type, string $value): void
+    {
+        $input = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:foo\r\nFN:Jane Doe\r\n$line\r\nEND:VCARD\r\n";
+        $output = Reader::read($input)->convert(Document::VCARD40);
+
+        self::assertSame($type, $output->ANNIVERSARY->getValueType());
+        self::assertSame($value, (string) $output->ANNIVERSARY->getValue());
+        self::assertSame([], array_filter($output->validate(), fn ($warning) => $warning['level'] > 1));
+    }
+
+    public static function nativeAnniversariesOfAnotherType(): array
+    {
+        return [
+            'uri' => ['ANNIVERSARY;VALUE=uri:tel:1', 'TEXT', 'tel:1'],
+            'integer date' => ['ANNIVERSARY;VALUE=integer:20200101', 'DATE-AND-OR-TIME', '20200101'],
+            'date' => ['ANNIVERSARY:2020-01-01', 'DATE-AND-OR-TIME', '2020-01-01'],
+        ];
+    }
 }
