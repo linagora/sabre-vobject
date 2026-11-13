@@ -108,10 +108,15 @@ class EventIterator implements \Iterator
             if (null === $uid || '' === $uid) {
                 throw new \InvalidArgumentException('The UID argument is required when a VCALENDAR is passed to this constructor');
             }
-            if (!isset($input->VEVENT)) {
+            // Another component sharing the UID (a VFREEBUSY, a VTODO) is
+            // not an instance of the event.
+            $events = array_values(array_filter(
+                $input->getByUID($uid),
+                fn ($component) => $component instanceof VEvent
+            ));
+            if (!$events) {
                 throw new \InvalidArgumentException('No events found in this calendar');
             }
-            $events = $input->getByUID($uid);
         }
 
         /** @var VEvent[] $events */

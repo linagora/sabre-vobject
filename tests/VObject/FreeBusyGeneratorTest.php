@@ -1136,4 +1136,40 @@ ICS;
             '20260108T080000Z/20260108T083000Z',
         ], array_values($periods));
     }
+
+    /**
+     * A VFREEBUSY sharing the UID of a recurring event is not one of its
+     * instances (#203).
+     */
+    public function testComponentSharingTheUidOfARecurringEventIsIgnored(): void
+    {
+        $obj = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:fb
+DTSTAMP:20260101T000000Z
+DTSTART:20260106T080000Z
+DURATION:PT30M
+RDATE:20260109T080000Z,20260112T080000Z
+END:VEVENT
+BEGIN:VFREEBUSY
+UID:fb
+DTSTAMP:20260101T000000Z
+END:VFREEBUSY
+END:VCALENDAR
+ICS;
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'),
+            new \DateTimeImmutable('2026-03-01T00:00:00Z'),
+            Reader::read($obj),
+            new \DateTimeZone('UTC')
+        );
+        $result = $gen->getResult();
+        self::assertSame(
+            '20260106T080000Z/20260106T083000Z,20260109T080000Z/20260109T083000Z,20260112T080000Z/20260112T083000Z',
+            implode(',', array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY')))
+        );
+    }
 }
