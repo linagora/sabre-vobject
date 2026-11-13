@@ -571,6 +571,12 @@ class VCardConverter
             $mimeType = $metadata;
         }
 
+        if ('' === $mimeType) {
+            // No media type means text/plain (RFC 2397): a BINARY without TYPE
+            // would come back as application/octet-stream.
+            return $newProperty;
+        }
+
         /** @var Binary $newProperty */
         $newProperty = $output->createProperty(
             $newProperty->name,
