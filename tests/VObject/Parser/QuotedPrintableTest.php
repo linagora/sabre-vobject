@@ -197,6 +197,23 @@ VCF;
         self::assertSame('x', (string) $card->FN);
     }
 
+    /**
+     * An empty line after BEGIN:VCARD leaves no buffered line: the look-ahead
+     * still runs (#204).
+     */
+    public function testBlankLineAfterBeginDoesNotDisableTheVersionScan(): void
+    {
+        $first = Reader::read("BEGIN:VCARD\r\n\r\nPHOTO:http://example.com/a.jpg\r\n\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n");
+        $second = Reader::read($first->serialize());
+
+        self::assertInstanceOf(Property\Uri::class, $first->PHOTO);
+        self::assertSame($first->PHOTO::class, $second->PHOTO::class);
+        self::assertSame($first->serialize(), $second->serialize());
+
+        $card = Reader::read("BEGIN:VCARD\r\n\r\nNOTE;ENCODING=QUOTED-PRINTABLE:a=3D41\r\nVERSION:3.0\r\nFN:x\r\nEND:VCARD\r\n");
+        self::assertSame('a=41', (string) $card->NOTE);
+    }
+
     public function testVersionOfTheNextCardIsNotUsed(): void
     {
         $stream = fopen('php://memory', 'r+');

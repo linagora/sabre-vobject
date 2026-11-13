@@ -215,7 +215,8 @@ class MimeDir extends Parser
         // A line without a colon is read as an empty VERSION, and a colon in a
         // quoted parameter value does not start the value.
         $versionRegex = '/^(?:[^.:;"]+\.)?VERSION(?:;(?:[^":]|"[^"]*")*)?(?::(.*))?$/i';
-        if (null === $this->lineBuffer || 1 === preg_match($versionRegex, $this->lineBuffer)) {
+        // No buffered line means the next one is empty, or the input ended.
+        if (null !== $this->lineBuffer && 1 === preg_match($versionRegex, $this->lineBuffer)) {
             // VERSION comes first, as nearly always.
             return;
         }
@@ -226,7 +227,11 @@ class MimeDir extends Parser
 
         // A VERSION inside a nested component is not the version of the card.
         $depth = 0;
-        foreach ($this->readUnfoldedLines($this->lineBuffer) as $line) {
+        foreach ($this->readUnfoldedLines($this->lineBuffer ?? '') as $line) {
+            if ('' === $line) {
+                // Empty lines are skipped, as readLine() does.
+                continue;
+            }
             $keyword = strtoupper(substr($line, 0, 6));
             if ('BEGIN:' === $keyword) {
                 ++$depth;
