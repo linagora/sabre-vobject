@@ -1537,4 +1537,24 @@ ICS);
 
         self::assertEquals(new \DateTimeImmutable('20260106T080000Z'), $iterator->getDtStart());
     }
+
+    public function testComponentSharingTheUidOfTheEventIsIgnored(): void
+    {
+        $calendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:fb\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART:20260106T080000Z\r\nRDATE:20260109T080000Z,20260112T080000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VFREEBUSY\r\nUID:fb\r\nDTSTAMP:20260101T000000Z\r\nEND:VFREEBUSY\r\n"
+            ."BEGIN:VTODO\r\nUID:fb\r\nDTSTAMP:20260101T000000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        self::assertCount(3, iterator_to_array(new EventIterator($calendar, 'fb'), false));
+    }
+
+    public function testUidOfAnotherComponentOnlyFindsNoEvent(): void
+    {
+        $calendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:ev\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART:20260106T080000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VTODO\r\nUID:todo\r\nDTSTAMP:20260101T000000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        $this->expectException(\InvalidArgumentException::class);
+        new EventIterator($calendar, 'todo');
+    }
 }
