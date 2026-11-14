@@ -603,6 +603,112 @@ ICS;
         self::assertSame($before, $stored->serialize());
     }
 
+    /**
+     * esn-sabre hands a team calendar event over to another member: it
+     * checks who acts and authorizes the former organizer on the message.
+     */
+    public function testRequestTakingTheEventOverFromAnAuthorizedFormerOrganizerIsApplied(): void
+    {
+        $message = self::organizerMessage('REQUEST', 'mailto:m@example.com', 'mailto:m@example.com');
+        $message->authorizedFormerOrganizers = ['MAILTO:O@Example.com'];
+
+        $result = (new Broker())->processMessage($message, Reader::read(self::STORED_BY_ORGANIZER));
+
+        self::assertSame('mailto:m@example.com', (string) $result->VEVENT->ORGANIZER);
+        self::assertSame('Moved', (string) $result->VEVENT->SUMMARY);
+    }
+
+    public static function authorizationsThatDoNotCoverTheStoredOrganizer(): array
+    {
+        return [
+            'another former organizer' => [['mailto:x@example.com']],
+            'an empty address' => [['']],
+            'a blank address' => [['  ']],
+        ];
+    }
+
+    /**
+     * @param string[] $authorized
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('authorizationsThatDoNotCoverTheStoredOrganizer')]
+    public function testRequestFromANewOrganizerIsRefusedWhenTheStoredOrganizerIsNotAuthorized(array $authorized): void
+    {
+        $stored = Reader::read(self::STORED_BY_ORGANIZER);
+        $before = $stored->serialize();
+        $message = self::organizerMessage('REQUEST', 'mailto:m@example.com', 'mailto:m@example.com');
+        $message->message->VEVENT->add('ATTENDEE', 'mailto:o@example.com');
+        $message->authorizedFormerOrganizers = $authorized;
+
+        try {
+            (new Broker())->processMessage($message, $stored);
+            self::fail('The REQUEST of a sender who is not the organizer was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    /**
+     * A blank authorization does not let anyone take over a stored copy
+     * whose ORGANIZER is blank too.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('authorizationsThatDoNotCoverTheStoredOrganizer')]
+    public function testRequestOntoABlankStoredOrganizerIsRefusedWithABlankAuthorization(array $authorized): void
+    {
+        $stored = Reader::read(str_replace('ORGANIZER:mailto:o@example.com', 'ORGANIZER:mailto:', self::STORED_BY_ORGANIZER));
+        $before = $stored->serialize();
+        $message = self::organizerMessage('REQUEST', 'mailto:m@example.com', 'mailto:m@example.com');
+        $message->authorizedFormerOrganizers = array_merge($authorized, ['mailto:']);
+
+        try {
+            (new Broker())->processMessage($message, $stored);
+            self::fail('A blank authorization let a REQUEST take over a blank organizer.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    /**
+     * A handover goes through a REQUEST: the authorization does not let the
+     * new organizer cancel the event.
+     */
+    public function testCancelFromANewOrganizerIsRefusedEvenWithTheFormerOneAuthorized(): void
+    {
+        $stored = Reader::read(self::STORED_BY_ORGANIZER);
+        $before = $stored->serialize();
+        $message = self::organizerMessage('CANCEL', 'mailto:m@example.com', 'mailto:m@example.com');
+        $message->authorizedFormerOrganizers = ['mailto:o@example.com'];
+
+        try {
+            (new Broker())->processMessage($message, $stored);
+            self::fail('The CANCEL of a sender who is not the organizer was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
+    /**
+     * The authorization covers the stored organizer only: the message must
+     * still be organized by its sender.
+     */
+    public function testRequestWhoseOrganizerIsNotItsSenderIsRefusedEvenWithAnAuthorization(): void
+    {
+        $stored = Reader::read(self::STORED_BY_ORGANIZER);
+        $before = $stored->serialize();
+        $message = self::organizerMessage('REQUEST', 'mailto:m@example.com', 'mailto:x@example.com');
+        $message->authorizedFormerOrganizers = ['mailto:o@example.com'];
+
+        try {
+            (new Broker())->processMessage($message, $stored);
+            self::fail('A REQUEST whose ORGANIZER is not its sender was accepted.');
+        } catch (ITipException) {
+        }
+
+        self::assertSame($before, $stored->serialize());
+    }
+
     public static function storedObjectsThatAreNotEvents(): array
     {
         $cases = [];

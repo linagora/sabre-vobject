@@ -1030,6 +1030,7 @@ This release supports PHP 8.2 and up.
 * Alarms are set correctly for attendees; a REPLY now carries the time zone of the answered occurrence
 * FREQ=MINUTELY and FREQ=SECONDLY recurrences now advance by INTERVAL (#31)
 * `Component::add()` gives a node added to another document that document as its root
+* `ITip\Message::$authorizedFormerOrganizers` lets the caller authorize a REQUEST to take an event over from its stored organizer (RFC 5546 2.1.5); the message itself never can
 
 ### Changed
 * A DURATION with an explicit `+` sign is read by `DateTimeParser::parse()`
