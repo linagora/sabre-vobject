@@ -102,6 +102,20 @@ class Message
     public bool $hasChange = true;
 
     /**
+     * Addresses of the stored organizers a REQUEST may take the event over
+     * from (RFC 5546 2.1.5), as authorized by the caller.
+     *
+     * The broker refuses a REQUEST onto a stored copy that its sender does
+     * not organize: the message cannot prove an organizer change, its sender
+     * writes every property of it. Only the caller, which knows who is
+     * acting and what they may write, can vouch for a handover, and it does
+     * so here. Nothing from the iTip body ever fills this list.
+     *
+     * @var string[]
+     */
+    public array $authorizedFormerOrganizers = [];
+
+    /**
      * Returns the schedule status as a string.
      *
      * For example:

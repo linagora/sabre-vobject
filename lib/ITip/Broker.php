@@ -1334,7 +1334,9 @@ class Broker
      * could rewrite or cancel someone else's copy of it.
      *
      * The message cannot authorize an organizer change by itself: its sender
-     * writes its ATTENDEE list too.
+     * writes its ATTENDEE list too. A REQUEST may only take the event over
+     * from the stored organizers the caller listed in
+     * Message::$authorizedFormerOrganizers.
      *
      * @throws ITipException
      */
@@ -1353,11 +1355,21 @@ class Broker
                 throw new ITipException('The stored object of a '.$itipMessage->method.' holds a '.$component->name.' besides its events.');
             }
         }
+        $acceptedOrganizers = [$sender];
+        if ('REQUEST' === $itipMessage->method) {
+            foreach ($itipMessage->authorizedFormerOrganizers as $formerOrganizer) {
+                $formerOrganizer = self::normalizedAddressString($formerOrganizer);
+                // A blank address normalizes to a bare scheme: it names nobody.
+                if (!str_ends_with($formerOrganizer, ':')) {
+                    $acceptedOrganizers[] = $formerOrganizer;
+                }
+            }
+        }
         foreach ($storedEvents as $vevent) {
             if (!isset($vevent->ORGANIZER)) {
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
-            if (self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()) !== $sender) {
+            if (!in_array(self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()), $acceptedOrganizers, true)) {
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
         }
