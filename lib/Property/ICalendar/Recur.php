@@ -2,7 +2,11 @@
 
 namespace Sabre\VObject\Property\ICalendar;
 
+use Sabre\VObject\DateTimeParser;
+use Sabre\VObject\InvalidDataException;
+use Sabre\VObject\Node;
 use Sabre\VObject\Property;
+use Sabre\VObject\Recur\RRuleIterator;
 use Sabre\Xml;
 
 /**
@@ -25,16 +29,21 @@ use Sabre\Xml;
 class Recur extends Property
 {
     /**
+     * Reference to the parent object, if this is not the top object.
+     */
+    public ?Node $parent = null;
+
+    /**
      * Updates the current value.
      *
      * This may be either a single, or multiple strings in an array.
      *
-     * @param string|array $value
+     * @param string|array|object $value
      */
-    public function setValue($value)
+    public function setValue($value): void
     {
         // If we're getting the data from json, we'll be receiving an object
-        if ($value instanceof \StdClass) {
+        if ($value instanceof \stdClass) {
             $value = (array) $value;
         }
 
@@ -45,17 +54,17 @@ class Recur extends Property
                     $v = strtoupper($v);
 
                     // The value had multiple sub-values
-                    if (false !== strpos($v, ',')) {
+                    if (str_contains($v, ',')) {
                         $v = explode(',', $v);
                     }
-                    if (0 === strcmp($k, 'until')) {
+                    if (0 === strcmp((string) $k, 'until')) {
                         $v = strtr($v, [':' => '', '-' => '']);
                     }
                 } elseif (is_array($v)) {
-                    $v = array_map('strtoupper', $v);
+                    $v = array_map(strtoupper(...), $v);
                 }
 
-                $newVal[strtoupper($k)] = $v;
+                $newVal[strtoupper((string) $k)] = $v;
             }
             $this->value = $newVal;
         } elseif (is_string($value)) {
@@ -73,10 +82,8 @@ class Recur extends Property
      * it as a string.
      *
      * To get the correct multi-value version, use getParts.
-     *
-     * @return string
      */
-    public function getValue()
+    public function getValue(): string
     {
         $out = [];
         foreach ($this->value as $key => $value) {
@@ -88,10 +95,8 @@ class Recur extends Property
 
     /**
      * Sets a multi-valued property.
-     *
-     * @param array $parts
      */
-    public function setParts(array $parts)
+    public function setParts(array $parts): void
     {
         $this->setValue($parts);
     }
@@ -101,10 +106,8 @@ class Recur extends Property
      *
      * This method always returns an array, if there was only a single value,
      * it will still be wrapped in an array.
-     *
-     * @return array
      */
-    public function getParts()
+    public function getParts(): array
     {
         return $this->value;
     }
@@ -114,20 +117,16 @@ class Recur extends Property
      *
      * This has been 'unfolded', so only 1 line will be passed. Unescaping is
      * not yet done, but parameters are not included.
-     *
-     * @param string $val
      */
-    public function setRawMimeDirValue($val)
+    public function setRawMimeDirValue(string $val): void
     {
         $this->setValue($val);
     }
 
     /**
      * Returns a raw mime-dir representation of the value.
-     *
-     * @return string
      */
-    public function getRawMimeDirValue()
+    public function getRawMimeDirValue(): string
     {
         return $this->getValue();
     }
@@ -137,10 +136,8 @@ class Recur extends Property
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'RECUR';
     }
@@ -150,19 +147,20 @@ class Recur extends Property
      *
      * This method must always return an array.
      *
-     * @return array
+     * @throws InvalidDataException
      */
-    public function getJsonValue()
+    public function getJsonValue(): array
     {
         $values = [];
         foreach ($this->getParts() as $k => $v) {
-            if (0 === strcmp($k, 'UNTIL')) {
-                $date = new DateTime($this->root, null, $v);
-                $values[strtolower($k)] = $date->getJsonValue()[0];
-            } elseif (0 === strcmp($k, 'COUNT')) {
-                $values[strtolower($k)] = intval($v);
+            if (0 === strcmp((string) $k, 'UNTIL')) {
+                // UNTIL has the value type of DTSTART: DATE or DATE-TIME.
+                $date = new DateTime($this->root, null, $v, str_contains((string) $v, 'T') ? [] : ['VALUE' => 'DATE']);
+                $values[strtolower((string) $k)] = $date->getJsonValue()[0];
+            } elseif (0 === strcmp((string) $k, 'COUNT')) {
+                $values[strtolower((string) $k)] = intval($v);
             } else {
-                $values[strtolower($k)] = $v;
+                $values[strtolower((string) $k)] = $v;
             }
         }
 
@@ -172,10 +170,8 @@ class Recur extends Property
     /**
      * This method serializes only the value of a property. This is used to
      * create xCard or xCal documents.
-     *
-     * @param Xml\Writer $writer XML writer
      */
-    protected function xmlSerializeValue(Xml\Writer $writer)
+    protected function xmlSerializeValue(Xml\Writer $writer): void
     {
         $valueType = strtolower($this->getValueType());
 
@@ -186,24 +182,27 @@ class Recur extends Property
 
     /**
      * Parses an RRULE value string, and turns it into a struct-ish array.
-     *
-     * @param string $value
-     *
-     * @return array
      */
-    public static function stringToArray($value)
+    public static function stringToArray(string $value): array
     {
         $value = strtoupper($value);
         $newValue = [];
         foreach (explode(';', $value) as $part) {
             // Skipping empty parts.
-            if (empty($part)) {
+            if ('' === $part) {
                 continue;
             }
-            list($partName, $partValue) = explode('=', $part);
+
+            $parts = explode('=', $part);
+
+            if (2 !== count($parts)) {
+                throw new InvalidDataException('The supplied iCalendar RRULE part is incorrect: '.$part);
+            }
+
+            [$partName, $partValue] = $parts;
 
             // The value itself had multiple values..
-            if (false !== strpos($partValue, ',')) {
+            if (str_contains($partValue, ',')) {
                 $partValue = explode(',', $partValue);
             }
             $newValue[$partName] = $partValue;
@@ -229,12 +228,8 @@ class Recur extends Property
      *   1 - The issue was repaired (only happens if REPAIR was turned on)
      *   2 - An inconsequential issue
      *   3 - A severe issue.
-     *
-     * @param int $options
-     *
-     * @return array
      */
-    public function validate($options = 0)
+    public function validate(int $options = 0): array
     {
         $repair = ($options & self::REPAIR);
 
@@ -251,7 +246,21 @@ class Recur extends Property
                 if ($repair) {
                     unset($values[$key]);
                 }
-            } elseif ('BYMONTH' == $key) {
+            } elseif ('UNTIL' === $key) {
+                // getJsonValue() formats UNTIL as a DATE or DATE-TIME.
+                try {
+                    if (!is_string($value)) {
+                        throw new InvalidDataException('UNTIL must have a single value');
+                    }
+                    DateTimeParser::parse($value);
+                } catch (InvalidDataException) {
+                    $warnings[] = [
+                        'level' => 3,
+                        'message' => 'UNTIL in '.$this->name.' must be a DATE or DATE-TIME value',
+                        'node' => $this,
+                    ];
+                }
+            } elseif ('BYMONTH' === $key) {
                 $byMonth = (array) $value;
                 foreach ($byMonth as $i => $v) {
                     if (!is_numeric($v) || (int) $v < 1 || (int) $v > 12) {
@@ -270,13 +279,13 @@ class Recur extends Property
                     }
                 }
                 // if there is no valid entry left, remove the whole value
-                if (is_array($value) && empty($values[$key])) {
+                if (is_array($value) && ([] === $values[$key])) {
                     unset($values[$key]);
                 }
-            } elseif ('BYWEEKNO' == $key) {
+            } elseif ('BYWEEKNO' === $key) {
                 $byWeekNo = (array) $value;
                 foreach ($byWeekNo as $i => $v) {
-                    if (!is_numeric($v) || (int) $v < -53 || 0 == (int) $v || (int) $v > 53) {
+                    if (!is_numeric($v) || (int) $v < -53 || 0 === (int) $v || (int) $v > 53) {
                         $warnings[] = [
                             'level' => $repair ? 1 : 3,
                             'message' => 'BYWEEKNO in RRULE must have value(s) from -53 to -1, or 1 to 53!',
@@ -292,13 +301,13 @@ class Recur extends Property
                     }
                 }
                 // if there is no valid entry left, remove the whole value
-                if (is_array($value) && empty($values[$key])) {
+                if (is_array($value) && ([] === $values[$key])) {
                     unset($values[$key]);
                 }
-            } elseif ('BYYEARDAY' == $key) {
+            } elseif ('BYYEARDAY' === $key) {
                 $byYearDay = (array) $value;
                 foreach ($byYearDay as $i => $v) {
-                    if (!is_numeric($v) || (int) $v < -366 || 0 == (int) $v || (int) $v > 366) {
+                    if (!is_numeric($v) || (int) $v < -366 || 0 === (int) $v || (int) $v > 366) {
                         $warnings[] = [
                             'level' => $repair ? 1 : 3,
                             'message' => 'BYYEARDAY in RRULE must have value(s) from -366 to -1, or 1 to 366!',
@@ -314,25 +323,78 @@ class Recur extends Property
                     }
                 }
                 // if there is no valid entry left, remove the whole value
-                if (is_array($value) && empty($values[$key])) {
+                if (is_array($value) && ([] === $values[$key])) {
                     unset($values[$key]);
                 }
             }
         }
         if (!isset($values['FREQ'])) {
-            $warnings[] = [
+            $warning = [
                 'level' => $repair ? 1 : 3,
                 'message' => 'FREQ is required in '.$this->name,
                 'node' => $this,
             ];
             if ($repair) {
+                // The other problems of the rule are gone with it.
                 $this->parent->remove($this);
+
+                return [$warning];
             }
+            $warnings[] = $warning;
         }
         if ($repair) {
             $this->setValue($values);
         }
 
+        // A problem left unrepaired (level 3) is already reported once.
+        if (isset($values['FREQ']) && !in_array(3, array_column($warnings, 'level'), true)) {
+            $warnings = array_merge($warnings, $this->validateAsIterated($values));
+        }
+
         return $warnings;
+    }
+
+    /**
+     * Reports what the recurrence iterator would refuse: the read paths
+     * (expand, time-range queries, free-busy) must accept what validate()
+     * accepts. These problems are not repaired, as dropping a part would
+     * change the meaning of the rule.
+     */
+    private function validateAsIterated(array $values): array
+    {
+        $message = null;
+        foreach (['COUNT', 'INTERVAL'] as $key) {
+            // RFC 5545 3.3.10: 1*DIGIT; the iterator casts the value.
+            if (isset($values[$key]) && is_string($values[$key]) && !preg_match('/^[0-9]+$/', $values[$key])) {
+                $message = $key.' in '.$this->name.' must be a positive integer!';
+            }
+        }
+
+        if (null === $message) {
+            try {
+                new class($values) extends RRuleIterator {
+                    // Only parse the rule: iterating is not needed to
+                    // validate it, and the parent constructor iterates.
+                    // @phpstan-ignore constructor.missingParentCall
+                    public function __construct(array $values)
+                    {
+                        $this->startDate = new \DateTimeImmutable('2000-01-01', new \DateTimeZone('UTC'));
+                        $this->parseRRule($values);
+                    }
+                };
+            } catch (\Exception $e) {
+                $message = 'Invalid '.$this->name.': '.$e->getMessage();
+            }
+        }
+
+        if (null === $message) {
+            return [];
+        }
+
+        return [[
+            'level' => 3,
+            'message' => $message,
+            'node' => $this,
+        ]];
     }
 }

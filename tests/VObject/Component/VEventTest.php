@@ -2,19 +2,19 @@
 
 namespace Sabre\VObject\Component;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject;
 
 class VEventTest extends TestCase
 {
-    /**
-     * @dataProvider timeRangeTestData
-     */
-    public function testInTimeRange(VEvent $vevent, $start, $end, $outcome)
+    #[DataProvider('timeRangeTestData')]
+    public function testInTimeRange(VEvent $vevent, \DateTime $start, \DateTime $end, bool $outcome): void
     {
-        $this->assertEquals($outcome, $vevent->isInTimeRange($start, $end));
+        self::assertEquals($outcome, $vevent->isInTimeRange($start, $end));
     }
 
-    public function timeRangeTestData()
+    public static function timeRangeTestData(): array
     {
         $tests = [];
 
@@ -42,9 +42,9 @@ class VEventTest extends TestCase
         $tests[] = [$vevent4, new \DateTime('2011-01-01'), new \DateTime('2011-11-01'), false];
         // Event with no end date should be treated as lasting the entire day.
         $tests[] = [$vevent4, new \DateTime('2011-12-25 16:00:00'), new \DateTime('2011-12-25 17:00:00'), true];
-        // DTEND is non inclusive so all day events should not be returned on the next day.
+        // DTEND is non-inclusive so all day events should not be returned on the next day.
         $tests[] = [$vevent4, new \DateTime('2011-12-26 00:00:00'), new \DateTime('2011-12-26 17:00:00'), false];
-        // The timezone of timerange in question also needs to be considered.
+        // The timezone of time range in question also needs to be considered.
         $tests[] = [$vevent4, new \DateTime('2011-12-26 00:00:00', new \DateTimeZone('Europe/Berlin')), new \DateTime('2011-12-26 17:00:00', new \DateTimeZone('Europe/Berlin')), false];
 
         $vevent5 = clone $vevent;
@@ -70,7 +70,7 @@ class VEventTest extends TestCase
         $vevent7->DTSTART['VALUE'] = 'DATE';
         $vevent7->RRULE = 'FREQ=MONTHLY';
         $tests[] = [$vevent7, new \DateTime('2012-02-01 15:00:00'), new \DateTime('2012-02-02'), true];
-        // The timezone of timerange in question should also be considered.
+        // The timezone of time range in question should also be considered.
         $tests[] = [$vevent7, new \DateTime('2012-02-02 00:00:00', new \DateTimeZone('Europe/Berlin')), new \DateTime('2012-02-03 00:00:00', new \DateTimeZone('Europe/Berlin')), false];
 
         // Added this test to check recurring events that have no instances.
@@ -89,6 +89,114 @@ class VEventTest extends TestCase
         $vevent9->RRULE = 'FREQ=DAILY';
         $tests[] = [$vevent9, new \DateTime('2016-10-31'), new \DateTime('2016-12-12'), true];
 
+        // Added this test to check events with RDATE property with multiple dates
+        $vevent10 = clone $vevent;
+        $vevent10->DTSTART = '20140901T000000Z';
+        $vevent10->DTEND = '20140901T010000Z';
+        $vevent10->add('RDATE', ['20141001T000000Z', '20141101T000000Z']);
+        // DTSTART is the first occurrence
+        $tests[] = [$vevent10, new \DateTime('2014-09-01'), new \DateTime('2014-09-02'), true];
+        // RDATE adds additional occurrences on Oct 1 and Nov 1
+        $tests[] = [$vevent10, new \DateTime('2014-10-01'), new \DateTime('2014-10-02'), true];
+        $tests[] = [$vevent10, new \DateTime('2014-11-01'), new \DateTime('2014-11-02'), true];
+        // No occurrence in December
+        $tests[] = [$vevent10, new \DateTime('2014-12-01'), new \DateTime('2014-12-31'), false];
+        // Range that includes first occurrence
+        $tests[] = [$vevent10, new \DateTime('2014-08-01'), new \DateTime('2014-09-30'), true];
+        // Range that spans all occurrences
+        $tests[] = [$vevent10, new \DateTime('2014-08-01'), new \DateTime('2014-12-31'), true];
+
+        // Added this test to check events with RDATE property with multiple instances
+        $vevent11 = clone $vevent;
+        $vevent11->DTSTART = '20140901T000000Z';
+        $vevent11->DTEND = '20140901T010000Z';
+        $vevent11->add('RDATE', '20141001T000000Z');
+        $vevent11->add('RDATE', '20141101T000000Z');
+        // DTSTART is the first occurrence
+        $tests[] = [$vevent11, new \DateTime('2014-09-01'), new \DateTime('2014-09-02'), true];
+        // RDATE adds additional occurrences on Oct 1 and Nov 1
+        $tests[] = [$vevent11, new \DateTime('2014-10-01'), new \DateTime('2014-10-02'), true];
+        $tests[] = [$vevent11, new \DateTime('2014-11-01'), new \DateTime('2014-11-02'), true];
+        // No occurrence in December
+        $tests[] = [$vevent11, new \DateTime('2014-12-01'), new \DateTime('2014-12-31'), false];
+        // Range that includes first occurrence
+        $tests[] = [$vevent11, new \DateTime('2014-08-01'), new \DateTime('2014-09-30'), true];
+        // Range that spans all occurrences
+        $tests[] = [$vevent11, new \DateTime('2014-08-01'), new \DateTime('2014-12-31'), true];
+
         return $tests;
+    }
+
+    public function testRepairDuplicateUidDoesNotAddAnother(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nUID:b\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR);
+        self::assertSame([3], array_column($messages, 'level'));
+        self::assertCount(2, $vcal->VEVENT->select('UID'));
+    }
+
+    public function testRepairMergesIdenticalDuplicates(): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $messages = $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR);
+        self::assertSame([1, 1], array_column($messages, 'level'));
+        self::assertCount(1, $vcal->select('PRODID'));
+        self::assertCount(1, $vcal->VEVENT->select('DTSTAMP'));
+        self::assertSame([], $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR));
+    }
+
+    #[DataProvider('nonDateValueTypes')]
+    public function testValidateReportsNonDateValueType(string $line): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260301T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n$line\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([3], array_column($vcal->validate(VObject\Node::PROFILE_CALDAV), 'level'));
+        self::assertSame([3], array_column($vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR), 'level'));
+    }
+
+    public static function nonDateValueTypes(): array
+    {
+        return [['EXDATE;VALUE=TEXT:20260302T100000Z'], ['DTEND;VALUE=PERIOD:20260301T100000Z/PT1H'],
+            ['RECURRENCE-ID;VALUE=TEXT:20260302T100000Z'], ['DURATION;VALUE=TEXT:PT1H'],
+            ['RDATE;VALUE=TEXT:20260310T100000Z'], ['EXRULE;VALUE=TEXT:FREQ=DAILY'], ['CREATED;VALUE=DURATION:P1D']];
+    }
+
+    #[DataProvider('allowedValueTypes')]
+    public function testValidateAcceptsAllowedValueType(string $line): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260301T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n$line\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([], $vcal->validate(VObject\Node::PROFILE_CALDAV));
+    }
+
+    public static function allowedValueTypes(): array
+    {
+        return [['EXDATE;VALUE=DATE-TIME:20260302T100000Z'], ['RDATE;VALUE=PERIOD:20260310T100000Z/PT1H'],
+            ['RDATE;VALUE=DATE:20260310'], ['DURATION:PT1H']];
+    }
+
+    #[DataProvider('nonDateTimeRangeEvents')]
+    public function testInTimeRangeWithNonDateDtstartOrDtend(string $lines, string $message): void
+    {
+        $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20260101T000000Z\r\n$lines\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $this->expectException(VObject\InvalidDataException::class);
+        $this->expectExceptionMessage($message);
+        $vcal->VEVENT->isInTimeRange(new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2027-01-01T00:00:00Z'));
+    }
+
+    public static function nonDateTimeRangeEvents(): array
+    {
+        return [
+            ['DTSTART;VALUE=PERIOD:20260301T100000Z/PT2H', 'DTSTART must be a date or date-time value'],
+            ['DTSTART;VALUE=TEXT:today', 'DTSTART must be a date or date-time value'],
+            ['DTSTART;VALUE=DURATION:P1D', 'DTSTART must be a date or date-time value'],
+            ['SUMMARY:no DTSTART', 'DTSTART must be a date or date-time value'],
+            ["DTSTART:20260301T100000Z\r\nDTEND;VALUE=TEXT:later", 'DTEND must be a date or date-time value'],
+        ];
     }
 }

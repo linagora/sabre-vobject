@@ -1,0 +1,31 @@
+# Tells linagora/esn-sabre that a branch it pins in composer.json moved, so
+# that its bump-sabre-vobject workflow opens the upgrade pull request right
+# away instead of at its next hourly poll. That workflow is idempotent: it
+# opens nothing when the pinned branch did not move.
+name: Notify downstream repositories
+
+on:
+  push:
+    branches:
+      - 'linagora-waiting-merges-*'
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify esn-sabre
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_DISPATCH_TOKEN }}
+          DOWNSTREAM_REPOSITORIES: linagora/esn-sabre
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::DOWNSTREAM_DISPATCH_TOKEN is not set, downstream repositories are not notified"
+            exit 0
+          fi
+          for repo in $DOWNSTREAM_REPOSITORIES; do
+            gh api "repos/$repo/dispatches" -f event_type=sabre-vobject-updated \
+              -f "client_payload[ref]=$GITHUB_REF_NAME" -f "client_payload[sha]=$GITHUB_SHA" \
+              || echo "::warning::could not notify $repo"
+          done

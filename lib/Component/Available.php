@@ -13,6 +13,10 @@ use Sabre\VObject;
  * @copyright Copyright (C) fruux GmbH (https://fruux.com/)
  * @author Ivan Enderlin
  * @license http://sabre.io/license/ Modified BSD License
+ *
+ * @property VObject\Property\ICalendar\DateTime DTSTART
+ * @property VObject\Property\ICalendar\DateTime DTEND
+ * @property VObject\Property\ICalendar\Duration DURATION
  */
 class Available extends VObject\Component
 {
@@ -26,15 +30,22 @@ class Available extends VObject\Component
      * If either the start or end is 'unbounded' its value will be null
      * instead.
      *
-     * @return array
+     * @throws VObject\InvalidDataException
      */
-    public function getEffectiveStartEnd()
+    public function getEffectiveStartEnd(): array
     {
+        if (!$this->DTSTART instanceof VObject\Property\ICalendar\DateTime) {
+            throw new VObject\InvalidDataException('An AVAILABLE component must have a DTSTART date or date-time');
+        }
         $effectiveStart = $this->DTSTART->getDateTime();
         if (isset($this->DTEND)) {
             $effectiveEnd = $this->DTEND->getDateTime();
-        } else {
+        } elseif (isset($this->DURATION)) {
             $effectiveEnd = $effectiveStart->add(VObject\DateTimeParser::parseDuration($this->DURATION));
+        } else {
+            // Neither DTEND nor DURATION: an instant, as for a VEVENT with a
+            // DATE-TIME DTSTART (RFC 5545 section 3.6.1). No time is free.
+            $effectiveEnd = $effectiveStart;
         }
 
         return [$effectiveStart, $effectiveEnd];
@@ -52,10 +63,8 @@ class Available extends VObject\Component
      *   * + - Must appear at least once.
      *   * * - Can appear any number of times.
      *   * ? - May appear, but not more than once.
-     *
-     * @var array
      */
-    public function getValidationRules()
+    public function getValidationRules(): array
     {
         return [
             'UID' => 1,
@@ -101,12 +110,8 @@ class Available extends VObject\Component
      *   1 - The issue was repaired (only happens if REPAIR was turned on).
      *   2 - A warning.
      *   3 - An error.
-     *
-     * @param int $options
-     *
-     * @return array
      */
-    public function validate($options = 0)
+    public function validate(int $options = 0): array
     {
         $result = parent::validate($options);
 

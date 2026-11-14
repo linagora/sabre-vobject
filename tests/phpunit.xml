@@ -1,23 +1,16 @@
-<phpunit
-  colors="true"
-  bootstrap="bootstrap.php"
-  convertErrorsToExceptions="true"
-  convertNoticesToExceptions="true"
-  convertWarningsToExceptions="true"
-  beStrictAboutTestsThatDoNotTestAnything="true"
-  beStrictAboutOutputDuringTests="true"
-  beStrictAboutTestSize="true"
-  >
-  <testsuite name="Sabre\VObject">
-    <directory>VObject/</directory>
-  </testsuite>
-
-  <filter>
-    <whitelist addUncoveredFilesFromWhitelist="true">
-        <directory suffix=".php">../lib/</directory>
-        <exclude>
-            <file>../lib/Sabre/VObject/includes.php</file>
-        </exclude>
-   </whitelist>
-  </filter>
+<?xml version="1.0"?>
+<phpunit colors="true" bootstrap="bootstrap.php" beStrictAboutTestsThatDoNotTestAnything="true" beStrictAboutOutputDuringTests="true" failOnRisky="true" failOnWarning="true" enforceTimeLimit="true" cacheDirectory=".phpunit.cache">
+  <php>
+    <ini name="error_reporting" value="E_ALL"/>
+  </php>
+  <testsuites>
+    <testsuite name="Sabre\VObject">
+      <directory>.</directory>
+    </testsuite>
+  </testsuites>
+  <source>
+    <include>
+      <directory suffix=".php">../lib/</directory>
+    </include>
+  </source>
 </phpunit>

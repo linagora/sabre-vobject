@@ -2,15 +2,16 @@
 
 namespace Sabre\VObject\Recur\EventIterator;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Recur;
 
 class InfiniteLoopProblemTest extends TestCase
 {
-    public function setUp()
+    private VCalendar $vcal;
+
+    public function setUp(): void
     {
         $this->vcal = new VCalendar();
     }
@@ -19,20 +20,20 @@ class InfiniteLoopProblemTest extends TestCase
      * This bug came from a Fruux customer. This would result in a never-ending
      * request.
      */
-    public function testFastForwardTooFar()
+    public function testFastForwardTooFar(): void
     {
         $ev = $this->vcal->createComponent('VEVENT');
         $ev->UID = 'foobar';
         $ev->DTSTART = '20090420T180000Z';
         $ev->RRULE = 'FREQ=WEEKLY;BYDAY=MO;UNTIL=20090704T205959Z;INTERVAL=1';
 
-        $this->assertFalse($ev->isInTimeRange(new DateTimeImmutable('2012-01-01 12:00:00'), new DateTimeImmutable('3000-01-01 00:00:00')));
+        self::assertFalse($ev->isInTimeRange(new \DateTimeImmutable('2012-01-01 12:00:00'), new \DateTimeImmutable('3000-01-01 00:00:00')));
     }
 
     /**
      * Different bug, also likely an infinite loop.
      */
-    public function testYearlyByMonthLoop()
+    public function testYearlyByMonthLoop(): void
     {
         $ev = $this->vcal->createComponent('VEVENT');
         $ev->UID = 'uuid';
@@ -51,20 +52,20 @@ class InfiniteLoopProblemTest extends TestCase
         $this->vcal->add($ev);
 
         $it = new Recur\EventIterator($this->vcal, 'uuid');
-        $it->fastForward(new DateTimeImmutable('2012-01-29 23:00:00', new DateTimeZone('UTC')));
+        $it->fastForward(new \DateTimeImmutable('2012-01-29 23:00:00', new \DateTimeZone('UTC')));
 
         $collect = [];
 
         while ($it->valid()) {
             $collect[] = $it->getDtStart();
-            if ($it->getDtStart() > new DateTimeImmutable('2013-02-05 22:59:59', new DateTimeZone('UTC'))) {
+            if ($it->getDtStart() > new \DateTimeImmutable('2013-02-05 22:59:59', new \DateTimeZone('UTC'))) {
                 break;
             }
             $it->next();
         }
 
-        $this->assertEquals(
-            [new DateTimeImmutable('2012-02-01 15:45:00', new DateTimeZone('Europe/Berlin'))],
+        self::assertEquals(
+            [new \DateTimeImmutable('2012-02-01 15:45:00', new \DateTimeZone('Europe/Berlin'))],
             $collect
         );
     }
@@ -73,11 +74,10 @@ class InfiniteLoopProblemTest extends TestCase
      * Something, somewhere produced an ics with an interval set to 0. Because
      * this means we increase the current day (or week, month) by 0, this also
      * results in an infinite loop.
-     *
-     * @expectedException \Sabre\VObject\InvalidDataException
      */
-    public function testZeroInterval()
+    public function testZeroInterval(): void
     {
+        $this->expectException(InvalidDataException::class);
         $ev = $this->vcal->createComponent('VEVENT');
         $ev->UID = 'uuid';
         $ev->DTSTART = '20120824T145700Z';
@@ -85,8 +85,8 @@ class InfiniteLoopProblemTest extends TestCase
         $this->vcal->add($ev);
 
         $it = new Recur\EventIterator($this->vcal, 'uuid');
-        $it->fastForward(new DateTimeImmutable('2013-01-01 23:00:00', new DateTimeZone('UTC')));
+        $it->fastForward(new \DateTimeImmutable('2013-01-01 23:00:00', new \DateTimeZone('UTC')));
 
-        // if we got this far.. it means we are no longer infinitely looping
+        // if we got this far it means we are no longer infinitely looping
     }
 }

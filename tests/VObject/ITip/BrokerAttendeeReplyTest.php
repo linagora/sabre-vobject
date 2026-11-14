@@ -2,9 +2,11 @@
 
 namespace Sabre\VObject\ITip;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 class BrokerAttendeeReplyTest extends BrokerTester
 {
-    public function testAccepted()
+    public function testAccepted(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -61,14 +63,132 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
 
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testRecurringReply()
+    public function testAcceptedWithTz(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:(UTC+01:00) Brussels\, Copenhagen\, Madrid\, Paris
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:foobar
+SUMMARY:B-day party
+SEQUENCE:1
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=One:mailto:one@example.org
+DTSTART;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T120000Z
+DTEND;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T130000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $newMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:(UTC+01:00) Brussels\, Copenhagen\, Madrid\, Paris
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:foobar
+SUMMARY:B-day party
+SEQUENCE:1
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
+DTSTART;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T120000Z
+DTEND;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T130000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $version = \Sabre\VObject\Version::VERSION;
+
+        $expected = [
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
+BEGIN:VTIMEZONE
+TZID:(UTC+01:00) Brussels\, Copenhagen\, Madrid\, Paris
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:foobar
+DTSTAMP:**ANY**
+SEQUENCE:1
+DTSTART;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T120000Z
+DTEND;TZID="(UTC+01:00) Brussels, Copenhagen, Madrid, Paris":20140716T130000Z
+SUMMARY:B-day party
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+        ];
+
+        $this->parse($oldMessage, $newMessage, $expected);
+    }
+
+    public function testRecurringReply(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -166,6 +286,23 @@ RECURRENCE-ID:20140726T120000Z
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -176,6 +313,23 @@ RECURRENCE-ID:20140724T120000Z
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=DECLINED;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -186,6 +340,23 @@ RECURRENCE-ID:20140728T120000Z
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=TENTATIVE;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -196,6 +367,23 @@ RECURRENCE-ID:20140729T120000Z
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -207,14 +395,14 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=DECLINED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
 
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testRecurringAllDay()
+    public function testRecurringAllDay(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -286,15 +474,15 @@ ICS;
         $version = \Sabre\VObject\Version::VERSION;
 
         $expected = [
-        [
-            'uid' => 'foobar',
-            'method' => 'REPLY',
-            'component' => 'VEVENT',
-            'sender' => 'mailto:one@example.org',
-            'senderName' => 'One',
-            'recipient' => 'mailto:strunk@example.org',
-            'recipientName' => 'Strunk',
-            'message' => <<<ICS
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Sabre//Sabre VObject $version//EN
@@ -309,6 +497,23 @@ RECURRENCE-ID;VALUE=DATE:20140726
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -318,6 +523,23 @@ RECURRENCE-ID;VALUE=DATE:20140724
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=DECLINED;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -327,6 +549,23 @@ RECURRENCE-ID;VALUE=DATE:20140728
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=TENTATIVE;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -336,6 +575,23 @@ RECURRENCE-ID;VALUE=DATE:20140729
 ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
@@ -346,14 +602,14 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=DECLINED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
 
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testNoChange()
+    public function testNoChange(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -385,7 +641,7 @@ ICS;
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testNoChangeForceSend()
+    public function testNoChangeForceSend(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -438,13 +694,13 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=NEEDS-ACTION;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testNoRelevantAttendee()
+    public function testNoRelevantAttendee(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -484,7 +740,7 @@ ICS;
      * This should automatically generate a DECLINED message for that
      * specific instance.
      */
-    public function testCreateReplyByException()
+    public function testCreateReplyByException(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -534,14 +790,13 @@ METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
-SEQUENCE:1
 DTSTART:20140818T200000Z
 RECURRENCE-ID:20140818T200000Z
 ORGANIZER:mailto:organizer@example.org
 ATTENDEE;PARTSTAT=DECLINED:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
         $this->parse($oldMessage, $newMessage, $expected);
@@ -553,7 +808,7 @@ ICS
      *
      * @depends testCreateReplyByException
      */
-    public function testCreateReplyByExceptionTz()
+    public function testCreateReplyByExceptionTz(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -603,14 +858,13 @@ METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
-SEQUENCE:1
 DTSTART;TZID=America/Toronto:20140818T200000
 RECURRENCE-ID;TZID=America/Toronto:20140818T200000
 ORGANIZER:mailto:organizer@example.org
 ATTENDEE;PARTSTAT=DECLINED:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
         $this->parse($oldMessage, $newMessage, $expected);
@@ -619,7 +873,7 @@ ICS
     /**
      * @depends testCreateReplyByException
      */
-    public function testCreateReplyByExceptionAllDay()
+    public function testCreateReplyByExceptionAllDay(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -671,7 +925,6 @@ METHOD:REPLY
 BEGIN:VEVENT
 UID:foobar
 DTSTAMP:**ANY**
-SEQUENCE:1
 DTSTART;VALUE=DATE:20140818
 SUMMARY:Weekly meeting
 RECURRENCE-ID;VALUE=DATE:20140818
@@ -679,13 +932,13 @@ ORGANIZER:mailto:organizer@example.org
 ATTENDEE;PARTSTAT=DECLINED:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testDeclined()
+    public function testDeclined(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -739,14 +992,14 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=DECLINED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
 
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testDeclinedCancelledEvent()
+    public function testDeclinedCancelledEvent(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -776,8 +1029,6 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $version = \Sabre\VObject\Version::VERSION;
-
         $expected = [];
 
         $this->parse($oldMessage, $newMessage, $expected);
@@ -789,10 +1040,10 @@ ICS;
      * Except in this case, there was already an overridden event, and the
      * overridden event was marked as cancelled by the attendee.
      *
-     * For any other attendence status, the new status would have been
+     * For any other attendance status, the new status would have been
      * declined, but for this, no message should we sent.
      */
-    public function testDontCreateReplyWhenEventWasDeclined()
+    public function testDontCreateReplyWhenEventWasDeclined(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -837,7 +1088,7 @@ ICS;
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testScheduleAgentOnOrganizer()
+    public function testScheduleAgentOnOrganizer(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -865,13 +1116,11 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $version = \Sabre\VObject\Version::VERSION;
-
         $expected = [];
         $this->parse($oldMessage, $newMessage, $expected);
     }
 
-    public function testAcceptedAllDay()
+    public function testAcceptedAllDay(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -925,7 +1174,7 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
 
@@ -939,7 +1188,7 @@ ICS
      * This is possible in cases an organizer created a recurring event, and
      * invited an attendee for one instance of the event.
      */
-    public function testReplyNoMasterEvent()
+    public function testReplyNoMasterEvent(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -971,8 +1220,6 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $version = \Sabre\VObject\Version::VERSION;
-
         $expected = [
             [
                 'uid' => 'foobar',
@@ -998,7 +1245,7 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
-ICS
+ICS,
             ],
         ];
 
@@ -1011,7 +1258,7 @@ ICS
      *
      * @depends testAccepted
      */
-    public function testPartyCrasher()
+    public function testPartyCrasher(): void
     {
         $oldMessage = <<<ICS
 BEGIN:VCALENDAR
@@ -1086,10 +1333,331 @@ ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
 END:VEVENT
 END:VCALENDAR
 
-ICS
+ICS,
             ],
         ];
 
         $this->parse($oldMessage, $newMessage, $expected);
+    }
+
+    public function testNewEventWithReply(): void
+    {
+        $oldMessage = null;
+
+        $newMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SUMMARY:Team meeting
+SEQUENCE:1
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
+DTSTART:20140716T120000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $version = \Sabre\VObject\Version::VERSION;
+
+        $expected = [
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => 'One',
+                'recipient' => 'mailto:strunk@example.org',
+                'recipientName' => 'Strunk',
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
+BEGIN:VEVENT
+UID:foobar
+DTSTAMP:**ANY**
+SEQUENCE:1
+DTSTART:20140716T120000Z
+SUMMARY:Team meeting
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;PARTSTAT=ACCEPTED;CN=One:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+        ];
+
+        $this->parse($oldMessage, $newMessage, $expected);
+    }
+
+    /**
+     * Test that adding EXDATE entries when oldEventInfo doesn't have exdate
+     * (e.g., when updating a newly created event) doesn't cause a TypeError.
+     *
+     * This tests the scenario where an attendee receives a new recurring event
+     * invitation with EXDATE entries already present. Since there's no old calendar,
+     * oldEventInfo is initialized with only minimal keys and lacks 'exdate'.
+     */
+    public function testAddExdateWithoutPreviousExdate(): void
+    {
+        // No old message - this is a new event invitation
+        $oldMessage = null;
+
+        // New message: recurring event with EXDATE already present
+        $newMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART:20140811T200000Z
+RRULE:FREQ=WEEKLY
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org
+EXDATE:20140818T200000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $version = \Sabre\VObject\Version::VERSION;
+        $expected = [
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => null,
+                'recipient' => 'mailto:organizer@example.org',
+                'recipientName' => null,
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
+BEGIN:VEVENT
+UID:foobar
+DTSTAMP:**ANY**
+SEQUENCE:1
+DTSTART:20140811T200000Z
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+            [
+                'uid' => 'foobar',
+                'method' => 'REPLY',
+                'component' => 'VEVENT',
+                'sender' => 'mailto:one@example.org',
+                'senderName' => null,
+                'recipient' => 'mailto:organizer@example.org',
+                'recipientName' => null,
+                'message' => <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject $version//EN
+CALSCALE:GREGORIAN
+METHOD:REPLY
+BEGIN:VEVENT
+UID:foobar
+DTSTAMP:**ANY**
+DTSTART:20140818T200000Z
+RECURRENCE-ID:20140818T200000Z
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE;PARTSTAT=DECLINED:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS,
+            ],
+        ];
+        $this->parse($oldMessage, $newMessage, $expected);
+    }
+
+    private static function overrideReply(string $master, string $overrideId, string $overrideStart): array
+    {
+        $override = fn (string $partstat) => "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\n"
+            .$overrideId."\r\n".$overrideStart."\r\n"
+            ."ORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=$partstat:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        $wrap = fn (string $body) => "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n$body\r\nEND:VCALENDAR\r\n";
+        $old = \Sabre\VObject\Reader::read($wrap($master.$override('NEEDS-ACTION')));
+        $new = \Sabre\VObject\Reader::read($wrap($master.$override('ACCEPTED')));
+
+        return [(new Broker())->parseEvent($new, 'mailto:a@example.com', $old), $new];
+    }
+
+    public function testReplyKeepsTheTimeZoneOfTheOverrideRecurrenceId(): void
+    {
+        $master = "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260105T090000Z\r\nDTEND:20260105T100000Z\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        [$messages] = self::overrideReply($master, 'RECURRENCE-ID;TZID=Europe/Paris:20260108T100000', 'DTSTART;TZID=Europe/Paris:20260108T140000');
+
+        self::assertCount(1, $messages);
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-08T09:00:00Z'))->getTimestamp(),
+            $messages[0]->message->VEVENT->{'RECURRENCE-ID'}->getDateTime()->getTimestamp()
+        );
+    }
+
+    public function testReplyKeepsAFloatingOverrideRecurrenceIdFloating(): void
+    {
+        $master = "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Europe/Paris:20260105T100000\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        [$messages, $new] = self::overrideReply($master, 'RECURRENCE-ID:20260108T100000', 'DTSTART:20260108T140000');
+
+        self::assertCount(1, $messages);
+        $reply = $messages[0]->message->VEVENT->{'RECURRENCE-ID'};
+        self::assertSame("RECURRENCE-ID:20260108T100000\r\n", $reply->serialize());
+        self::assertSame($new->VEVENT[1]->{'RECURRENCE-ID'}->getDateTime()->getTimestamp(), $reply->getDateTime()->getTimestamp());
+    }
+
+    private const REMOVED_OVERRIDE = "BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\n"
+        ."RECURRENCE-ID;TZID=Asia/Tokyo:20260107T180000\r\n"
+        ."DTSTART;TZID=Europe/Paris:20260107T100000\r\nDTEND;TZID=Europe/Paris:20260107T110000\r\n"
+        ."ORGANIZER:mailto:strunk@example.org\r\n"
+        ."ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org\r\nEND:VEVENT\r\n";
+
+    private static function seriesOf(string $attendee, string $partstat): string
+    {
+        return "BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;TZID=Europe/Paris:20260105T100000\r\nDTEND;TZID=Europe/Paris:20260105T110000\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:strunk@example.org\r\n"
+            ."ATTENDEE;PARTSTAT=$partstat:mailto:$attendee\r\nEND:VEVENT\r\n";
+    }
+
+    private static function calendarOf(string $events): string
+    {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n{$events}END:VCALENDAR\r\n";
+    }
+
+    public function testRemovedOverrideRepliesWithTheStatusOfTheMaster(): void
+    {
+        $master = self::seriesOf('one@example.org', 'NEEDS-ACTION');
+
+        $messages = (new Broker())->parseEvent(self::calendarOf($master), 'mailto:one@example.org', self::calendarOf($master.self::REMOVED_OVERRIDE));
+
+        self::assertCount(1, $messages);
+        $event = $messages[0]->message->VEVENT;
+        self::assertSame('NEEDS-ACTION', (string) $event->ATTENDEE['PARTSTAT']);
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-07T09:00:00Z'))->getTimestamp(),
+            $event->{'RECURRENCE-ID'}->getDateTime()->getTimestamp()
+        );
+        self::assertSame(
+            (new \DateTimeImmutable('2026-01-07T09:00:00Z'))->getTimestamp(),
+            $event->DTSTART->getDateTime()->getTimestamp()
+        );
+    }
+
+    public function testRemovedOverrideWithTheStatusOfTheMasterSendsNoReply(): void
+    {
+        $master = self::seriesOf('one@example.org', 'ACCEPTED');
+
+        self::assertSame([], (new Broker())->parseEvent(self::calendarOf($master), 'mailto:one@example.org', self::calendarOf($master.self::REMOVED_OVERRIDE)));
+    }
+
+    public function testRemovedOverrideOfAnAttendeeNotOnTheMasterIsDeclined(): void
+    {
+        $old = self::seriesOf('two@example.org', 'ACCEPTED').self::REMOVED_OVERRIDE;
+        $new = self::seriesOf('two@example.org', 'ACCEPTED')
+            ."BEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID;TZID=Europe/Paris:20260108T100000\r\n"
+            ."DTSTART;TZID=Europe/Paris:20260108T100000\r\nDTEND;TZID=Europe/Paris:20260108T110000\r\n"
+            ."ORGANIZER:mailto:strunk@example.org\r\nATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org\r\nEND:VEVENT\r\n";
+
+        $messages = (new Broker())->parseEvent(self::calendarOf($new), 'mailto:one@example.org', self::calendarOf($old));
+
+        $statuses = [];
+        foreach ($messages as $message) {
+            $statuses[(string) $message->message->VEVENT->{'RECURRENCE-ID'}] = (string) $message->message->VEVENT->ATTENDEE['PARTSTAT'];
+        }
+        self::assertSame(['20260107T180000' => 'DECLINED', '20260108T100000' => 'ACCEPTED'], $statuses);
+    }
+
+    private const EMPTY_PARTSTAT_COPY = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:foobar\r\nDTSTAMP:20260102T000000Z\r\n"
+        ."DTSTART:20260105T100000Z\r\nORGANIZER:mailto:strunk@example.org\r\nATTENDEE;PARTSTAT=%s:mailto:one@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+    public function testNewCopyWithEmptyPartstatIsNotAResponse(): void
+    {
+        self::assertSame([], (new Broker())->parseEvent(sprintf(self::EMPTY_PARTSTAT_COPY, ''), 'mailto:one@example.org'));
+    }
+
+    public function testEmptyPartstatInAnUpdateRepliesWithTheDefault(): void
+    {
+        $messages = (new Broker())->parseEvent(
+            sprintf(self::EMPTY_PARTSTAT_COPY, ''),
+            'mailto:one@example.org',
+            sprintf(self::EMPTY_PARTSTAT_COPY, 'ACCEPTED')
+        );
+
+        self::assertCount(1, $messages);
+        self::assertSame('NEEDS-ACTION', (string) $messages[0]->message->VEVENT->ATTENDEE['PARTSTAT']);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function exdatesInAnotherZone(): array
+    {
+        // 04:00 in New York and 09:00 UTC are 10:00 in Paris: the second instance.
+        return [
+            'another TZID' => ['EXDATE;TZID=America/New_York:20260106T040000'],
+            'UTC' => ['EXDATE:20260106T090000Z'],
+            'the zone of the master' => ['EXDATE;TZID=Europe/Paris:20260106T100000'],
+        ];
+    }
+
+    #[DataProvider('exdatesInAnotherZone')]
+    public function testCreateReplyByExceptionInAnotherZone(string $exdate): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART;TZID=Europe/Paris:20260105T100000
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = str_replace("ATTENDEE:mailto:one@example.org\n", "ATTENDEE:mailto:one@example.org\n$exdate\n", $oldMessage);
+
+        $messages = (new Broker())->parseEvent($newMessage, 'mailto:one@example.org', $oldMessage);
+
+        self::assertCount(1, $messages);
+        $vevent = $messages[0]->message->VEVENT;
+        $expected = new \DateTimeImmutable('2026-01-06T10:00:00', new \DateTimeZone('Europe/Paris'));
+        self::assertSame($expected->getTimestamp(), $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp());
+        self::assertSame($expected->getTimestamp(), $vevent->DTSTART->getDateTime()->getTimestamp());
+        self::assertSame('DECLINED', (string) $vevent->ATTENDEE['PARTSTAT']);
+    }
+
+    /**
+     * The same EXDATE written in another zone is not a new deleted instance.
+     */
+    public function testExdateRewrittenInAnotherZoneSendsNothing(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART;TZID=Europe/Paris:20260105T100000
+RRULE:FREQ=DAILY;COUNT=5
+EXDATE;TZID=Europe/Paris:20260106T100000
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = str_replace('EXDATE;TZID=Europe/Paris:20260106T100000', 'EXDATE:20260106T090000Z', $oldMessage);
+
+        self::assertSame([], (new Broker())->parseEvent($newMessage, 'mailto:one@example.org', $oldMessage));
     }
 }

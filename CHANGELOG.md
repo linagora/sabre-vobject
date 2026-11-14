@@ -1,8 +1,206 @@
 ChangeLog
 =========
 
-4.2.0-alpha1 (2018-09-26)
+5.0.0 (2026-07-07)
 ------------------
+* #767 Drop PHP 7.4 8.0 8.1 and support PHP 8.2 and up (@phil-davis)
+* #769 fix: minor code fixes (@phil-davis)
+* #586 PHP types (@tcitworld @phil-davis)
+
+This major release v5 declares function parameter and return types across the
+codebase. Users will need to be careful to call functions/methods with the
+correct types.
+
+Support for PHP below 8.2 has been dropped.
+This release supports PHP 8.2 and up.
+
+4.6.1 (2026-07-07)
+------------------
+* #776 fix: preserve UTC 'Z' indicator in Period JSON serialization (@bastien-roucaries @guimard @phil-davis)
+
+4.6.0 (2026-05-31)
+------------------
+* #718 feat(VCard): add getByTypes method (@JimKnoxx)
+* #756 fix: Update deprecated timezone names (@ralflang)
+
+4.5.9 (2026-05-31)
+------------------
+* #759 fix(itip): handle null old calendar/event (@ChristophWurst)
+
+4.5.8 (2026-01-12)
+------------------
+
+* #721: Fix variable scope (@KristofferFM)
+* #723: Broker shouldn't add EXDATE property with floating timezone (@KristofferFM)
+* #726: Improved check on property name (@KristofferFM)
+* #727: Improve error checks in Mimedir parser (@KristofferFM)
+* #728: Removing attendee from scheduled recurring event should generate an EXDATE property (@KristofferFM)
+* #735: use RDATE in time range check and use all instances (@SebastianKrupinski)
+* #743: send participation reply on fresh event (@SebastianKrupinski)
+
+4.5.7 (2025-04-17)
+------------------
+
+* #618: Add new exchangetimezone 'Amsterdam, Berlin, Bern, Rom, Stockholm, Wien' (@chr-is)
+* #674: Allow unknown value data types for VALUE (@heiglandreas)
+* #707: add phpdoc return types for arrayaccess methods (@smhg)
+
+4.5.6 (2024-10-14)
+------------------
+
+* #662: add PHP 8.4 to CI (@phil-davis)
+* #669: fix: check if event status was changed to cancelled and generate appropriate message (@SebastianKrupinski)
+* #673: Fix Implicitly marking parameter $param as nullable is deprecated (@cedric-anne)
+* #675: refactor: Replace dirname(__FILE__) with __DIR__ (@ChristophWurst)
+* #692: Throw InvalidDataException when RRule is invalid (@mathroc)
+
+4.5.5 (2024-07-02)
+------------------
+
+* #632: Add PHP 8.3 to CI (@phil-davis)
+* #649: add lineIndex and lineString properties to a Property Node (@JohnRDOrazio)
+* #652: ITip\Broker: handle timezones in replies to exception events (@gharlan)
+* #654: chore: stop exporting php-cs-fixer config (@phil-davis)
+* #656: Yearly rrule compliance by the iterator (@kroky)
+* #658: throw ParseException when null input is provided (@phil-davis)
+* #653: Handle summer time jumps in event recurrences (@phil-davis)
+
+4.5.4 (2023-11-09)
+------------------
+
+* #619: fixed issue: Undefined index: plusminus (@sash04ek)
+* #622: Create Issue467Test.php for 619 (@sash04ek)
+* #623: docs: fix type definition for oldCalendar (@kesselb)
+
+4.5.3 (2023-01-22)
+------------------
+
+* #607: Apply 'Support sabre/xml v4' and needed code changes to 4.5 branch (@phil-davis)
+
+4.5.2 (2023-01-20)
+------------------
+
+* #603: Support sabre/xml v4 (@gharlan)
+
+4.5.1 (2022-10-09)
+------------------
+
+* #597: Remove utf8_encode to easily support PHP 8.2 (@phil-davis)
+
+4.5.0 (2022-08-17)
+------------------
+
+* #579: Update .gitattributes (@cedric-anne)
+* #561: PHP 8.1 deprecated support for null values in its APIs (@mstilkerich)
+* #571: Fully ignore invalid lines (@heiglandreas)
+* #564: Fix infinite loop caused by yearly with bySetPos (@liurxliu)
+* #567: Endless loop problem in RRuleIterator::nextDaily (@KristofferFM)
+* #466: Add support for MEMBER in a VCard (@sash04ek)
+* #559: Handle Vobjects without closing tag (@sash04ek)
+* #582: Fix bug in by year day (@KAYLukas)
+
+4.4.3 (2022-07-15)
+------------------
+
+* #577: Ignore multiple same parameter-values (@heiglandreas)
+
+4.4.2 (2022-06-24)
+------------------
+
+* #565: lowercase mailto:-addresses in getNormalizedValue() (@pk1234)
+* #568: Add NICKNAME fallback for VCards without FNs (@Evengard)
+* #573: Component/select: Before uppercasing $child->group, make sure it isn't null (@algernon)
+* #575: Fix encoding detection on PHP 8.1 (@come-nc)
+
+4.4.1 (2021-12-07)
+------------------
+
+ #557: Fix Iterator method signatures and avoid passing null as separator for implode (PHP 8.1 support) (@come-nc)
+
+4.4.0 (2021-11-15)
+------------------
+
+ #548: Allow easier extension of the timezone guessing (@heiglandreas)
+
+4.3.8 (2021-11-14)
+------------------
+
+* #538: fix EventIterator returns wrong end endTime (@floerke)
+* #541: Reordering of the attendees is not a significant change (@floerke)
+* #543: Reordering of vevent is not a significant change (@floerke)
+
+4.3.7 (2021-11-04)
+------------------
+
+* #551: version bump that was missed in 4.3.6 (@phil-davis)
+
+4.3.6 (2021-11-04)
+------------------
+
+* #544: Fix deprecated usages and return types on PHP 8.1 (@cedric-anne)
+
+4.3.5 (2021-02-12)
+------------------
+
+* #523: Fix setting properties with group assignment (@mstilkerich)
+* #532: Make use of until parameter in nextMonthly function (@jaircuevajunior)
+
+4.3.4 (2021-02-04)
+------------------
+
+* #529: Reassign modified date in yearly rrule (@laoneo)
+* #525: Add .gitattributes to reduce package size (@fezfez)
+
+4.3.3 (2020-11-09)
+------------------
+
+* #519: Remove US/Pacific-New obsolete timezone (@phil-davis)
+
+4.3.2 (2020-10-03)
+------------------
+
+* #513: Added Support for PHP 8.0 (@phil-davis)
+
+4.3.1 (2020-07-13)
+------------------
+
+* #510: Fix an incomplete phpdoc type annotation (@mstilkerich)
+* #505: Refactor unit test code for phpunit9 (@phil-davis)
+* #500: Standardize CI (@phil-davis)
+* #496: CI tooling changes (@JeroenVanOort)
+
+4.3.0 (2020-01-31)
+------------------
+
+* Added support for PHP 7.4, dropped support for PHP 7.0 (@phil-davis)
+* #487: Added phpstan coverage, updated testsuite for phpunit8 (@phil-davis, @JeroenVanOort)
+* #495: refactored maps to use ::class notation (@JeroenVanOort)
+
+4.2.2 (2020-01-14)
+------------------
+
+* #465: Add TZ in iTip REPLY iTip messages
+* #486: Add PHONE-NUMBER value type (used for TEL in vCard 3.0)
+
+4.2.1 (2019-12-18)
+------------------
+
+* #469, #451: fix compat with php 7.4
+* #443: prevent running in indefinite loop
+* #449: Preventing creating a component for a root document
+* #450: Fix parse with option Forgiving with trailing equal
+* #459: fixed typo in VCalendar which resulting in usage of the wrong TimeZone
+* #462: Broker::parseEventForOrganizer copies DTSTAMP from $eventInfo that causes broken scheduling
+
+4.2.0 (2019-02-19)
+------------------
+
+* #432: DTSTAMP must be specified in UTC
+* #435: ORGANIZER e-mail address are case-insensitive
+* #441: Repairing BASE64 encoded vCard version 3
+
+4.2.0-alpha1 (2018-09-26)
+-------------------------
 
 * #412: Broker: add timezone to CANCEL messages
 * #424: Support php7.3
@@ -77,7 +275,7 @@ ChangeLog
 * #306: iTip REPLYs to the first instance of a recurring event was not handled
   correctly.
 * Slightly better error message during validation of `N` and `ADR` properties.
-* #312: Correctly extracing timezone in the iTip broker, even when we don't
+* #312: Correctly extracting timezone in the iTip broker, even when we don't
   have a master event. (@vkomrakov-sugar).
 * When validating a component's property that must appear once and which could
   automatically be repaired, make sure we report the change as 'repaired'.
@@ -399,7 +597,7 @@ ChangeLog
 * #114: VTIMEZONE is retained when generating new REQUEST objects.
 * #114: Support for 'MAILTO:' style email addresses (in uppercase) in the iTip
   broker. This improves evolution support.
-* #115: Using REQUEST-STATUS from REPLY messages and now propegating that into
+* #115: Using REQUEST-STATUS from REPLY messages and now propagating that into
   SCHEDULE-STATUS.
 
 
@@ -470,7 +668,7 @@ ChangeLog
 * Updated: Windows timezone mapping to latest version from unicode.org
 * Changed: The timezone maps are now loaded in from external files, in
   lib/Sabre/VObject/timezonedata.
-* Added: Fixing badly encoded URL's from google contacts vcards.
+* Added: Fixing badly encoded URL's from Google contacts vcards.
 * Fixed: Issue #68. Couldn't decode properties ending in a colon.
 * Fixed: Issue #72. RecurrenceIterator should respect timezone in the UNTIL
   clause.
@@ -544,7 +742,7 @@ ChangeLog
 * Added: Utility to convert between 2.1, 3.0 and 4.0 vCards.
 * Added: You can now add() multiple parameters to a property in one call.
 * Added: Parameter::has() for easily checking if a parameter value exists.
-* Added: VCard::preferred() to find a preferred email, phone number, etc for a
+* Added: VCard::preferred() to find a preferred email, phone number, etc. for a
   contact.
 * Changed: All $duration properties are now public.
 * Added: A few validators for iCalendar documents.
@@ -636,7 +834,7 @@ ChangeLog
 3.0.0-alpha2 (2013-05-22)
 -------------------------
 
-* Fixed: vCard URL properties were referencing a non-existant class.
+* Fixed: vCard URL properties were referencing a non-existent class.
 
 
 3.0.0-alpha1 (2013-05-21)
@@ -741,7 +939,7 @@ ChangeLog
 ------------------
 
 * Fixed: Microsoft re-uses their magic numbers for different timezones,
-  specifically id 2 for both Sarajevo and Lisbon). A workaround was added to
+  (specifically id 2 for both Sarajevo and Lisbon). A workaround was added to
   deal with this.
 
 
@@ -794,7 +992,7 @@ ChangeLog
   properties such as N, ADR, ORG and CATEGORIES.
 * Added: Splitter classes, that can split up large objects (such as exports)
   into individual objects (thanks @DominikTo and @armin-hackmann).
-* Added: VFREEBUSY component, which allows easily checking wether timeslots are
+* Added: VFREEBUSY component, which allows easily checking whether timeslots are
   available.
 * Added: The Reader class now has a 'FORGIVING' option, which allows it to parse
   properties with incorrect characters in the name (at this time, it just allows
@@ -818,3 +1016,70 @@ ChangeLog
 * New: made it easier to construct the FreeBusyGenerator.
 
 [iTip]: http://tools.ietf.org/html/rfc5546
+
+## [Unreleased]
+
+### Upgrade instructions
+* `ITip\Broker::processMessage()` now throws `ITipException` for a REQUEST or CANCEL not sent by the organizer of the stored event, and for a REPLY from someone who is not an attendee. Callers (for instance sabre/dav schedulers) must handle it.
+* Malformed input is now reported with the documented exceptions (`InvalidDataException`, `ParseException`) instead of PHP errors. A CalDAV or CardDAV server should answer a 4xx for them, not a 500.
+* Stricter validation: `validate()` now reports invalid RRULEs, DURATION and TRIGGER values, `VALUE` types that do not fit a property, nonexistent dates (`20260231`), hour 24, control characters, an empty UID and similar values. Objects already stored with such values may be refused when they are read again.
+
+### Added
+* Broker handles an iTIP message that contains only an updated occurrence (#365), and a CANCEL of a single recurrence instance
+* Broker sends iTIP messages for modified instances only, and exposes a flag for a change that is not very significant
+* Alarms are set correctly for attendees; a REPLY now carries the time zone of the answered occurrence
+* FREQ=MINUTELY and FREQ=SECONDLY recurrences now advance by INTERVAL (#31)
+* `Component::add()` gives a node added to another document that document as its root
+* `ITip\Message::$authorizedFormerOrganizers` lets the caller authorize a REQUEST to take an event over from its stored organizer (RFC 5546 2.1.5); the message itself never can
+
+### Changed
+* A DURATION with an explicit `+` sign is read by `DateTimeParser::parse()`
+* A date with an omitted year is written `--MMDD` when converting to vCard 4.0
+* A PHOTO, LOGO or SOUND keeps its media type through vCard 3 conversion; a base64 `data:` URI with parameters stays a URI
+* A native ANNIVERSARY or KIND wins over the Apple/X- extensions whatever the order; extensions of another type become a date or a text
+* An EXDATE made for a removed attendee keeps its type (VALUE=DATE) and its instant
+* Reordering RRULE lists, or writing numbers with leading zeros (`COUNT=05`, `BYMONTHDAY=5,05`), is no longer a significant change
+* A CANCEL never carries a lower SEQUENCE than the stored one, and an absent SEQUENCE is read as 0
+* `FloatValue` is written with the fewest plain digits, with no exponent; an infinite value is written `1e999`
+
+### Fixed
+* YEARLY RRULE with BYMONTH when DTSTART is in another month starts at the first valid date
+* iTIP: no REPLY for deleted events without organizer; EMAIL alarms without ATTENDEE and a master without ORGANIZER are tolerated
+* iTIP: malformed incoming messages no longer raise PHP errors; an invalid PARTSTAT or REQUEST-STATUS from a REPLY is not stored (#128)
+* iTIP: an attendee deleting an event declines the instances they have (#126), and a removed override falls back to the status of the master
+* iTIP: a REPLY copies the RECURRENCE-ID of the answered override; a CANCEL of one occurrence keeps every EXDATE line
+* iTIP: a CANCEL of an override without master marks it STATUS:CANCELLED instead of leaving no VEVENT (#121); a REPLY to a series with no instances no longer fails (#190)
+* iTIP: an EXDATE in another time zone declines the right instance; an empty PARTSTAT reads as NEEDS-ACTION; `DTSTART` of a wrong type is rejected
+* Recurrence: no extra monthly occurrence at an UNTIL on a skipped day; instances at a repeated local time use their first occurrence (RFC 5545 3.3.5)
+* Recurrence: instance ends keep their exact duration across DST changes; an end before the start is taken as the start; overrides use their own DURATION and drop their recurrence properties
+* Recurrence: RDATE instances are yielded in chronological order, resolved in their own time zone, accept PERIOD values, and are all-day for an all-day event (#144)
+* Recurrence: an override-only object yields every override, and a master without RRULE is expanded with its overrides
+* Recurrence: `expand()` keeps the instances of every master sharing a UID, returns no end before the start (#135), and selects non-recurring events in the reference time zone
+* Recurrence: BYDAY, BYWEEKNO (negative values, WKST), BYYEARDAY, BYSETPOS and BYMONTH rules in YEARLY, MONTHLY, WEEKLY and DAILY frequencies give the dates the RFC prescribes (#62, #129, #130)
+* Recurrence: invalid RRULEs (no FREQ, lists in single-valued parts, huge INTERVAL, UNTIL as a duration, non-numeric BY* values) throw `InvalidDataException` or end instead of hanging or raising PHP errors
+* Recurrence: COUNT with UNTIL stops at the first of them; no instance after year 9999, and an instance ending past 9999 is clamped (so `expand()` does not fail)
+* Dates and time zones: nonexistent dates, hour 24, empty or overflowing values and a DATE-TIME holding a duration throw `InvalidDataException`; a TZID on a DATE value no longer changes the reference zone
+* Time zones: `GMT+hhmm` and `+hh:mm` TZIDs resolve correctly; an unknown TZID follows the rules of its VTIMEZONE; offsets with seconds are supported; a non-numeric X-MICROSOFT-CDO-TZID is not read as a CDO id (#155)
+* A cloned document is the root of its own nodes
+* Free-busy: overrides, RDATE-only events and recurring AVAILABLE are counted; STATUS and TRANSP are read per instance (#125); malformed VFREEBUSY, empty or inverted intervals and AVAILABLE without DTSTART, DTEND or DURATION are ignored (#77)
+* VALARM: `isInTimeRange()` is bounded by the range, not by REPEAT; an alarm with no anchor throws `InvalidDataException`; `validate()` refuses a relative TRIGGER with nothing to relate to
+* VEVENT, VTODO and VJOURNAL `isInTimeRange()` ignore DTSTART, DUE or DTEND values that are not dates
+* Parser: quoted-printable is decoded once, a bare CR is dropped from TEXT and parameter values, a line `0` is no longer lost, and a vCard is read the same way wherever VERSION is (#140, #147, #154, #156)
+* Parser: properties named BEGIN or END, nested VCALENDAR/VCARD and a multi-valued VALUE parameter are rejected; nameless parameters are resolved before the property is created
+* Text: N and ADR components are read back as lists; the groups `0` and empty are kept; `"\,"` is unescaped in URL values (#69); an empty name is rejected
+* jCal/jCard: malformed shapes, invalid names, line breaks, empty lists, a lone null, booleans for non-BOOLEAN values, non-finite numbers and values a property cannot hold are refused with a `ParseException` (#34, #91, #136, #151, #192)
+* jCal/jCard: a BOOLEAN given as a string keeps its meaning (#185); an UNKNOWN value round-trips; a parameter named GROUP, an empty group and sub-components of a vCard no longer break the export (#137)
+* jCal: a UTC `Z` is decided per value, an unresolved TZID is exported without `Z`, an RRULE UNTIL that is a DATE stays a DATE, and VALUE is not added for the default type
+* Validation: repaired property names are checked before the property is validated (#139); duplicated required properties are not repaired by a copy; an empty UID, invalid DUE, DURATION, TRIGGER, RRULE, UTC-OFFSET, PERIOD, FLOAT, TIMESTAMP and non-UTF-8 parameter values, and every control character are reported (#153)
+* Validation: an RRULE removed for lacking FREQ no longer makes a PUT fail for its other problems (#193)
+* vCard conversion: a missing VERSION is repaired first, duplicated VERSION lines are checked (#145), `getValue()` of a single list is a string (#146), and a BINARY value that is not base64 is no longer erased
+* vCard 3.0 / 4.0 conversion: malformed `data:` URIs, unknown VALUE on PHOTO/LOGO/SOUND, ITEMn groups, `1604` omit-year dates, `\n` in X-ADDRESSBOOKSERVER-MEMBER and repeated anniversary or kind extensions are handled without loss (#148, #157, #186, #187, #195, #196, #197)
+* vCard dates and times: extended-format `HH:MM`, TIMESTAMP, and values with a missing field are read and written correctly (#131, #132, #194)
+* A vCard 2.1 with N or ADR lists serializes without "Array to string" (#141)
+
+### Security
+* A REQUEST or CANCEL is refused unless its sender organizes the stored event; it is also refused onto a stored object that is not only events
+* A REPLY from someone who is not an attendee no longer adds them to the event
+* jCal/jCard names and values can no longer inject properties or break the stored object with CR/LF or other separators
+* Parsing and serializing no longer exhaust memory or CPU on crafted input: parameter tokens are read one at a time, parameter value lists serialize in linear time, and RRULE scans stop after a 400-year cycle
+* A VALARM with a huge REPEAT and an RRULE with a huge INTERVAL or a SECONDLY AVAILABLE no longer stall time-range and free-busy requests

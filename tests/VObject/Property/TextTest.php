@@ -4,10 +4,11 @@ namespace Sabre\VObject\Property;
 
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Component\VCard;
+use Sabre\VObject\Reader;
 
 class TextTest extends TestCase
 {
-    public function assertVCard21Serialization($propValue, $expected)
+    public function assertVCard21Serialization($propValue, string $expected): void
     {
         $doc = new VCard([
             'VERSION' => '2.1',
@@ -21,67 +22,109 @@ class TextTest extends TestCase
 
         $output = $doc->serialize();
 
-        $this->assertEquals("BEGIN:VCARD\r\nVERSION:2.1\r\n$expected\r\nEND:VCARD\r\n", $output);
+        self::assertEquals("BEGIN:VCARD\r\nVERSION:2.1\r\n$expected\r\nEND:VCARD\r\n", $output);
     }
 
-    public function testSerializeVCard21()
+    public function testSerializeVCard21(): void
     {
-        $this->assertVCard21Serialization(
+        self::assertVCard21Serialization(
             'f;oo',
             'PROP;P1=V1:f;oo'
         );
     }
 
-    public function testSerializeVCard21Array()
+    public function testSerializeVCard21Array(): void
     {
-        $this->assertVCard21Serialization(
+        self::assertVCard21Serialization(
             ['f;oo', 'bar'],
             'PROP;P1=V1:f\;oo;bar'
         );
     }
 
-    public function testSerializeVCard21Fold()
+    public function testSerializeVCard21Fold(): void
     {
-        $this->assertVCard21Serialization(
+        self::assertVCard21Serialization(
             str_repeat('x', 80),
             'PROP;P1=V1:'.str_repeat('x', 64)."\r\n ".str_repeat('x', 16)
         );
     }
 
-    public function testSerializeQuotedPrintable()
+    public function testSerializeQuotedPrintable(): void
     {
-        $this->assertVCard21Serialization(
+        self::assertVCard21Serialization(
             "foo\r\nbar",
             'PROP;P1=V1;ENCODING=QUOTED-PRINTABLE:foo=0D=0Abar'
         );
     }
 
-    public function testSerializeQuotedPrintableFold()
+    public function testSerializeQuotedPrintableFold(): void
     {
-        $this->assertVCard21Serialization(
+        self::assertVCard21Serialization(
             "foo\r\nbarxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "PROP;P1=V1;ENCODING=QUOTED-PRINTABLE:foo=0D=0Abarxxxxxxxxxxxxxxxxxxxxxxxxxx=\r\n xxx"
         );
     }
 
-    public function testValidateMinimumPropValue()
+    public function testValidateMinimumPropValue(): void
     {
-        $vcard = <<<IN
-BEGIN:VCARD
-VERSION:4.0
-UID:foo
-FN:Hi!
-N:A
-END:VCARD
-IN;
+        $vcard = <<<IN_WRAP
+        BEGIN:VCARD
+        VERSION:4.0
+        UID:foo
+        FN:Hi!
+        N:A
+        END:VCARD
+        IN_WRAP;
 
-        $vcard = \Sabre\VObject\Reader::read($vcard);
-        $this->assertEquals(1, count($vcard->validate()));
+        $vcard = Reader::read($vcard);
+        self::assertCount(1, $vcard->validate());
 
-        $this->assertEquals(1, count($vcard->N->getParts()));
+        self::assertCount(1, $vcard->N->getParts());
 
         $vcard->validate(\Sabre\VObject\Node::REPAIR);
 
-        $this->assertEquals(5, count($vcard->N->getParts()));
+        self::assertCount(5, $vcard->N->getParts());
+    }
+
+    public function testRepairOfUriAdrSurvivesSerialization(): void
+    {
+        foreach (['ADR;VALUE=uri:geo:1,2', 'N;VALUE=uri:urn:x'] as $line) {
+            $card = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:a\r\n$line\r\nEND:VCARD\r\n");
+            $repair = array_column($card->validate(\Sabre\VObject\Node::PROFILE_CARDDAV | \Sabre\VObject\Node::REPAIR), 'level');
+            $strict = array_column(Reader::read($card->serialize())->validate(\Sabre\VObject\Node::PROFILE_CARDDAV), 'level');
+            self::assertSame([3], $repair);
+            self::assertSame([3], $strict);
+        }
+    }
+
+    public function testBareCarriageReturnRoundTrips(): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\rb\r\nSUMMARY:x\ry\\nz\r\n"
+            ."DTSTART:20351005T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $again = Reader::read($vcal->serialize());
+
+        self::assertSame('ab', (string) $vcal->VEVENT->UID);
+        self::assertSame((string) $vcal->VEVENT->UID, (string) $again->VEVENT->UID);
+        self::assertSame("xy\nz", (string) $vcal->VEVENT->SUMMARY);
+        self::assertSame((string) $vcal->VEVENT->SUMMARY, (string) $again->VEVENT->SUMMARY);
+    }
+
+    public function testBareCarriageReturnInStructuredValue(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nN:Do\re;Jo\rhn;;;\r\nEND:VCARD\r\n");
+
+        self::assertSame(['Doe', 'John', '', '', ''], $vcard->N->getParts());
+        self::assertSame($vcard->N->getParts(), Reader::read($vcard->serialize())->N->getParts());
+    }
+
+    public function testVCard21ValueListInAComponentIsSerialized(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:2.1\r\nN:Doe;Rene,J.;;;\r\nFN:x\r\nEND:VCARD\r\n");
+        self::assertStringContainsString("N:Doe;Rene,J.;;;\r\n", $card->serialize());
+
+        $card = Reader::readJson('["vcard",[["version",{},"text","2.1"],["fn",{},"text","x"],["n",{},"text",["Doe",["Rene","J."],"","",""]]]]');
+        self::assertStringContainsString("N:Doe;Rene,J.;;;\r\n", $card->serialize());
     }
 }
