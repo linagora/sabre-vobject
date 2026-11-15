@@ -1055,6 +1055,7 @@ This release supports PHP 8.2 and up.
 * Recurrence: RDATE instances are yielded in chronological order, resolved in their own time zone, accept PERIOD values, and are all-day for an all-day event (#144)
 * Recurrence: an override-only object yields every override, and a master without RRULE is expanded with its overrides
 * Recurrence: `expand()` keeps the instances of every master sharing a UID, returns no end before the start (#135), and selects non-recurring events in the reference time zone
+* Recurrence: `EventIterator` by UID only reads the VEVENTs with that UID, so a VFREEBUSY or VTODO sharing the UID of a recurring event no longer makes free-busy queries fail with a `TypeError`; a UID with no event is refused
 * Recurrence: BYDAY, BYWEEKNO (negative values, WKST), BYYEARDAY, BYSETPOS and BYMONTH rules in YEARLY, MONTHLY, WEEKLY and DAILY frequencies give the dates the RFC prescribes (#62, #129, #130)
 * Recurrence: invalid RRULEs (no FREQ, lists in single-valued parts, huge INTERVAL, UNTIL as a duration, non-numeric BY* values) throw `InvalidDataException` or end instead of hanging or raising PHP errors
 * Recurrence: COUNT with UNTIL stops at the first of them; no instance after year 9999, and an instance ending past 9999 is clamped (so `expand()` does not fail)
@@ -1074,6 +1075,8 @@ This release supports PHP 8.2 and up.
 * Validation: an RRULE removed for lacking FREQ no longer makes a PUT fail for its other problems (#193)
 * vCard conversion: a missing VERSION is repaired first, duplicated VERSION lines are checked (#145), `getValue()` of a single list is a string (#146), and a BINARY value that is not base64 is no longer erased
 * vCard 3.0 / 4.0 conversion: malformed `data:` URIs, unknown VALUE on PHOTO/LOGO/SOUND, ITEMn groups, `1604` omit-year dates, `\n` in X-ADDRESSBOOKSERVER-MEMBER and repeated anniversary or kind extensions are handled without loss (#148, #157, #186, #187, #195, #196, #197)
+* vCard 3.0 conversion: a `data:` URI without a media type stays a URI instead of becoming a BINARY that loses its `text/plain` type on the way back (#205)
+* vCard 4.0 conversion: a native ANNIVERSARY of another type (for instance a URI) becomes a date or a text (#206)
 * vCard dates and times: extended-format `HH:MM`, TIMESTAMP, and values with a missing field are read and written correctly (#131, #132, #194)
 * A vCard 2.1 with N or ADR lists serializes without "Array to string" (#141)
 
