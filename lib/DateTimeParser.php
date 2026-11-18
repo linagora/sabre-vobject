@@ -78,6 +78,13 @@ class DateTimeParser
         // timezones that are a mere UTC offset. Whether it includes a
         // transition at its end depends on the time zone database, and the
         // first instant after a transition is ambiguous too.
+        //
+        // A zone changes offset a few times a year at most: the window is
+        // only read from the zone when the cached list of the year has a
+        // transition near it.
+        if (!self::hasTransitionNear($tz, $timestamp)) {
+            return $date;
+        }
         $transitions = $tz->getTransitions($timestamp - 86400, $timestamp + 1);
         if (!is_array($transitions) || count($transitions) < 2) {
             return $date;
@@ -97,6 +104,55 @@ class DateTimeParser
         }
 
         return (new \DateTimeImmutable('@'.$earliest))->setTimezone($tz);
+    }
+
+    /**
+     * Transition timestamps per zone name and UTC year, read with a margin of
+     * two days on each side of the year.
+     *
+     * @var array<string, list<int>>
+     */
+    private static array $transitionCache = [];
+
+    /**
+     * Bound of $transitionCache: a document can name many zones and years.
+     */
+    private const TRANSITION_CACHE_LIMIT = 100;
+
+    /**
+     * Tells if $tz may have a transition in the window of
+     * firstOccurrenceOfLocalTime(), [$timestamp - 86400, $timestamp + 1],
+     * widened by a second on each side. A false positive only costs the
+     * exact check.
+     */
+    private static function hasTransitionNear(\DateTimeZone $tz, int $timestamp): bool
+    {
+        $year = (int) gmdate('Y', $timestamp);
+        $key = $tz->getName().'|'.$year;
+
+        if (!isset(self::$transitionCache[$key])) {
+            $transitions = $tz->getTransitions(
+                gmmktime(0, 0, 0, 1, 1, $year) - 2 * 86400,
+                gmmktime(0, 0, 0, 1, 1, $year + 1) + 2 * 86400
+            );
+            if (!is_array($transitions)) {
+                // An offset or an abbreviation: nothing is cached, as such a
+                // zone can share its name with a zone that has transitions.
+                return false;
+            }
+            if (count(self::$transitionCache) >= self::TRANSITION_CACHE_LIMIT) {
+                self::$transitionCache = [];
+            }
+            self::$transitionCache[$key] = array_column($transitions, 'ts');
+        }
+
+        foreach (self::$transitionCache[$key] as $transition) {
+            if ($transition >= $timestamp - 86401 && $transition <= $timestamp + 2) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -212,6 +212,34 @@ class DateTimeParserTest extends TestCase
         self::assertSame('2026-10-25T00:00:00+00:00', $date->setTimezone(new \DateTimeZone('UTC'))->format('c'));
     }
 
+    /**
+     * The transitions are cached per zone and year: a repeated hour at the
+     * start of a year, far in the future, and in a zone south of the equator.
+     */
+    #[DataProvider('repeatedHours')]
+    public function testRepeatedHourIsItsFirstOccurrenceInEveryYear(string $value, string $zone, string $firstOccurrence): void
+    {
+        for ($i = 0; $i < 2; ++$i) {
+            $date = DateTimeParser::parseDateTime($value, new \DateTimeZone($zone));
+            self::assertSame($firstOccurrence, $date->setTimezone(new \DateTimeZone('UTC'))->format('c'));
+        }
+    }
+
+    public static function repeatedHours(): array
+    {
+        return [
+            ['20261025T023000', 'Europe/Paris', '2026-10-25T00:30:00+00:00'],
+            ['20261025T033000', 'Europe/Paris', '2026-10-25T02:30:00+00:00'],
+            ['20261024T023000', 'Europe/Paris', '2026-10-24T00:30:00+00:00'],
+            ['20901029T023000', 'Europe/Paris', '2090-10-29T00:30:00+00:00'],
+            ['20260405T023000', 'Australia/Sydney', '2026-04-04T15:30:00+00:00'],
+            ['20261101T013000', 'America/New_York', '2026-11-01T05:30:00+00:00'],
+            // Samoa skipped 2011-12-30: the transition is near the new year.
+            ['20111231T120000', 'Pacific/Apia', '2011-12-30T22:00:00+00:00'],
+            ['20260115T120000', '+01:00', '2026-01-15T11:00:00+00:00'],
+        ];
+    }
+
     public function testParseICalendarDurationFail(): void
     {
         $this->expectException(InvalidDataException::class);
