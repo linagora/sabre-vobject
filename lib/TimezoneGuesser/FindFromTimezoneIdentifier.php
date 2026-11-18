@@ -11,6 +11,20 @@ use DateTimeZone;
  */
 class FindFromTimezoneIdentifier implements TimezoneFinder
 {
+    /**
+     * Identifiers of DateTimeZone::listIdentifiers(), as keys, built once.
+     *
+     * @var array<string, int>|null
+     */
+    private static ?array $identifiers = null;
+
+    /**
+     * Identifiers of timezonedata/php-bc.php, as keys, built once.
+     *
+     * @var array<string, int>|null
+     */
+    private static ?array $bcIdentifiers = null;
+
     public function find(string $tzid, ?bool $failIfUncertain = false): ?\DateTimeZone
     {
         // First we will just see if the tzid is a support timezone identifier.
@@ -36,13 +50,16 @@ class FindFromTimezoneIdentifier implements TimezoneFinder
         // That's why we're checking if we'll be able to successfully instantiate
         // \DateTimeZone() before doing so. Otherwise, we could simply instantiate
         // and catch the exception.
-        $tzIdentifiers = \DateTimeZone::listIdentifiers();
+        //
+        // Both lists are built once and looked up by key: rebuilding them on
+        // every lookup was most of the cost of reading a DATE-TIME with a TZID.
+        self::$identifiers ??= array_flip(\DateTimeZone::listIdentifiers());
 
         try {
             if (
-                in_array($tzid, $tzIdentifiers, true)
-                || preg_match('/^GMT(\+|-)([0-9]{4})\z/', $tzid, $matches)
-                || in_array($tzid, $this->getIdentifiersBC(), true)
+                isset(self::$identifiers[$tzid])
+                || preg_match('/^GMT(\+|-)([0-9]{4})\z/', $tzid)
+                || isset($this->getIdentifiersBC()[$tzid])
             ) {
                 return new \DateTimeZone($tzid);
             }
@@ -53,7 +70,7 @@ class FindFromTimezoneIdentifier implements TimezoneFinder
     }
 
     /**
-     * This method returns an array of timezone identifiers, that are supported
+     * This method returns the timezone identifiers, as keys, that are supported
      * by DateTimeZone(), but not returned by DateTimeZone::listIdentifiers().
      *
      * We're not using DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC) because:
@@ -61,8 +78,11 @@ class FindFromTimezoneIdentifier implements TimezoneFinder
      * - It also returns identifiers, that are invalid values for new DateTimeZone() on some PHP versions.
      * (See timezonedata/php-bc.php and timezonedata php-workaround.php)
      */
+    /**
+     * @return array<string, int>
+     */
     private function getIdentifiersBC(): array
     {
-        return include __DIR__.'/../timezonedata/php-bc.php';
+        return self::$bcIdentifiers ??= array_flip(include __DIR__.'/../timezonedata/php-bc.php');
     }
 }

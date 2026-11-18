@@ -31,6 +31,25 @@ class TimeZoneUtil
     /** @var TimezoneFinder[] */
     private array $timezoneFinders = [];
 
+    /**
+     * What the finders returned per TZID, false for nothing: the same TZID is
+     * looked up for every property, every expanded instance and every jCal
+     * value. Keyed by $failIfUncertain, then by TZID. Only the finders are
+     * cached: the guessers and the default-zone fallback depend on the
+     * document and on date_default_timezone_get().
+     *
+     * @var array<int, array<string, \DateTimeZone|false>>
+     */
+    private array $finderCache = [];
+
+    private int $finderCacheSize = 0;
+
+    /**
+     * Bound of $finderCache, so that a document with many distinct TZIDs
+     * cannot grow it without limit.
+     */
+    private const FINDER_CACHE_LIMIT = 100;
+
     private function __construct()
     {
         $this->addGuesser('lic', new GuessFromLicEntry());
@@ -56,6 +75,8 @@ class TimeZoneUtil
     private function addFinder(string $key, TimezoneFinder $finder): void
     {
         $this->timezoneFinders[$key] = $finder;
+        $this->finderCache = [];
+        $this->finderCacheSize = 0;
     }
 
     /**
@@ -74,12 +95,8 @@ class TimeZoneUtil
      */
     private function findTimeZone(string $tzid, ?Component $vcalendar = null, bool $failIfUncertain = false): \DateTimeZone
     {
-        foreach ($this->timezoneFinders as $timezoneFinder) {
-            $timezone = $timezoneFinder->find($tzid, $failIfUncertain);
-            if (!$timezone instanceof \DateTimeZone) {
-                continue;
-            }
-
+        $timezone = $this->findWithFinders($tzid, $failIfUncertain);
+        if ($timezone instanceof \DateTimeZone) {
             return $timezone;
         }
 
@@ -106,6 +123,38 @@ class TimeZoneUtil
 
         // If we got all the way here, we default to whatever has been set as the PHP default timezone.
         return new \DateTimeZone(date_default_timezone_get());
+    }
+
+    /**
+     * Runs the finders, memoized per TZID. Returning the same instance again
+     * is safe: DateTimeZone is immutable.
+     */
+    private function findWithFinders(string $tzid, bool $failIfUncertain): ?\DateTimeZone
+    {
+        $key = (int) $failIfUncertain;
+        if (isset($this->finderCache[$key][$tzid])) {
+            $cached = $this->finderCache[$key][$tzid];
+
+            return false === $cached ? null : $cached;
+        }
+
+        $found = false;
+        foreach ($this->timezoneFinders as $timezoneFinder) {
+            $timezone = $timezoneFinder->find($tzid, $failIfUncertain);
+            if ($timezone instanceof \DateTimeZone) {
+                $found = $timezone;
+                break;
+            }
+        }
+
+        if ($this->finderCacheSize >= self::FINDER_CACHE_LIMIT) {
+            $this->finderCache = [];
+            $this->finderCacheSize = 0;
+        }
+        $this->finderCache[$key][$tzid] = $found;
+        ++$this->finderCacheSize;
+
+        return false === $found ? null : $found;
     }
 
     public static function addTimezoneGuesser(string $key, TimezoneGuesser $guesser): void

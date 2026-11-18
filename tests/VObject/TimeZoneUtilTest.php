@@ -609,4 +609,49 @@ HI;
             $vcal->VEVENT->DTSTART->getDateTime()->getTimestamp()
         );
     }
+
+    public function testRepeatedLookupReturnsTheSameZone(): void
+    {
+        $first = TimeZoneUtil::getTimeZone('Europe/Paris');
+
+        self::assertSame('Europe/Paris', $first->getName());
+        self::assertSame($first, TimeZoneUtil::getTimeZone('Europe/Paris'));
+    }
+
+    /**
+     * The finders are memoized, the VTIMEZONE of each document is not.
+     */
+    public function testUnknownTzidStillUsesTheVTimezoneOfEachDocument(): void
+    {
+        $plusOne = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\n");
+        $plusTwo = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0200\r\nEND:STANDARD\r\n");
+        $at = new \DateTimeImmutable('2026-01-15T12:00:00Z');
+
+        self::assertSame(3600, TimeZoneUtil::getTimeZone('Custom', $plusOne)->getOffset($at));
+        self::assertSame(7200, TimeZoneUtil::getTimeZone('Custom', $plusTwo)->getOffset($at));
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('Custom')->getName());
+    }
+
+    public function testFinderAddedAfterALookupIsUsed(): void
+    {
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('My Zone')->getName());
+
+        TimeZoneUtil::addTimezoneFinder('mine', new class implements TimezoneGuesser\TimezoneFinder {
+            public function find(string $tzid, ?bool $failIfUncertain = false): ?\DateTimeZone
+            {
+                return 'My Zone' === $tzid ? new \DateTimeZone('Asia/Tokyo') : null;
+            }
+        });
+
+        self::assertSame('Asia/Tokyo', TimeZoneUtil::getTimeZone('My Zone')->getName());
+    }
+
+    public function testManyDistinctTzidsStillResolve(): void
+    {
+        for ($i = 0; $i < 250; ++$i) {
+            self::assertSame('UTC', TimeZoneUtil::getTimeZone('Unknown '.$i)->getName());
+        }
+        self::assertSame('Europe/Paris', TimeZoneUtil::getTimeZone('Europe/Paris')->getName());
+        self::assertSame('Europe/Paris', TimeZoneUtil::getTimeZone('Europe/Paris')->getName());
+    }
 }
