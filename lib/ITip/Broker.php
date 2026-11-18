@@ -13,6 +13,7 @@ use Sabre\VObject\Reader;
 use Sabre\VObject\Recur\EventIterator;
 use Sabre\VObject\Recur\MaxInstancesExceededException;
 use Sabre\VObject\Recur\NoInstancesException;
+use Sabre\VObject\Settings;
 
 /**
  * The ITip\Broker class is a utility class that helps with processing
@@ -476,7 +477,8 @@ class Broker
      * The message is a reply. This is for example an attendee telling
      * an organizer he accepted the invite, or declined it.
      *
-     * @throws ITipException                 when the sender is not an attendee and party crashers are refused
+     * @throws ITipException                 when the sender is not an attendee and party crashers are refused,
+     *                                       or when the REPLY is about more than Settings::$maxRecurrences instances
      * @throws InvalidDataException
      * @throws MaxInstancesExceededException
      */
@@ -519,6 +521,12 @@ class Broker
                     $requestStatus = $statusCode;
                 }
             }
+        }
+
+        // An attendee replies to some instances, not to more than a series
+        // may have: each one is looked up in the stored object.
+        if (Settings::$maxRecurrences >= 0 && count($instances) > Settings::$maxRecurrences) {
+            throw new ITipException('The REPLY is about more instances than the '.Settings::$maxRecurrences.' a series may have.');
         }
 
         if (!$this->acceptPartyCrashers) {
@@ -569,32 +577,13 @@ class Broker
         }
         // If we got replies to instances that did not exist in the
         // original list, it means that new exceptions must be created.
+        $newObjects = $this->findReplyInstances($existingObject, $itipMessage->uid, $instances);
         foreach ($instances as $recurIdTimestamp => $instance) {
-            try {
-                $recurrenceIterator = new EventIterator($existingObject, $itipMessage->uid);
-            } catch (NoInstancesException) {
-                // The series has no instance the reply could be about.
+            if (!isset($newObjects[$recurIdTimestamp])) {
+                // Invalid recurrence id. Skipping this object.
                 continue;
             }
-            $found = false;
-            $iterations = 1000;
-            do {
-                $newObject = $recurrenceIterator->getEventObject();
-                $recurrenceIterator->next();
-
-                // Compare the Unix timestamp returned by getTimestamp with the previously calculated timestamp.
-                // If they are the same, then this is a matching recurrence, even though its date-time may have
-                // been expressed in a different format/timezone.
-                if (isset($newObject->{'RECURRENCE-ID'}) && $newObject->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() === $recurIdTimestamp) {
-                    $found = true;
-                }
-                --$iterations;
-            } while ($recurrenceIterator->valid() && !$found && $iterations);
-
-            // Invalid recurrence id. Skipping this object.
-            if (!$found) {
-                continue;
-            }
+            $newObject = $newObjects[$recurIdTimestamp];
 
             unset(
                 $newObject->RRULE,
@@ -624,6 +613,62 @@ class Broker
         }
 
         return $existingObject;
+    }
+
+    /**
+     * Finds, among the first 1000 instances of the series, the ones a REPLY
+     * is about, keyed by their RECURRENCE-ID timestamp.
+     *
+     * The series is expanded once for all of them: expanding it again for
+     * each one let a REPLY with many RECURRENCE-IDs that are not instances
+     * cost 1000 instances each. The stored overrides were updated by the
+     * caller already, so only the instances of the master are looked at.
+     *
+     * @param array<int|string, mixed> $instances the replied instances, keyed by RECURRENCE-ID timestamp
+     *
+     * @return array<int, VEvent>
+     *
+     * @throws InvalidDataException
+     * @throws MaxInstancesExceededException
+     */
+    private function findReplyInstances(VCalendar $existingObject, ?string $uid, array $instances): array
+    {
+        $wanted = array_filter(array_keys($instances), is_int(...));
+        if (!$wanted) {
+            return [];
+        }
+        try {
+            $recurrenceIterator = new EventIterator($existingObject, $uid);
+        } catch (NoInstancesException) {
+            // The series has no instance the reply could be about.
+            return [];
+        }
+
+        // The RECURRENCE-ID of an instance is its start, written as the
+        // master writes its DTSTART: a floating time is read back in the
+        // default time zone, so it can be a day away from the instance.
+        $last = max($wanted) + 2 * 86400;
+        $found = [];
+        for ($iterations = 1000; $recurrenceIterator->valid() && $iterations > 0; --$iterations) {
+            if (null === $recurrenceIterator->getCurrentOverride()) {
+                if ($recurrenceIterator->getDtStart()->getTimestamp() > $last) {
+                    break;
+                }
+                $newObject = $recurrenceIterator->getEventObject();
+                // Compare the Unix timestamps: a matching recurrence may
+                // have been expressed in a different format or time zone.
+                $timestamp = $newObject->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
+                if (isset($instances[$timestamp]) && !isset($found[$timestamp])) {
+                    $found[$timestamp] = $newObject;
+                    if (count($found) === count($wanted)) {
+                        break;
+                    }
+                }
+            }
+            $recurrenceIterator->next();
+        }
+
+        return $found;
     }
 
     /**

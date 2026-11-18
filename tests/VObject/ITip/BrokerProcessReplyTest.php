@@ -6,6 +6,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Node;
 use Sabre\VObject\Reader;
+use Sabre\VObject\Settings;
 
 class BrokerProcessReplyTest extends BrokerTester
 {
@@ -956,5 +957,110 @@ ICS);
         // The replied instance does not exist: it is skipped, nothing changes.
         self::assertInstanceOf(VCalendar::class, $result);
         self::assertSame($before, $result->serialize());
+    }
+
+    private static function dailySeries(): VCalendar
+    {
+        $stored = Reader::read(<<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:u1
+DTSTAMP:20260101T000000Z
+DTSTART;TZID=Europe/Paris:20260105T090000
+DTEND;TZID=Europe/Paris:20260105T100000
+RRULE:FREQ=DAILY
+SUMMARY:Daily
+ORGANIZER:mailto:o@example.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:a@example.com
+END:VEVENT
+END:VCALENDAR
+ICS);
+        self::assertInstanceOf(VCalendar::class, $stored);
+
+        return $stored;
+    }
+
+    /**
+     * @param list<string> $recurrenceIds
+     */
+    private static function replyTo(array $recurrenceIds): Message
+    {
+        $vevents = '';
+        foreach ($recurrenceIds as $recurrenceId) {
+            $vevents .= "BEGIN:VEVENT\r\nUID:u1\r\nDTSTAMP:20260101T000000Z\r\nRECURRENCE-ID:".$recurrenceId
+                ."\r\nORGANIZER:mailto:o@example.com\r\nATTENDEE;PARTSTAT=ACCEPTED:mailto:a@example.com\r\nEND:VEVENT\r\n";
+        }
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->component = 'VEVENT';
+        $message->uid = 'u1';
+        $message->sender = 'mailto:a@example.com';
+        $message->recipient = 'mailto:o@example.com';
+        $message->message = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nMETHOD:REPLY\r\n".$vevents."END:VCALENDAR\r\n");
+
+        return $message;
+    }
+
+    /**
+     * The series is expanded once for all the replied instances, not once
+     * for each: RECURRENCE-IDs that are not instances are skipped.
+     */
+    public function testReplyWithManyRecurrenceIdsThatAreNotInstances(): void
+    {
+        $recurrenceIds = ['20260110T080000Z', '20260107T080000Z'];
+        for ($i = 0; $i < 3000; ++$i) {
+            $recurrenceIds[] = gmdate('Ymd\THis\Z', 1767603600 + 86400 * $i + 60);
+        }
+
+        $start = microtime(true);
+        $result = (new Broker())->processMessage(self::replyTo($recurrenceIds), self::dailySeries());
+        $elapsed = microtime(true) - $start;
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        $recurrenceIdsAdded = [];
+        foreach ($result->select('VEVENT') as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'})) {
+                $recurrenceIdsAdded[] = $vevent->{'RECURRENCE-ID'}->getDateTime()->format('Ymd\THis');
+                self::assertSame('ACCEPTED', (string) $vevent->ATTENDEE['PARTSTAT']);
+                self::assertFalse(isset($vevent->RRULE));
+            }
+        }
+        // In the order of the REPLY.
+        self::assertSame(['20260110T090000', '20260107T090000'], $recurrenceIdsAdded);
+        self::assertLessThan(5, $elapsed);
+    }
+
+    public function testReplyAboutMoreInstancesThanASeriesMayHaveIsRefused(): void
+    {
+        $maxRecurrences = Settings::$maxRecurrences;
+        Settings::$maxRecurrences = 3;
+        try {
+            $this->expectException(ITipException::class);
+            (new Broker())->processMessage(
+                self::replyTo(['20260105T080000Z', '20260106T080000Z', '20260107T080000Z', '20260108T080000Z']),
+                self::dailySeries()
+            );
+        } finally {
+            Settings::$maxRecurrences = $maxRecurrences;
+        }
+    }
+
+    public function testReplyAboutAsManyInstancesAsASeriesMayHaveIsApplied(): void
+    {
+        $maxRecurrences = Settings::$maxRecurrences;
+        Settings::$maxRecurrences = 3;
+        try {
+            $result = (new Broker())->processMessage(
+                self::replyTo(['20260105T080000Z', '20260106T080000Z', '20260107T080000Z']),
+                self::dailySeries()
+            );
+        } finally {
+            Settings::$maxRecurrences = $maxRecurrences;
+        }
+
+        self::assertInstanceOf(VCalendar::class, $result);
+        self::assertCount(4, $result->select('VEVENT'));
     }
 }
