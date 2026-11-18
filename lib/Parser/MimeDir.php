@@ -448,11 +448,13 @@ class MimeDir extends Parser
          * in the result.
          */
         foreach ($this->readTokens($regex, $line) as $match) {
+            // Each group is a [string, offset] pair: see readTokens().
             if (isset($match['paramValue'])) {
-                if ($match['paramValue'] && '"' === $match['paramValue'][0]) {
-                    $value = \substr($match['paramValue'], 1, -1);
+                $paramValue = $match['paramValue'][0];
+                if ($paramValue && '"' === $paramValue[0]) {
+                    $value = \substr($paramValue, 1, -1);
                 } else {
-                    $value = $match['paramValue'];
+                    $value = $paramValue;
                 }
 
                 $value = $this->unescapeParam($value);
@@ -469,15 +471,15 @@ class MimeDir extends Parser
                     throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.' did not follow iCalendar/vCard conventions');
                 }
 
-                if ('=' === $match[0][0] && self::TOKEN_PARAMNAME !== $lastToken) {
-                    throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': Missing parameter name for parameter value "'.$match['paramValue'].'"');
+                if ('=' === $match[0][0][0] && self::TOKEN_PARAMNAME !== $lastToken) {
+                    throw new ParseException('Invalid Mimedir file. Line starting at '.$this->startLine.': Missing parameter name for parameter value "'.$paramValue.'"');
                 }
 
                 if (\is_null($property['parameters'][$lastParam])) {
                     $property['parameters'][$lastParam] = $value;
                 } elseif (is_array($property['parameters'][$lastParam])) {
                     $property['parameters'][$lastParam][] = $value;
-                } elseif ('=' === $match[0][0] && $property['parameters'][$lastParam] === $value) {
+                } elseif ('=' === $match[0][0][0] && $property['parameters'][$lastParam] === $value) {
                     // When a repeated parameter (VALUE=DATE;VALUE=DATE) has
                     // the same value as the current one, then we can leave
                     // the current parameter as it is. The values of one list
@@ -492,18 +494,18 @@ class MimeDir extends Parser
                 continue;
             }
             if (isset($match['paramName'])) {
-                $lastParam = strtoupper($match['paramName']);
+                $lastParam = strtoupper($match['paramName'][0]);
                 $property['parameters'][$lastParam] ??= null;
                 $lastToken = self::TOKEN_PARAMNAME;
                 continue;
             }
             if (isset($match['propValue'])) {
-                $property['value'] = $match['propValue'];
+                $property['value'] = $match['propValue'][0];
                 $lastToken = self::TOKEN_PROPVALUE;
                 continue;
             }
-            if (isset($match['name']) && 0 < strlen($match['name'])) {
-                $property['name'] = strtoupper($match['name']);
+            if (isset($match['name']) && 0 < strlen($match['name'][0])) {
+                $property['name'] = strtoupper($match['name'][0]);
                 $lastToken = self::TOKEN_PROPNAME;
                 continue;
             }
@@ -641,7 +643,12 @@ class MimeDir extends Parser
      * No alternative of the regex matches an empty string, so the offset always
      * moves. An offset keeps the whole line as the subject, for ^ and (?<=:).
      *
-     * @return \Generator<array<int|string, string>>
+     * Each match is yielded as preg_match returns it with PREG_OFFSET_CAPTURE:
+     * every group is a [string, offset] pair, ['', -1] when it did not match,
+     * and the trailing unmatched groups are left out. Copying out the strings
+     * cost a closure call per group of every token.
+     *
+     * @return \Generator<array<int|string, array{string, int}>>
      */
     private function readTokens(string $regex, string $line): \Generator
     {
@@ -649,7 +656,7 @@ class MimeDir extends Parser
         while (1 === preg_match($regex, $line, $match, PREG_OFFSET_CAPTURE, $offset)) {
             $offset = $match[0][1] + strlen($match[0][0]);
 
-            yield array_map(static fn (array $group): string => $group[0], $match);
+            yield $match;
         }
     }
 
