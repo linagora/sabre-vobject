@@ -792,29 +792,20 @@ class MimeDir extends Parser
      *   * ^ is encoded as ^^.
      *   * " is encoded as ^'
      */
-    private function unescapeParam(string $input): ?string
+    private function unescapeParam(string $input): string
     {
-        return
-            preg_replace_callback(
-                '#(\^(\^|n|\'))#',
-                function ($matches) {
-                    switch ($matches[2]) {
-                        case 'n':
-                            return "\n";
-                        case '^':
-                            return '^';
-                        case '\'':
-                            return '"';
+        // Almost no value has an escape or a carriage return.
+        if (false === strpbrk($input, "^\r")) {
+            return $input;
+        }
 
-                            // @codeCoverageIgnoreStart
-                    }
-                    // @codeCoverageIgnoreEnd
-                },
-                // The property class is chosen from these values, before the
-                // Parameter is created: a bare carriage return is dropped here
-                // too, so that the class matches the value that is stored.
-                str_replace("\r", '', $input)
-            );
+        // The property class is chosen from these values, before the
+        // Parameter is created: a bare carriage return is dropped here too,
+        // so that the class matches the value that is stored.
+        //
+        // strtr() goes left to right and does not rescan what it wrote, so
+        // "^^n" gives "^n", and a ^ before any other character stays.
+        return strtr(str_replace("\r", '', $input), ['^^' => '^', '^n' => "\n", "^'" => '"']);
     }
 
     /**

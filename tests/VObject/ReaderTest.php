@@ -293,6 +293,23 @@ class ReaderTest extends TestCase
         self::assertEquals("paramvalue1\nvalue2^nvalue3", $result->parameters['PARAMNAME']->getValue());
     }
 
+    /**
+     * RFC 6868 escapes are read left to right, without reading the output
+     * again, and a ^ before any other character is kept.
+     */
+    public function testReadPropertyParameterCaretEscapes(): void
+    {
+        $data = "BEGIN:VCALENDAR\r\nPROPNAME;A=^^^n;B=^^^^n;C=a^xb^;D=\"^'q^'\";E=plain:propValue\r\nEND:VCALENDAR";
+        $result = Reader::read($data)->PROPNAME;
+
+        self::assertInstanceOf(Property::class, $result);
+        self::assertSame("^\n", $result['A']->getValue());
+        self::assertSame('^^n', $result['B']->getValue());
+        self::assertSame('a^xb^', $result['C']->getValue());
+        self::assertSame('"q"', $result['D']->getValue());
+        self::assertSame('plain', $result['E']->getValue());
+    }
+
     public function testReadPropertyParameterQuotedColon(): void
     {
         $data = "BEGIN:VCALENDAR\r\nPROPNAME;PARAMNAME=\"param:value\":propValue\r\nEND:VCALENDAR";
