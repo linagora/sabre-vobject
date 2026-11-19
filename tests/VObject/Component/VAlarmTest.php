@@ -286,4 +286,29 @@ BLA;
 
         self::assertSame(!$valid, in_array(3, $levels, true));
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function endsBeforeTheStart(): array
+    {
+        return [
+            'VEVENT DTEND' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260110T100000Z\r\nDTEND:20260105T110000Z\r\n%sEND:VEVENT\r\n"],
+            'VEVENT negative DURATION' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260110T100000Z\r\nDURATION:-P5D\r\n%sEND:VEVENT\r\n"],
+            'VTODO DUE' => ["BEGIN:VTODO\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260110T100000Z\r\nDUE:20260105T110000Z\r\n%sEND:VTODO\r\n"],
+        ];
+    }
+
+    #[DataProvider('endsBeforeTheStart')]
+    public function testTriggerRelatedToAnEndBeforeTheStartIsTakenAtTheStart(string $component): void
+    {
+        $alarm = "BEGIN:VALARM\r\nTRIGGER;RELATED=END:-PT30M\r\nACTION:DISPLAY\r\nDESCRIPTION:r\r\nEND:VALARM\r\n";
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n".sprintf($component, $alarm)."END:VCALENDAR\r\n");
+        $alarm = $vcal->getBaseComponent()->VALARM;
+        $utc = new \DateTimeZone('UTC');
+
+        self::assertEquals(new \DateTimeImmutable('2026-01-10T09:30:00Z'), $alarm->getEffectiveTriggerTime());
+        self::assertFalse($alarm->isInTimeRange(new \DateTimeImmutable('2026-01-05', $utc), new \DateTimeImmutable('2026-01-06', $utc)));
+        self::assertTrue($alarm->isInTimeRange(new \DateTimeImmutable('2026-01-10', $utc), new \DateTimeImmutable('2026-01-11', $utc)));
+    }
 }

@@ -58,6 +58,15 @@ class VAlarm extends VObject\Component
                 } else {
                     $effectiveTrigger = self::getAnchor($parentComponent, 'DTSTART');
                 }
+                // An end before the start is invalid (RFC 5545 sections
+                // 3.8.2.2 and 3.8.2.3): the component is taken as lasting
+                // zero seconds, as VEvent::isInTimeRange and EventIterator do.
+                if ($parentComponent->DTSTART instanceof VObject\Property\ICalendar\DateTime) {
+                    $startAnchor = $parentComponent->DTSTART->getDateTime();
+                    if ($effectiveTrigger < $startAnchor) {
+                        $effectiveTrigger = $startAnchor;
+                    }
+                }
             }
             $effectiveTrigger = $effectiveTrigger->add($triggerDuration);
         } elseif ($trigger instanceof VObject\Property\ICalendar\DateTime) {
