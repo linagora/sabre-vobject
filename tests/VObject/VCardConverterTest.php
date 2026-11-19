@@ -1248,4 +1248,48 @@ VCF;
         self::assertFalse(isset($v4->ANNIVERSARY['VALUE']), $serialized);
         self::assertSame('2020-01-01', (string) $v4->ANNIVERSARY);
     }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function anniversariesWithAndWithoutTheYear(): array
+    {
+        return [
+            'two extensions' => ["X-ANNIVERSARY:1604-05-06\r\nX-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-05-06\r\n", '1604-05-06'],
+            'the yearless one first' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-05-06\r\nX-ANNIVERSARY:1604-05-06\r\n", '--0506'],
+            'a native ANNIVERSARY after' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-05-06\r\nANNIVERSARY:1604-05-06\r\n", '1604-05-06'],
+            'a yearless native ANNIVERSARY after' => ["X-ANNIVERSARY:1604-05-06\r\nANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-05-06\r\n", '--0506'],
+        ];
+    }
+
+    #[DataProvider('anniversariesWithAndWithoutTheYear')]
+    public function testAnniversaryExtensionWithOmittedYearIsNotMergedWithTheRealYear(string $lines, string $anniversary): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\n{$lines}END:VCARD\r\n");
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        $v4 = Reader::read($serialized);
+
+        self::assertSame($anniversary, (string) $v4->ANNIVERSARY, $serialized);
+        // the other date stays, as an extension
+        self::assertCount(1, $v4->select('X-ANNIVERSARY'), $serialized);
+        self::assertSame([], $v4->validate(Node::PROFILE_CARDDAV), $serialized);
+    }
+
+    public function testAnniversaryExtensionWithOmittedYearMergedWithTheSameDate(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nX-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-05-06\r\nX-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-05-06\r\nEND:VCARD\r\n");
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        $v4 = Reader::read($serialized);
+
+        self::assertSame('--0506', (string) $v4->ANNIVERSARY, $serialized);
+        self::assertCount(0, $v4->select('X-ANNIVERSARY'), $serialized);
+    }
+
+    public function testAnniversaryTwinMarksTheOmittedYearInVCard3(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nANNIVERSARY:--0203\r\nEND:VCARD\r\n");
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+
+        self::assertSame('1604', (string) $v3->{'ITEM1.X-ABDATE'}['X-APPLE-OMIT-YEAR'], $v3->serialize());
+    }
 }
