@@ -399,6 +399,10 @@ class VCardConverter
     {
         if ($newProperty instanceof Property\VCard\DateAndOrTime || 'TEXT' === $newProperty->getValueType()) {
             $newProperty->name = 'ANNIVERSARY';
+            // An unknown VALUE is kept by convertProperty, but an ANNIVERSARY
+            // is only a date-and-or-time or a text: the VALUE is written
+            // back from the class when it is needed.
+            unset($parameters['VALUE']);
 
             return $newProperty;
         }

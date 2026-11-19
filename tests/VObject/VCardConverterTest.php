@@ -1237,4 +1237,15 @@ VCF;
             'date' => ['ANNIVERSARY:2020-01-01', 'DATE-AND-OR-TIME', '2020-01-01'],
         ];
     }
+
+    public function testNativeAnniversaryWithUnknownValueTypeLosesIt(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nANNIVERSARY;VALUE=foo:2020-01-01\r\nEND:VCARD\r\n");
+        $serialized = $v3->convert(Document::VCARD40)->serialize();
+        $v4 = Reader::read($serialized);
+
+        self::assertInstanceOf(Property\VCard\DateAndOrTime::class, $v4->ANNIVERSARY);
+        self::assertFalse(isset($v4->ANNIVERSARY['VALUE']), $serialized);
+        self::assertSame('2020-01-01', (string) $v4->ANNIVERSARY);
+    }
 }
