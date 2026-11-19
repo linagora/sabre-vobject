@@ -110,6 +110,12 @@ class VCardConverter
                 if ($binaryProperty !== $newProperty) {
                     // The value is no longer of the unknown type, if any.
                     unset($parameters['VALUE']);
+                    if (isset($parameters['TYPE']) && !isset($binaryProperty['TYPE'])) {
+                        // The vCard 4 TYPE (work, home) would be read back as
+                        // the format: the media type, then without one in
+                        // TYPE, goes first.
+                        $binaryProperty['TYPE'] = 'application/octet-stream';
+                    }
                 }
                 $newProperty = $binaryProperty;
             } elseif ($property instanceof Property\VCard\DateAndOrTime) {
