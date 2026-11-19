@@ -2,15 +2,14 @@
 
 namespace Sabre\VObject\Component;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject;
 
 class VCardTest extends TestCase
 {
-    /**
-     * @dataProvider validateData
-     */
-    public function testValidate($input, $expectedWarnings, $expectedRepairedOutput)
+    #[DataProvider('validateData')]
+    public function testValidate(string $input, array $expectedWarnings, string $expectedRepairedOutput): void
     {
         $vcard = VObject\Reader::read($input);
 
@@ -21,17 +20,17 @@ class VCardTest extends TestCase
             $warnMsg[] = $warning['message'];
         }
 
-        $this->assertEquals($expectedWarnings, $warnMsg);
+        self::assertEquals($expectedWarnings, $warnMsg);
 
         $vcard->validate(VObject\Component::REPAIR);
 
-        $this->assertEquals(
+        self::assertEquals(
             $expectedRepairedOutput,
             $vcard->serialize()
         );
     }
 
-    public function validateData()
+    public static function validateData(): array
     {
         $tests = [];
 
@@ -92,6 +91,14 @@ class VCardTest extends TestCase
             ],
             "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nORG:Acme Co.\r\nFN:Acme Co.\r\nEND:VCARD\r\n",
         ];
+        // No FN, NICKNAME fallback
+        $tests[] = [
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nNICKNAME:JohnDoe\r\nEND:VCARD\r\n",
+            [
+                'The FN property must appear in the VCARD component exactly 1 time',
+            ],
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nNICKNAME:JohnDoe\r\nFN:JohnDoe\r\nEND:VCARD\r\n",
+        ];
         // No FN, EMAIL fallback
         $tests[] = [
             "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:foo\r\nEMAIL:1@example.org\r\nEND:VCARD\r\n",
@@ -104,25 +111,50 @@ class VCardTest extends TestCase
         return $tests;
     }
 
-    public function testGetDocumentType()
+    #[DataProvider('cardsWithoutVersion')]
+    public function testRepairMissingVersionLeavesAValidCard(string $lines, string $expectedVersion): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nFN:Jane Doe\r\nUID:a\r\n$lines\r\nEND:VCARD\r\n");
+        $messages = array_column($card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR), 'level');
+        self::assertSame($expectedVersion, (string) $card->VERSION);
+        self::assertNotContains(3, $messages);
+
+        $stored = VObject\Reader::read($card->serialize());
+        $strict = array_column($stored->validate(VObject\Node::PROFILE_CARDDAV), 'level');
+        self::assertNotContains(3, $strict);
+        foreach ($card->children() as $property) {
+            self::assertSame($property::class, $stored->select($property->name)[0]::class);
+        }
+    }
+
+    public static function cardsWithoutVersion(): array
+    {
+        return [
+            ['LOGO;ENCODING=b;TYPE=PNG:iVBORw0KGgo=', '3.0'],
+            ['PHOTO:', '3.0'],
+            ['EMAIL:a@example.com', '4.0'],
+        ];
+    }
+
+    public function testGetDocumentType(): void
     {
         $vcard = new VCard([], false);
         $vcard->VERSION = '2.1';
-        $this->assertEquals(VCard::VCARD21, $vcard->getDocumentType());
+        self::assertEquals(VCard::VCARD21, $vcard->getDocumentType());
 
         $vcard = new VCard([], false);
         $vcard->VERSION = '3.0';
-        $this->assertEquals(VCard::VCARD30, $vcard->getDocumentType());
+        self::assertEquals(VCard::VCARD30, $vcard->getDocumentType());
 
         $vcard = new VCard([], false);
         $vcard->VERSION = '4.0';
-        $this->assertEquals(VCard::VCARD40, $vcard->getDocumentType());
+        self::assertEquals(VCard::VCARD40, $vcard->getDocumentType());
 
         $vcard = new VCard([], false);
-        $this->assertEquals(VCard::UNKNOWN, $vcard->getDocumentType());
+        self::assertEquals(VCard::UNKNOWN, $vcard->getDocumentType());
     }
 
-    public function testGetByType()
+    public function testGetByType(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -133,13 +165,34 @@ END:VCARD
 VCF;
 
         $vcard = VObject\Reader::read($vcard);
-        $this->assertEquals('1@example.org', $vcard->getByType('EMAIL', 'home')->getValue());
-        $this->assertEquals('2@example.org', $vcard->getByType('EMAIL', 'work')->getValue());
-        $this->assertNull($vcard->getByType('EMAIL', 'non-existant'));
-        $this->assertNull($vcard->getByType('ADR', 'non-existant'));
+        self::assertEquals('1@example.org', $vcard->getByType('EMAIL', 'home')->getValue());
+        self::assertEquals('2@example.org', $vcard->getByType('EMAIL', 'work')->getValue());
+        self::assertNull($vcard->getByType('EMAIL', 'non-existent'));
+        self::assertNull($vcard->getByType('ADR', 'non-existent'));
     }
 
-    public function testPreferredNoPref()
+    public function testGetByTypes(): void
+    {
+        $vcard = <<<VCF
+BEGIN:VCARD
+VERSION:3.0
+TEL;TYPE=HOME,CELL:112233445566
+TEL;TYPE=WORK,cell:665544332211
+TEL;TYPE=WORK:7778889994455
+TEL;TYPE=EXTERNAL:555555555
+END:VCARD
+VCF;
+
+        $vcard = VObject\Reader::read($vcard);
+        self::assertEquals('112233445566', $vcard->getByTypes('TEL', ['home', 'cell'])->getValue());
+        self::assertEquals('665544332211', $vcard->getByTypes('TEL', ['work', 'cell'])->getValue());
+        self::assertEquals('7778889994455', $vcard->getByTypes('TEL', ['work'])->getValue());
+        self::assertEquals('555555555', $vcard->getByTypes('TEL', ['external'])->getValue());
+        self::assertNull($vcard->getByTypes('TEL', ['non-existent']));
+        self::assertNull($vcard->getByTypes('EMAIL', ['non-existent']));
+    }
+
+    public function testPreferredNoPref(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -150,10 +203,10 @@ END:VCARD
 VCF;
 
         $vcard = VObject\Reader::read($vcard);
-        $this->assertEquals('1@example.org', $vcard->preferred('EMAIL')->getValue());
+        self::assertEquals('1@example.org', $vcard->preferred('EMAIL')->getValue());
     }
 
-    public function testPreferredWithPref()
+    public function testPreferredWithPref(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -164,10 +217,10 @@ END:VCARD
 VCF;
 
         $vcard = VObject\Reader::read($vcard);
-        $this->assertEquals('2@example.org', $vcard->preferred('EMAIL')->getValue());
+        self::assertEquals('2@example.org', $vcard->preferred('EMAIL')->getValue());
     }
 
-    public function testPreferredWith40Pref()
+    public function testPreferredWith40Pref(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -179,10 +232,10 @@ END:VCARD
 VCF;
 
         $vcard = VObject\Reader::read($vcard);
-        $this->assertEquals('3@example.org', $vcard->preferred('EMAIL')->getValue());
+        self::assertEquals('3@example.org', $vcard->preferred('EMAIL')->getValue());
     }
 
-    public function testPreferredNotFound()
+    public function testPreferredNotFound(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -191,10 +244,10 @@ END:VCARD
 VCF;
 
         $vcard = VObject\Reader::read($vcard);
-        $this->assertNull($vcard->preferred('EMAIL'));
+        self::assertNull($vcard->preferred('EMAIL'));
     }
 
-    public function testNoUIDCardDAV()
+    public function testNoUIDCardDAV(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -202,15 +255,15 @@ VERSION:4.0
 FN:John Doe
 END:VCARD
 VCF;
-        $this->assertValidate(
+        self::assertValidate(
             $vcard,
-            VCARD::PROFILE_CARDDAV,
+            VCard::PROFILE_CARDDAV,
             3,
             'vCards on CardDAV servers MUST have a UID property.'
         );
     }
 
-    public function testNoUIDNoCardDAV()
+    public function testNoUIDNoCardDAV(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -218,7 +271,7 @@ VERSION:4.0
 FN:John Doe
 END:VCARD
 VCF;
-        $this->assertValidate(
+        self::assertValidate(
             $vcard,
             0,
             2,
@@ -226,7 +279,7 @@ VCF;
         );
     }
 
-    public function testNoUIDNoCardDAVRepair()
+    public function testNoUIDNoCardDAVRepair(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -234,15 +287,15 @@ VERSION:4.0
 FN:John Doe
 END:VCARD
 VCF;
-        $this->assertValidate(
+        self::assertValidate(
             $vcard,
-            VCARD::REPAIR,
+            VCard::REPAIR,
             1,
             'Adding a UID to a vCard property is recommended.'
         );
     }
 
-    public function testVCard21CardDAV()
+    public function testVCard21CardDAV(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -251,15 +304,15 @@ FN:John Doe
 UID:foo
 END:VCARD
 VCF;
-        $this->assertValidate(
+        self::assertValidate(
             $vcard,
-            VCARD::PROFILE_CARDDAV,
+            VCard::PROFILE_CARDDAV,
             3,
             'CardDAV servers are not allowed to accept vCard 2.1.'
         );
     }
 
-    public function testVCard21NoCardDAV()
+    public function testVCard21NoCardDAV(): void
     {
         $vcard = <<<VCF
 BEGIN:VCARD
@@ -268,22 +321,22 @@ FN:John Doe
 UID:foo
 END:VCARD
 VCF;
-        $this->assertValidate(
+        self::assertValidate(
             $vcard,
             0,
             0
         );
     }
 
-    public function assertValidate($vcf, $options, $expectedLevel, $expectedMessage = null)
+    public function assertValidate($vcf, $options, int $expectedLevel, ?string $expectedMessage = null): void
     {
         $vcal = VObject\Reader::read($vcf);
         $result = $vcal->validate($options);
 
-        $this->assertValidateResult($result, $expectedLevel, $expectedMessage);
+        self::assertValidateResult($result, $expectedLevel, $expectedMessage);
     }
 
-    public function assertValidateResult($input, $expectedLevel, $expectedMessage = null)
+    public function assertValidateResult($input, int $expectedLevel, ?string $expectedMessage = null): void
     {
         $messages = [];
         foreach ($input as $warning) {
@@ -291,12 +344,67 @@ VCF;
         }
 
         if (0 === $expectedLevel) {
-            $this->assertEquals(0, count($input), 'No validation messages were expected. We got: '.implode(', ', $messages));
+            self::assertCount(0, $input, 'No validation messages were expected. We got: '.implode(', ', $messages));
         } else {
-            $this->assertEquals(1, count($input), 'We expected exactly 1 validation message, We got: '.implode(', ', $messages));
+            self::assertCount(1, $input, 'We expected exactly 1 validation message, We got: '.implode(', ', $messages));
 
-            $this->assertEquals($expectedMessage, $input[0]['message']);
-            $this->assertEquals($expectedLevel, $input[0]['level']);
+            self::assertEquals($expectedMessage, $input[0]['message']);
+            self::assertEquals($expectedLevel, $input[0]['level']);
         }
+    }
+
+    #[DataProvider('duplicatedUnacceptableVersions')]
+    public function testDuplicatedVersionIsCheckedLikeASingleOne(string $version): void
+    {
+        $line = "VERSION:$version\r\n";
+        $card = VObject\Reader::read("BEGIN:VCARD\r\n$line{$line}FN:a\r\nUID:a\r\nEND:VCARD\r\n");
+        $messages = $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        self::assertContains(3, array_column($messages, 'level'));
+    }
+
+    public static function duplicatedUnacceptableVersions(): array
+    {
+        return [['2.1'], ['9']];
+    }
+
+    public function testDuplicatedAcceptableVersionIsMerged(): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\nEND:VCARD\r\n");
+        $messages = $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        self::assertNotContains(3, array_column($messages, 'level'));
+        self::assertCount(1, $card->select('VERSION'));
+    }
+
+    public function testRepairFnFromNWithOneValueListComponent(): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nN:a,b\r\nEND:VCARD\r\n");
+        $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+
+        self::assertSame('a,b', (string) $card->FN);
+    }
+
+    #[DataProvider('cardsWithANameRepairedIntoFn')]
+    public function testNameRepairedIntoFnIsCountedAsFn(string $lines, bool $accepted, string $fn): void
+    {
+        $card = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:u\r\n$lines\r\nEND:VCARD\r\n");
+        $options = VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR;
+
+        self::assertSame($accepted, !in_array(3, array_column($card->validate($options), 'level'), true));
+
+        if ($accepted) {
+            self::assertSame($fn, (string) $card->FN);
+            $again = VObject\Reader::read($card->serialize())->validate($options);
+            self::assertNotContains(3, array_column($again, 'level'));
+        }
+    }
+
+    public static function cardsWithANameRepairedIntoFn(): array
+    {
+        return [
+            'next to an FN' => ["FN:Jane\r\nX..FN:Janet", false, ''],
+            'next to an N' => ["N:Doe;Jane;;;\r\nX..FN:Janet", true, 'Janet'],
+            'dot inside the name' => ["N:E;;;;\r\nA.F.N:0", true, '0'],
+            'alone' => ['X..FN:Janet', true, 'Janet'],
+        ];
     }
 }

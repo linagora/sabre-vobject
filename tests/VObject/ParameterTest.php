@@ -6,79 +6,79 @@ use PHPUnit\Framework\TestCase;
 
 class ParameterTest extends TestCase
 {
-    public function testSetup()
+    public function testSetup(): void
     {
         $cal = new Component\VCalendar();
 
         $param = new Parameter($cal, 'name', 'value');
-        $this->assertEquals('NAME', $param->name);
-        $this->assertEquals('value', $param->getValue());
+        self::assertEquals('NAME', $param->name);
+        self::assertEquals('value', $param->getValue());
     }
 
-    public function testSetupNameLess()
+    public function testSetupNameLess(): void
     {
         $card = new Component\VCard();
 
         $param = new Parameter($card, null, 'URL');
-        $this->assertEquals('VALUE', $param->name);
-        $this->assertEquals('URL', $param->getValue());
-        $this->assertTrue($param->noName);
+        self::assertEquals('VALUE', $param->name);
+        self::assertEquals('URL', $param->getValue());
+        self::assertTrue($param->noName);
     }
 
-    public function testModify()
+    public function testModify(): void
     {
         $cal = new Component\VCalendar();
 
         $param = new Parameter($cal, 'name', null);
         $param->addValue(1);
-        $this->assertEquals([1], $param->getParts());
+        self::assertEquals([1], $param->getParts());
 
         $param->setParts([1, 2]);
-        $this->assertEquals([1, 2], $param->getParts());
+        self::assertEquals([1, 2], $param->getParts());
 
         $param->addValue(3);
-        $this->assertEquals([1, 2, 3], $param->getParts());
+        self::assertEquals([1, 2, 3], $param->getParts());
 
         $param->setValue(4);
         $param->addValue(5);
-        $this->assertEquals([4, 5], $param->getParts());
+        self::assertEquals([4, 5], $param->getParts());
     }
 
-    public function testCastToString()
+    public function testCastToString(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', 'value');
-        $this->assertEquals('value', $param->__toString());
-        $this->assertEquals('value', (string) $param);
+        self::assertEquals('value', $param->__toString());
+        self::assertEquals('value', (string) $param);
     }
 
-    public function testCastNullToString()
+    public function testCastNullToString(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', null);
-        $this->assertEquals('', $param->__toString());
-        $this->assertEquals('', (string) $param);
+        self::assertEquals('', $param->__toString());
+        self::assertEquals('', (string) $param);
     }
 
-    public function testSerialize()
+    public function testSerialize(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', 'value');
-        $this->assertEquals('NAME=value', $param->serialize());
+        self::assertEquals('NAME=value', $param->serialize());
     }
 
-    public function testSerializeEmpty()
+    public function testSerializeEmpty(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', null);
-        $this->assertEquals('NAME=', $param->serialize());
+        self::assertEquals('NAME=', $param->serialize());
     }
 
-    public function testSerializeComplex()
+    public function testSerializeComplex(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', ['val1', 'val2;', 'val3^', "val4\n", 'val5"']);
-        $this->assertEquals('NAME=val1,"val2;","val3^^","val4^n","val5^\'"', $param->serialize());
+        self::assertEquals('NAME=val1,"val2;","val3^^","val4^n","val5^\'"', $param->serialize());
     }
 
     /**
@@ -87,14 +87,14 @@ class ParameterTest extends TestCase
      *
      * So we specifically added support for that.
      */
-    public function testSerializePlusSign()
+    public function testSerializePlusSign(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'EMAIL', 'user+something@example.org');
-        $this->assertEquals('EMAIL="user+something@example.org"', $param->serialize());
+        self::assertEquals('EMAIL="user+something@example.org"', $param->serialize());
     }
 
-    public function testIterate()
+    public function testIterate(): void
     {
         $cal = new Component\VCalendar();
 
@@ -105,20 +105,103 @@ class ParameterTest extends TestCase
             $result[] = $value;
         }
 
-        $this->assertEquals([1, 2, 3, 4], $result);
+        self::assertEquals([1, 2, 3, 4], $result);
     }
 
-    public function testSerializeColon()
+    public function testSerializeColon(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', 'va:lue');
-        $this->assertEquals('NAME="va:lue"', $param->serialize());
+        self::assertEquals('NAME="va:lue"', $param->serialize());
     }
 
-    public function testSerializeSemiColon()
+    public function testSerializeSemiColon(): void
     {
         $cal = new Component\VCalendar();
         $param = new Parameter($cal, 'name', 'va;lue');
-        $this->assertEquals('NAME="va;lue"', $param->serialize());
+        self::assertEquals('NAME="va;lue"', $param->serialize());
+    }
+
+    public function testBareCarriageReturnInParameterValueIsNotSerialized(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE;X-A=a\rb:x\r\nEND:VCARD\r\n");
+        self::assertSame('ab', $card->NOTE['X-A']->getValue());
+
+        $card->NOTE['X-B'] = "c\rd";
+        $out = $card->serialize();
+        self::assertSame(substr_count($out, "\r"), substr_count($out, "\r\n"));
+        self::assertStringContainsString('NOTE;X-A=ab;X-B=cd:x', $out);
+    }
+
+    public function testValuelessParameterRoundTrip(): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nEMAIL;FOO:a@example.com\r\nEND:VCARD\r\n");
+        self::assertSame([''], $card->EMAIL['FOO']->getParts());
+        $reread = Reader::read($card->serialize());
+        self::assertSame($card->EMAIL['FOO']->getParts(), $reread->EMAIL['FOO']->getParts());
+        self::assertSame($card->serialize(), $reread->serialize());
+    }
+
+    public function testValidateReportsNonUtf8Value(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nSUMMARY;X-P=\xFF;X-Q=a,b\xE9:a\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $messages = $vcal->validate();
+        self::assertCount(2, $messages);
+        self::assertSame(3, $messages[0]['level']);
+
+        $messages = $vcal->validate(Node::REPAIR);
+        self::assertCount(2, $messages);
+        self::assertSame(1, $messages[0]['level']);
+        self::assertSame("\u{FF}", (string) $vcal->VEVENT->SUMMARY['X-P']);
+        self::assertSame(['a', "b\u{E9}"], $vcal->VEVENT->SUMMARY['X-Q']->getParts());
+        self::assertSame([], $vcal->validate());
+        self::assertIsString(json_encode($vcal->jsonSerialize(), JSON_THROW_ON_ERROR));
+    }
+
+    public function testSerializeManyValuesIsLinear(): void
+    {
+        $cal = new Component\VCalendar();
+        $prop = $cal->add('X-VALUES', 'v');
+        $prop['X-P'] = array_fill(0, 200000, '!:!');
+
+        $start = microtime(true);
+        $out = $prop['X-P']->serialize();
+        $elapsed = microtime(true) - $start;
+
+        self::assertSame('X-P='.implode(',', array_fill(0, 200000, '"!:!"')), $out);
+        // Quadratic before: minutes for this list.
+        self::assertLessThan(2.0, $elapsed);
+    }
+
+    public function testSerializeMixesPlainAndQuotedValues(): void
+    {
+        $cal = new Component\VCalendar();
+        $prop = $cal->add('X-VALUES', 'v');
+        $prop['X-P'] = ['a', 'b:c', "d\ne^f\"g", '+'];
+
+        self::assertSame('X-P=a,"b:c","d^ne^^f^\'g","+"', $prop['X-P']->serialize());
+    }
+
+    public function testCarriageReturnInJsonParameterIsNormalizedLikeInMimeDir(): void
+    {
+        $card = Reader::readJson(json_encode(['vcard', [
+            ['version', new \stdClass(), 'text', '4.0'],
+            ['fn', new \stdClass(), 'text', 'x'],
+            ['note', ['x-a' => "a\rb", 'x-b' => ["\r", 'c']], 'text', 'x'],
+        ]]));
+        $reread = Reader::read($card->serialize());
+
+        self::assertSame(['ab'], $reread->NOTE['X-A']->getParts());
+        self::assertSame(['ab'], $card->NOTE['X-A']->getParts());
+        self::assertSame('ab', $card->NOTE->jsonSerialize()[1]->{'x-a'});
+        self::assertSame(['', 'c'], $card->NOTE['X-B']->getParts());
+        self::assertSame(['', 'c'], $reread->NOTE['X-B']->getParts());
+
+        $card->NOTE['X-A']->addValue("d\re");
+        $card->NOTE['X-B']->setParts(["f\rg"]);
+        self::assertSame(['ab', 'de'], $card->NOTE['X-A']->getParts());
+        self::assertSame(['fg'], $card->NOTE['X-B']->getParts());
     }
 }

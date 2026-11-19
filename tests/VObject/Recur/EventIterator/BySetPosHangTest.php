@@ -1,9 +1,9 @@
 <?php
 
-namespace Sabre\VObject\Recur;
+namespace Sabre\VObject\Recur\EventIterator;
 
-use DateTime;
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Reader;
 
 class BySetPosHangTest extends TestCase
@@ -14,7 +14,7 @@ class BySetPosHangTest extends TestCase
      *
      * See: https://github.com/fruux/sabre-vobject/issues/212
      */
-    public function testExpand()
+    public function testExpand(): void
     {
         $ics = <<<ICS
 BEGIN:VCALENDAR
@@ -31,10 +31,11 @@ END:VCALENDAR
 ICS;
 
         $vcal = Reader::read($ics);
-        $this->assertInstanceOf('Sabre\\VObject\\Component\\VCalendar', $vcal);
+        self::assertInstanceOf(VCalendar::class, $vcal);
 
-        $vcal = $vcal->expand(new DateTime('2015-01-01'), new DateTime('2016-01-01'));
+        $vcal = $vcal->expand(new \DateTime('2015-01-01'), new \DateTime('2016-01-01'));
 
+        $dates = [];
         foreach ($vcal->VEVENT as $event) {
             $dates[] = $event->DTSTART->getValue();
         }
@@ -55,6 +56,6 @@ ICS;
             '20151224T160000Z',
         ];
 
-        $this->assertEquals($expectedDates, $dates);
+        self::assertEquals($expectedDates, $dates);
     }
 }

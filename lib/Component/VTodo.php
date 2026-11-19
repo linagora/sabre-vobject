@@ -2,7 +2,6 @@
 
 namespace Sabre\VObject\Component;
 
-use DateTimeInterface;
 use Sabre\VObject;
 
 /**
@@ -13,6 +12,19 @@ use Sabre\VObject;
  * @copyright Copyright (C) fruux GmbH (https://fruux.com/)
  * @author Evert Pot (http://evertpot.com/)
  * @license http://sabre.io/license/ Modified BSD License
+ *
+ * @property VObject\Property\ICalendar\DateTime DTSTART
+ * @property VObject\Property\ICalendar\DateTime DTEND
+ * @property VObject\Property\ICalendar\DateTime DTSTAMP
+ * @property VObject\Property\ICalendar\Duration DURATION
+ * @property VObject\Property\ICalendar\Recur RRULE
+ * @property VObject\Property\ICalendar\DateTime EXDATE
+ * @property VObject\Property\ICalendar\DateTime RDATE
+ * @property VObject\Property\ICalendar\Recur EXRULE
+ * @property VObject\Property\ICalendar\DateTime {'RECURRENCE-ID'}
+ * @property VObject\Property\ICalendar\DateTime DUE
+ * @property VObject\Property\ICalendar\DateTime COMPLETED
+ * @property VObject\Property\ICalendar\DateTime CREATED
  */
 class VTodo extends VObject\Component
 {
@@ -23,18 +35,17 @@ class VTodo extends VObject\Component
      * The rules used to determine if an event falls within the specified
      * time-range is based on the CalDAV specification.
      *
-     * @param DateTimeInterface $start
-     * @param DateTimeInterface $end
-     *
-     * @return bool
+     * @throws VObject\InvalidDataException
      */
-    public function isInTimeRange(DateTimeInterface $start, DateTimeInterface $end)
+    public function isInTimeRange(\DateTimeInterface $start, \DateTimeInterface $end): bool
     {
-        $dtstart = isset($this->DTSTART) ? $this->DTSTART->getDateTime() : null;
+        // The class of these properties follows their VALUE parameter: one
+        // that is not a date is ignored, like a missing one.
+        $dtstart = $this->DTSTART instanceof VObject\Property\ICalendar\DateTime ? $this->DTSTART->getDateTime() : null;
         $duration = isset($this->DURATION) ? VObject\DateTimeParser::parseDuration($this->DURATION) : null;
-        $due = isset($this->DUE) ? $this->DUE->getDateTime() : null;
-        $completed = isset($this->COMPLETED) ? $this->COMPLETED->getDateTime() : null;
-        $created = isset($this->CREATED) ? $this->CREATED->getDateTime() : null;
+        $due = $this->DUE instanceof VObject\Property\ICalendar\DateTime ? $this->DUE->getDateTime() : null;
+        $completed = $this->COMPLETED instanceof VObject\Property\ICalendar\DateTime ? $this->COMPLETED->getDateTime() : null;
+        $created = $this->CREATED instanceof VObject\Property\ICalendar\DateTime ? $this->CREATED->getDateTime() : null;
 
         if ($dtstart) {
             if ($duration) {
@@ -43,19 +54,19 @@ class VTodo extends VObject\Component
                 return $start <= $effectiveEnd && $end > $dtstart;
             } elseif ($due) {
                 return
-                    ($start < $due || $start <= $dtstart) &&
-                    ($end > $dtstart || $end >= $due);
-            } else {
-                return $start <= $dtstart && $end > $dtstart;
+                    ($start < $due || $start <= $dtstart)
+                    && ($end > $dtstart || $end >= $due);
             }
+
+            return $start <= $dtstart && $end > $dtstart;
         }
         if ($due) {
             return $start < $due && $end >= $due;
         }
         if ($completed && $created) {
             return
-                ($start <= $created || $start <= $completed) &&
-                ($end >= $created || $end >= $completed);
+                ($start <= $created || $start <= $completed)
+                && ($end >= $created || $end >= $completed);
         }
         if ($completed) {
             return $start <= $completed && $end >= $completed;
@@ -79,10 +90,8 @@ class VTodo extends VObject\Component
      *   * + - Must appear at least once.
      *   * * - Can appear any number of times.
      *   * ? - May appear, but not more than once.
-     *
-     * @var array
      */
-    public function getValidationRules()
+    public function getValidationRules(): array
     {
         return [
             'UID' => 1,
@@ -97,7 +106,7 @@ class VTodo extends VObject\Component
             'LAST-MODIFIED' => '?',
             'LOCATION' => '?',
             'ORGANIZER' => '?',
-            'PERCENT' => '?',
+            'PERCENT-COMPLETE' => '?',
             'PRIORITY' => '?',
             'RECURRENCE-ID' => '?',
             'SEQUENCE' => '?',
@@ -140,11 +149,9 @@ class VTodo extends VObject\Component
      *   2 - An inconsequential issue
      *   3 - A severe issue.
      *
-     * @param int $options
-     *
-     * @return array
+     * @throws VObject\InvalidDataException
      */
-    public function validate($options = 0)
+    public function validate(int $options = 0): array
     {
         $result = parent::validate($options);
         if (isset($this->DUE) && isset($this->DTSTART)) {
@@ -157,12 +164,18 @@ class VTodo extends VObject\Component
                     'message' => 'The value type (DATE or DATE-TIME) must be identical for DUE and DTSTART',
                     'node' => $due,
                 ];
-            } elseif ($due->getDateTime() < $dtStart->getDateTime()) {
-                $result[] = [
-                    'level' => 3,
-                    'message' => 'DUE must occur after DTSTART',
-                    'node' => $due,
-                ];
+            } elseif ($due instanceof VObject\Property\ICalendar\DateTime && $dtStart instanceof VObject\Property\ICalendar\DateTime) {
+                try {
+                    if ($due->getDateTime() < $dtStart->getDateTime()) {
+                        $result[] = [
+                            'level' => 3,
+                            'message' => 'DUE must occur after DTSTART',
+                            'node' => $due,
+                        ];
+                    }
+                } catch (VObject\InvalidDataException) {
+                    // The invalid value is reported by the property itself.
+                }
             }
         }
 
@@ -171,10 +184,8 @@ class VTodo extends VObject\Component
 
     /**
      * This method should return a list of default property values.
-     *
-     * @return array
      */
-    protected function getDefaults()
+    protected function getDefaults(): array
     {
         return [
             'UID' => 'sabre-vobject-'.VObject\UUIDUtil::getUUID(),

@@ -2,13 +2,14 @@
 
 namespace Sabre\VObject;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class FreeBusyGeneratorTest extends TestCase
 {
     use PHPUnitAssertions;
 
-    public function testGeneratorBaseObject()
+    public function testGeneratorBaseObject(): void
     {
         $obj = new Component\VCalendar();
         $obj->METHOD = 'PUBLISH';
@@ -19,18 +20,16 @@ class FreeBusyGeneratorTest extends TestCase
 
         $result = $gen->getResult();
 
-        $this->assertEquals('PUBLISH', $result->METHOD->getValue());
+        self::assertEquals('PUBLISH', $result->METHOD->getValue());
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
-    public function testInvalidArg()
+    public function testInvalidArg(): void
     {
-        $gen = new FreeBusyGenerator(
+        $this->expectException(\InvalidArgumentException::class);
+        new FreeBusyGenerator(
             new \DateTime('2012-01-01'),
             new \DateTime('2012-12-31'),
-            new \StdClass()
+            new \stdClass()
         );
     }
 
@@ -44,12 +43,11 @@ class FreeBusyGeneratorTest extends TestCase
      * It only generates the freebusy report for the following time-range:
      * 2011-01-01 11:00:00 until 2011-01-03 11:11:11
      *
-     * @param string      $expected
-     * @param array       $input
-     * @param string|null $timeZone
-     * @param string      $vavailability
+     * @param array|string $input
+     *
+     * @throws ParseException
      */
-    public function assertFreeBusyReport($expected, $input, $timeZone = null, $vavailability = null)
+    public function assertFreeBusyReport(string $expected, $input, ?\DateTimeZone $timeZone = null, ?string $vavailability = null): void
     {
         $gen = new FreeBusyGenerator(
             new \DateTime('20110101T110000Z', new \DateTimeZone('UTC')),
@@ -81,10 +79,10 @@ END:VFREEBUSY
 END:VCALENDAR
 ICS;
 
-        $this->assertVObjectEqualsVObject($expected, $output);
+        self::assertVObjectEqualsVObject($expected, $output);
     }
 
-    public function testSimple()
+    public function testSimple(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -96,13 +94,13 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T120000Z/20110101T130000Z',
             $blob
         );
     }
 
-    public function testSource()
+    public function testSource(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -117,7 +115,7 @@ ICS;
         fwrite($h, $blob);
         rewind($h);
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T120000Z/20110101T130000Z',
             $h
         );
@@ -126,7 +124,7 @@ ICS;
     /**
      * Testing TRANSP:OPAQUE.
      */
-    public function testOpaque()
+    public function testOpaque(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -139,7 +137,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T130000Z/20110101T140000Z',
             $blob
         );
@@ -148,7 +146,7 @@ ICS;
     /**
      * Testing TRANSP:TRANSPARENT.
      */
-    public function testTransparent()
+    public function testTransparent(): void
     {
         // transparent, hidden
         $blob = <<<ICS
@@ -162,7 +160,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             '',
             $blob
         );
@@ -171,7 +169,7 @@ ICS;
     /**
      * Testing STATUS:CANCELLED.
      */
-    public function testCancelled()
+    public function testCancelled(): void
     {
         // transparent, hidden
         $blob = <<<ICS
@@ -185,7 +183,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             '',
             $blob
         );
@@ -194,7 +192,7 @@ ICS;
     /**
      * Testing STATUS:TENTATIVE.
      */
-    public function testTentative()
+    public function testTentative(): void
     {
         // tentative, shows up
         $blob = <<<ICS
@@ -208,18 +206,18 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY;FBTYPE=BUSY-TENTATIVE:20110101T180000Z/20110101T190000Z',
             $blob
         );
     }
 
     /**
-     * Testing an event that falls outside of the report time-range.
+     * Testing an event that falls outside the report time-range.
      */
-    public function testOutsideTimeRange()
+    public function testOutsideTimeRange(): void
     {
-        // outside of time-range, hidden
+        // outside time-range, hidden
         $blob = <<<ICS
 BEGIN:VCALENDAR
 BEGIN:VEVENT
@@ -230,18 +228,18 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             '',
             $blob
         );
     }
 
     /**
-     * Testing an event that falls outside of the report time-range.
+     * Testing an event that falls outside the report time-range.
      */
-    public function testOutsideTimeRange2()
+    public function testOutsideTimeRange2(): void
     {
-        // outside of time-range, hidden
+        // outside time-range, hidden
         $blob = <<<ICS
 BEGIN:VCALENDAR
 BEGIN:VEVENT
@@ -252,7 +250,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             '',
             $blob
         );
@@ -261,7 +259,7 @@ ICS;
     /**
      * Testing an event that uses DURATION.
      */
-    public function testDuration()
+    public function testDuration(): void
     {
         // using duration, shows up
         $blob = <<<ICS
@@ -274,7 +272,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T190000Z/20110101T200000Z',
             $blob
         );
@@ -283,7 +281,7 @@ ICS;
     /**
      * Testing an all-day event.
      */
-    public function testAllDay()
+    public function testAllDay(): void
     {
         // Day-long event, shows up
         $blob = <<<ICS
@@ -295,7 +293,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110102T000000Z/20110103T000000Z',
             $blob
         );
@@ -304,7 +302,7 @@ ICS;
     /**
      * Testing an event that has no end or duration.
      */
-    public function testNoDuration()
+    public function testNoDuration(): void
     {
         // No duration, does not show up
         $blob = <<<ICS
@@ -316,7 +314,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             '',
             $blob
         );
@@ -325,7 +323,7 @@ ICS;
     /**
      * Testing feeding the freebusy generator an object instead of a string.
      */
-    public function testObject()
+    public function testObject(): void
     {
         // encoded as object, shows up
         $blob = <<<ICS
@@ -338,7 +336,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T210000Z/20110101T220000Z',
             Reader::read($blob)
         );
@@ -347,7 +345,7 @@ ICS;
     /**
      * Testing feeding VFREEBUSY objects instead of VEVENT.
      */
-    public function testVFreeBusy()
+    public function testVFreeBusy(): void
     {
         // Freebusy. Some parts show up
         $blob = <<<ICS
@@ -362,14 +360,14 @@ END:VFREEBUSY
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             "FREEBUSY:20110103T010000Z/20110103T020000Z\n".
             'FREEBUSY:20110103T030000Z/20110103T060000Z',
             $blob
         );
     }
 
-    public function testYearlyRecurrence()
+    public function testYearlyRecurrence(): void
     {
         // Yearly recurrence rule, shows up
         $blob = <<<ICS
@@ -383,13 +381,13 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T220000Z/20110101T230000Z',
             $blob
         );
     }
 
-    public function testYearlyRecurrenceDuration()
+    public function testYearlyRecurrenceDuration(): void
     {
         // Yearly recurrence rule + duration, shows up
         $blob = <<<ICS
@@ -403,13 +401,13 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T230000Z/20110102T000000Z',
             $blob
         );
     }
 
-    public function testFloatingTime()
+    public function testFloatingTime(): void
     {
         // Floating time, no timezone
         $blob = <<<ICS
@@ -422,13 +420,13 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T120000Z/20110101T130000Z',
             $blob
         );
     }
 
-    public function testFloatingTimeReferenceTimeZone()
+    public function testFloatingTimeReferenceTimeZone(): void
     {
         // Floating time + reference timezone
         $blob = <<<ICS
@@ -441,16 +439,16 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T170000Z/20110101T180000Z',
             $blob,
             new \DateTimeZone('America/Toronto')
         );
     }
 
-    public function testAllDay2()
+    public function testAllDay2(): void
     {
-        // All-day event, slightly outside of the VFREEBUSY range.
+        // All-day event, slightly outside the VFREEBUSY range.
         $blob = <<<ICS
 BEGIN:VCALENDAR
 BEGIN:VEVENT
@@ -460,13 +458,13 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T110000Z/20110102T000000Z',
             $blob
         );
     }
 
-    public function testAllDayReferenceTimeZone()
+    public function testAllDayReferenceTimeZone(): void
     {
         // All-day event + reference timezone
         $blob = <<<ICS
@@ -478,14 +476,14 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T110000Z/20110102T050000Z',
             $blob,
             new \DateTimeZone('America/Toronto')
         );
     }
 
-    public function testNoValidInstances()
+    public function testNoValidInstances(): void
     {
         // Recurrence rule with no valid instances
         $blob = <<<ICS
@@ -500,7 +498,7 @@ END:VEVENT
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             '',
             $blob
         );
@@ -510,7 +508,7 @@ ICS;
      * This VAVAILABILITY object overlaps with the time-range, but we're just
      * busy the entire time.
      */
-    public function testVAvailabilitySimple()
+    public function testVAvailabilitySimple(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -535,7 +533,7 @@ END:VAVAILABILITY
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             "FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110101T110000Z/20110101T120000Z\n".
             "FREEBUSY:20110101T120000Z/20110101T130000Z\n".
             'FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110101T130000Z/20110103T110000Z',
@@ -549,7 +547,7 @@ ICS;
      * This VAVAILABILITY object does not overlap at all with the freebusy
      * report, so it should be ignored.
      */
-    public function testVAvailabilityIrrelevant()
+    public function testVAvailabilityIrrelevant(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -574,7 +572,7 @@ END:VAVAILABILITY
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T120000Z/20110101T130000Z',
             $blob,
             null,
@@ -586,7 +584,7 @@ ICS;
      * This VAVAILABILITY object has a 9am-5pm AVAILABLE object for office
      * hours.
      */
-    public function testVAvailabilityOfficeHours()
+    public function testVAvailabilityOfficeHours(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -613,7 +611,7 @@ END:VAVAILABILITY
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             "FREEBUSY;FBTYPE=BUSY-TENTATIVE:20110101T110000Z/20110101T120000Z\n".
             "FREEBUSY:20110101T120000Z/20110101T130000Z\n".
             "FREEBUSY;FBTYPE=BUSY-TENTATIVE:20110101T130000Z/20110103T090000Z\n",
@@ -627,7 +625,7 @@ ICS;
      * This test has the same office hours, but has a vacation blocked off for
      * the relevant time, using a higher priority. (lower number).
      */
-    public function testVAvailabilityOfficeHoursVacation()
+    public function testVAvailabilityOfficeHoursVacation(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -661,7 +659,7 @@ END:VAVAILABILITY
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             'FREEBUSY:20110101T110000Z/20110103T110000Z',
             $blob,
             null,
@@ -675,7 +673,7 @@ ICS;
      *
      * The end-result is that the vacation VAVAILABILITY is completely ignored.
      */
-    public function testVAvailabilityOfficeHoursVacation2()
+    public function testVAvailabilityOfficeHoursVacation2(): void
     {
         $blob = <<<ICS
 BEGIN:VCALENDAR
@@ -709,13 +707,469 @@ END:VAVAILABILITY
 END:VCALENDAR
 ICS;
 
-        $this->assertFreeBusyReport(
+        self::assertFreeBusyReport(
             "FREEBUSY;FBTYPE=BUSY-TENTATIVE:20110101T110000Z/20110101T120000Z\n".
             "FREEBUSY:20110101T120000Z/20110101T130000Z\n".
             "FREEBUSY;FBTYPE=BUSY-TENTATIVE:20110101T130000Z/20110103T090000Z\n",
             $blob,
             null,
             $vavail
+        );
+    }
+
+    public function testNoEmptyOrInvertedPeriods(): void
+    {
+        $objects = [];
+        foreach ([
+            "DTSTART:20251231T230000Z\r\nDTEND:20260101T000000Z", // ends at the window start
+            "DTSTART:20260105T100000Z\r\nDTEND:20260105T100000Z", // zero length
+            "DTSTART:20260106T100000Z\r\nDURATION:-PT1H",         // negative duration
+            "DTSTART:20260303T000000Z\r\nDURATION:PT1H",          // starts at the window end
+        ] as $i => $times) {
+            $objects[] = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:$i\r\n"
+                ."DTSTAMP:20260101T000000Z\r\n$times\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        }
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-03-03T00:00:00Z'), $objects
+        );
+        self::assertCount(0, $generator->getResult()->VFREEBUSY->select('FREEBUSY'));
+    }
+
+    public function testInvertedEventDoesNotHideBusyTime(): void
+    {
+        $objects = [];
+        foreach ([
+            "DTSTART:20260105T120000Z\r\nDTEND:20260105T100000Z",
+            "DTSTART:20260105T090000Z\r\nDTEND:20260105T120000Z",
+        ] as $i => $times) {
+            $objects[] = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:$i\r\n"
+                ."DTSTAMP:20260101T000000Z\r\n$times\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        }
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-03-03T00:00:00Z'), $objects
+        );
+        self::assertSame(
+            ['20260105T090000Z/20260105T120000Z'],
+            array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY'))
+        );
+    }
+
+    /**
+     * An AVAILABLE with neither DTEND nor DURATION makes no time free.
+     */
+    public function testVAvailabilityAvailableWithoutEnd(): void
+    {
+        $vavail = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VAVAILABILITY
+DTSTART:20110101T000000Z
+DTEND:20120101T000000Z
+BEGIN:AVAILABLE
+DTSTART:20110102T000000Z
+END:AVAILABLE
+END:VAVAILABILITY
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport(
+            'FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110101T110000Z/20110103T110000Z',
+            [],
+            null,
+            $vavail
+        );
+    }
+
+    /**
+     * An AVAILABLE without DTSTART is ignored: it makes no time free.
+     */
+    public function testVAvailabilityAvailableWithoutDtstart(): void
+    {
+        $vavail = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VAVAILABILITY
+DTSTART:20110101T000000Z
+DTEND:20120101T000000Z
+BEGIN:AVAILABLE
+DTEND:20110102T000000Z
+END:AVAILABLE
+BEGIN:AVAILABLE
+DTSTART:20110102T000000Z
+DTEND:20110102T010000Z
+END:AVAILABLE
+END:VAVAILABILITY
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport(
+            "FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110101T110000Z/20110102T000000Z\n".
+            'FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:20110102T010000Z/20110103T110000Z',
+            [],
+            null,
+            $vavail
+        );
+    }
+
+    public function testRdateOnlyEvent(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:b\r\n"
+            ."DTSTAMP:20260102T000000Z\r\nDTSTART:20260106T080000Z\r\nDURATION:PT30M\r\n"
+            ."RDATE:20260109T080000Z,20260112T080000Z\r\nEND:VEVENT\r\n"
+            ."BEGIN:VEVENT\r\nUID:b\r\nDTSTAMP:20260102T000000Z\r\nRECURRENCE-ID:20260112T080000Z\r\n"
+            ."DTSTART:20260112T100000Z\r\nDTEND:20260112T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-03-03T00:00:00Z'), $vcal
+        );
+        self::assertSame([
+            '20260106T080000Z/20260106T083000Z',
+            '20260109T080000Z/20260109T083000Z',
+            '20260112T100000Z/20260112T110000Z',
+        ], array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY')));
+    }
+
+    public static function malformedVFreeBusyData(): array
+    {
+        return [
+            'no FREEBUSY' => [''],
+            'empty value' => ["FREEBUSY;FBTYPE=BUSY-UNAVAILABLE:\r\n"],
+            'no slash' => ["FREEBUSY:20260310T120000Z\r\n"],
+            'invalid start' => ["FREEBUSY:20260310T10Z/20260310T130000Z\r\n"],
+            'invalid end' => ["FREEBUSY:20260310T120000Z/20201611T100000Z\r\n"],
+            'invalid duration' => ["FREEBUSY:20260310T120000Z/PXT\r\n"],
+        ];
+    }
+
+    #[DataProvider('malformedVFreeBusyData')]
+    public function testMalformedVFreeBusyIsIgnored(string $freebusy): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n"
+            ."BEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260310T100000Z\r\nDURATION:PT1H\r\nEND:VEVENT\r\n"
+            ."BEGIN:VFREEBUSY\r\nUID:fb\r\nDTSTAMP:20260101T000000Z\r\n{$freebusy}"
+            ."FREEBUSY:20260311T100000Z/PT1H\r\nEND:VFREEBUSY\r\nEND:VCALENDAR\r\n");
+        if ('' === $freebusy) {
+            $vcal->VFREEBUSY->remove('FREEBUSY');
+        }
+        set_error_handler(fn (int $no, string $str, string $file, int $line) => throw new \ErrorException($str, 0, $no, $file, $line));
+        try {
+            $generator = new FreeBusyGenerator(
+                new \DateTimeImmutable('2026-03-01T00:00:00Z'), new \DateTimeImmutable('2026-04-01T00:00:00Z'), $vcal
+            );
+            $result = $generator->getResult();
+        } finally {
+            restore_error_handler();
+        }
+        self::assertSame(
+            '' === $freebusy ? ['20260310T100000Z/20260310T110000Z'] : ['20260310T100000Z/20260310T110000Z', '20260311T100000Z/20260311T110000Z'],
+            array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY'))
+        );
+    }
+
+    public function testAvailableRruleIsBounded(): void
+    {
+        $availability = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\n"
+            ."BEGIN:VAVAILABILITY\r\nUID:av\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."BEGIN:AVAILABLE\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART:20200101T090000Z\r\nDTEND:20200101T090001Z\r\nRRULE:FREQ=SECONDLY\r\n"
+            ."END:AVAILABLE\r\nEND:VAVAILABILITY\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-05T00:00:00Z'), new \DateTimeImmutable('2026-01-17T00:00:00Z')
+        );
+        $generator->setVAvailability($availability);
+
+        $start = microtime(true);
+        try {
+            $generator->getResult();
+            self::fail('Expected MaxInstancesExceededException');
+        } catch (Recur\MaxInstancesExceededException) {
+        }
+        self::assertLessThan(2, microtime(true) - $start);
+    }
+
+    public function testOverrideWithoutMaster(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T100000Z
+DTSTART:20110102T100000Z
+DTEND:20110102T110000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport('FREEBUSY:20110102T100000Z/20110102T110000Z', $blob);
+    }
+
+    public function testOverridesWithoutMasterOfSameUid(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T100000Z
+DTSTART:20110102T100000Z
+DTEND:20110102T110000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T140000Z
+DTSTART:20110102T140000Z
+DTEND:20110102T150000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport("FREEBUSY:20110102T100000Z/20110102T110000Z\nFREEBUSY:20110102T140000Z/20110102T150000Z", $blob);
+    }
+
+    public function testOverrideMovesNonRecurringMaster(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110101T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport('FREEBUSY:20110102T120000Z/20110102T130000Z', $blob);
+    }
+
+    public function testCancelledOverrideIsNotBusy(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+RRULE:FREQ=DAILY;COUNT=2
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+STATUS:CANCELLED
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport('FREEBUSY:20110101T120000Z/20110101T130000Z', $blob);
+    }
+
+    public function testTransparentOverrideIsNotBusy(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+RRULE:FREQ=DAILY;COUNT=2
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+TRANSP:TRANSPARENT
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport('FREEBUSY:20110101T120000Z/20110101T130000Z', $blob);
+    }
+
+    public function testOpaqueOverrideOfTransparentSeriesIsBusy(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+RRULE:FREQ=DAILY;COUNT=2
+TRANSP:TRANSPARENT
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport('FREEBUSY:20110102T120000Z/20110102T130000Z', $blob);
+    }
+
+    public function testOverrideOfCancelledSeriesIsBusy(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+RRULE:FREQ=DAILY;COUNT=2
+STATUS:CANCELLED
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport('FREEBUSY:20110102T120000Z/20110102T130000Z', $blob);
+    }
+
+    public function testConfirmedOverrideOfTentativeSeriesIsBusy(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+RRULE:FREQ=DAILY;COUNT=2
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport("FREEBUSY;FBTYPE=BUSY-TENTATIVE:20110101T120000Z/20110101T130000Z\nFREEBUSY:20110102T120000Z/20110102T130000Z", $blob);
+    }
+
+    public function testTentativeOverrideOfConfirmedSeries(): void
+    {
+        $blob = <<<ICS
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:foobar
+DTSTART:20110101T120000Z
+DTEND:20110101T130000Z
+RRULE:FREQ=DAILY;COUNT=2
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20110102T120000Z
+DTSTART:20110102T120000Z
+DTEND:20110102T130000Z
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        self::assertFreeBusyReport("FREEBUSY:20110101T120000Z/20110101T130000Z\nFREEBUSY;FBTYPE=BUSY-TENTATIVE:20110102T120000Z/20110102T130000Z", $blob);
+    }
+
+    #[DataProvider('allDayMastersWithDateTimeRDate')]
+    public function testAllDayMasterWithDateTimeRDateMatchesExpand(string $rdate): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;VALUE=DATE:20260115\r\n$rdate\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $zone = new \DateTimeZone('America/St_Johns');
+        $start = new \DateTimeImmutable('2026-01-01T00:00:00Z');
+        $end = new \DateTimeImmutable('2026-03-03T00:00:00Z');
+
+        $periods = [];
+        $result = (new FreeBusyGenerator($start, $end, $vcal, $zone))->getResult();
+        foreach ($result->VFREEBUSY->select('FREEBUSY') as $freebusy) {
+            $periods[] = (string) $freebusy;
+        }
+
+        self::assertSame([
+            '20260109T033000Z/20260110T033000Z',
+            '20260115T033000Z/20260116T033000Z',
+        ], $periods);
+    }
+
+    public static function allDayMastersWithDateTimeRDate(): array
+    {
+        return [
+            'date-time' => ['RDATE:20260109T080000Z'],
+            'period' => ['RDATE;VALUE=PERIOD:20260109T080000Z/PT1H'],
+            'date' => ['RDATE;VALUE=DATE:20260109'],
+        ];
+    }
+
+    public function testRecurringEventWithUidZero(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//fuzz//EN\r\nBEGIN:VEVENT\r\nUID:0\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART:20260106T080000Z\r\nDURATION:PT30M\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('20260101T000000Z'),
+            new \DateTimeImmutable('20260303T000000Z'),
+            $vcal,
+            new \DateTimeZone('UTC')
+        );
+
+        $periods = array_map(strval(...), $generator->getResult()->VFREEBUSY->select('FREEBUSY'));
+
+        self::assertSame([
+            '20260106T080000Z/20260106T083000Z',
+            '20260107T080000Z/20260107T083000Z',
+            '20260108T080000Z/20260108T083000Z',
+        ], array_values($periods));
+    }
+
+    /**
+     * A VFREEBUSY sharing the UID of a recurring event is not one of its
+     * instances (#203).
+     */
+    public function testComponentSharingTheUidOfARecurringEventIsIgnored(): void
+    {
+        $obj = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:fb
+DTSTAMP:20260101T000000Z
+DTSTART:20260106T080000Z
+DURATION:PT30M
+RDATE:20260109T080000Z,20260112T080000Z
+END:VEVENT
+BEGIN:VFREEBUSY
+UID:fb
+DTSTAMP:20260101T000000Z
+END:VFREEBUSY
+END:VCALENDAR
+ICS;
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'),
+            new \DateTimeImmutable('2026-03-01T00:00:00Z'),
+            Reader::read($obj),
+            new \DateTimeZone('UTC')
+        );
+        $result = $gen->getResult();
+        self::assertSame(
+            '20260106T080000Z/20260106T083000Z,20260109T080000Z/20260109T083000Z,20260112T080000Z/20260112T083000Z',
+            implode(',', array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY')))
         );
     }
 }
