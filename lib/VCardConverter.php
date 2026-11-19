@@ -150,7 +150,12 @@ class VCardConverter
                     }
                     // They are added after X-ANNIVERSARY, so that converting
                     // back to vCard 4.0 keeps that one (and its group).
-                    $extraProperties[] = $output->createProperty('ITEM'.$x.'.X-ABDATE', $newProperty->getValue(), ['VALUE' => 'DATE-AND-OR-TIME']);
+                    // It marks the same year as omitted.
+                    $extraProperties[] = $output->createProperty(
+                        'ITEM'.$x.'.X-ABDATE',
+                        $newProperty->getValue(),
+                        ['VALUE' => 'DATE-AND-OR-TIME'] + (isset($newProperty['X-APPLE-OMIT-YEAR']) ? ['X-APPLE-OMIT-YEAR' => '1604'] : [])
+                    );
                     $extraProperties[] = $output->createProperty('ITEM'.$x.'.X-ABLABEL', '_$!<Anniversary>!$_');
                 }
             } elseif ('KIND' === $property->name) {
@@ -255,9 +260,11 @@ class VCardConverter
                     // vCard 4.0 (RFC 6350 section 6.2.6): another value stays
                     // as an extension.
                     // A native ANNIVERSARY wins, whatever the order of the lines.
-                    if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
-                        || self::hasValue($output, 'ANNIVERSARY', $this->anniversaryValue($newProperty, $parameters))
-                        || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())) {
+                    // The values are compared by what they mean: a year marked
+                    // as omitted is another date.
+                    $anniversary = $this->anniversaryValue($newProperty, $parameters);
+                    if ($this->hasAnniversary($output, 'ANNIVERSARY', $anniversary)
+                        || $this->hasAnniversary($input, 'ANNIVERSARY', $anniversary)) {
                         return;
                     }
                     // The date labelled as the anniversary is the one, if any.
@@ -294,10 +301,13 @@ class VCardConverter
                     // If we already have an anniversary property with the same
                     // value, ignore. X-ANNIVERSARY holds the same anniversary
                     // with its own group, whichever is converted first.
-                    if (self::hasValue($output, 'ANNIVERSARY', (string) $newProperty->getValue())
-                        || self::hasValue($output, 'ANNIVERSARY', $this->anniversaryValue($newProperty, $parameters))
-                        || self::hasValue($input, 'ANNIVERSARY', (string) $newProperty->getValue())
-                        || self::hasValue($input, 'X-ANNIVERSARY', (string) $newProperty->getValue())) {
+                    $anniversary = $this->anniversaryValue($newProperty, $parameters);
+                    if ($this->hasAnniversary($output, 'ANNIVERSARY', $anniversary)
+                        || $this->hasAnniversary($input, 'ANNIVERSARY', $anniversary)
+                        || $this->hasAnniversary($input, 'X-ANNIVERSARY', $anniversary)
+                        // The twin of an X-ANNIVERSARY, as written without
+                        // X-APPLE-OMIT-YEAR before.
+                        || self::hasValue($input, 'X-ANNIVERSARY', (string) $property->getValue())) {
                         return;
                     }
                     if (isset($output->ANNIVERSARY) || isset($input->ANNIVERSARY)) {
@@ -382,6 +392,30 @@ class VCardConverter
         } catch (InvalidDataException) {
             return $value;
         }
+    }
+
+    /**
+     * Returns true if a card has a property of that name which means that
+     * anniversary, once the year X-APPLE-OMIT-YEAR marks as omitted is
+     * removed.
+     */
+    private function hasAnniversary(Component\VCard $card, string $name, string $value): bool
+    {
+        foreach ($card->select($name) as $property) {
+            $stored = (string) $property->getValue();
+            if (isset($property['X-APPLE-OMIT-YEAR'])
+                && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
+                try {
+                    $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
+                } catch (InvalidDataException) {
+                }
+            }
+            if ($stored === $value) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
