@@ -1660,4 +1660,33 @@ ICS;
 
         self::assertSame([], (new Broker())->parseEvent($newMessage, 'mailto:one@example.org', $oldMessage));
     }
+
+    /**
+     * A DATE EXDATE on a DATE-TIME series removes no instance
+     * (EventIterator excludes nothing for it): it declines nothing.
+     */
+    public function testDateExdateOnDateTimeSeriesSendsNothing(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART;TZID=Europe/Paris:20260105T100000
+DTEND;TZID=Europe/Paris:20260105T113000
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $newMessage = str_replace("RRULE:FREQ=DAILY;COUNT=5\n", "RRULE:FREQ=DAILY;COUNT=5\nEXDATE;VALUE=DATE:20260105\n", $oldMessage);
+
+        self::assertSame([], (new Broker())->parseEvent($newMessage, 'mailto:one@example.org', $oldMessage));
+
+        foreach ((new Broker())->parseEvent($newMessage, 'mailto:one@example.org') as $message) {
+            self::assertFalse(isset($message->message->VEVENT->{'RECURRENCE-ID'}), $message->message->serialize());
+        }
+    }
 }
