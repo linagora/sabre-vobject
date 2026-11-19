@@ -1292,4 +1292,27 @@ VCF;
 
         self::assertSame('1604', (string) $v3->{'ITEM1.X-ABDATE'}['X-APPLE-OMIT-YEAR'], $v3->serialize());
     }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function photosWithAVCard4Type(): array
+    {
+        return [
+            'application/octet-stream' => ['data:application/octet-stream;base64,aUQ6ZA==', 'data:application/octet-stream;base64,aUQ6ZA=='],
+            'an invalid media type' => ['data:audioaudio/ork:63;base64,aUQ6ZA==', 'data:application/octet-stream;base64,aUQ6ZA=='],
+            'image/png' => ['data:image/png;base64,aUQ6ZA==', 'data:image/png;base64,aUQ6ZA=='],
+        ];
+    }
+
+    #[DataProvider('photosWithAVCard4Type')]
+    public function testVCard4TypeOfAPhotoIsNotItsMediaType(string $uri, string $expected): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nPHOTO;TYPE=work:{$uri}\r\nEND:VCARD\r\n");
+        $v3 = Reader::read($v4->convert(Document::VCARD30)->serialize());
+        $back = Reader::read($v3->convert(Document::VCARD40)->serialize());
+
+        self::assertSame($expected, (string) $back->PHOTO, $back->serialize());
+        self::assertSame('work', (string) $back->PHOTO['TYPE'], $back->serialize());
+    }
 }
