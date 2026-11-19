@@ -1052,6 +1052,11 @@ class Broker
     private static function exdateIds(Property $exDate, \DateTimeZone $timezone, Property\ICalendar\DateTime $start): array
     {
         $parts = $exDate->getParts();
+        if ($exDate instanceof Property\ICalendar\DateTime && !$exDate->hasTime() && $start->hasTime()) {
+            // A DATE on a DATE-TIME series is no instance of it: EventIterator
+            // excludes nothing for it, so the attendee declines nothing.
+            return [];
+        }
         if (!$exDate instanceof Property\ICalendar\DateTime || !$exDate->hasTime() || $exDate->isFloating()) {
             return $parts;
         }
