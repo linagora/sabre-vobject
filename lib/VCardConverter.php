@@ -665,14 +665,35 @@ class VCardConverter
             switch ($param->name) {
                 // We need to see if there's any TYPE=PREF, because in vCard 4
                 // that's now PREF=1.
+                // A property preferred twice (PREF=1 and TYPE=PREF, or
+                // TYPE=PREF,PREF) is PREF=1 once.
+                //
+                // The other parts are added at once: adding them one by one
+                // would copy the list for each part.
                 case 'TYPE':
+                    $types = [];
+                    $prefFirst = null;
                     foreach ($param->getParts() as $paramPart) {
                         if ('PREF' === strtoupper((string) $paramPart)) {
-                            $newProperty->add('PREF', '1');
+                            $prefFirst ??= true;
                         } else {
-                            $newProperty->add($param->name, $paramPart);
+                            $prefFirst ??= false;
+                            $types[] = $paramPart;
                         }
                     }
+                    if (true === $prefFirst && !isset($newProperty['PREF'])) {
+                        $newProperty->add('PREF', '1');
+                    }
+                    if ([] !== $types) {
+                        $newProperty->add($param->name, $types);
+                    }
+                    if (false === $prefFirst && count($types) < count($param->getParts()) && !isset($newProperty['PREF'])) {
+                        $newProperty->add('PREF', '1');
+                    }
+                    break;
+                case 'PREF':
+                    // An explicit PREF says more than TYPE=PREF.
+                    $newProperty[$param->name] = array_values(array_unique($param->getParts()));
                     break;
                     // These no longer exist in vCard 4
                 case 'ENCODING':
@@ -691,6 +712,10 @@ class VCardConverter
      */
     protected function convertParameters30(Property $newProperty, array $parameters): void
     {
+        // Whether TYPE=PREF is written yet: a property preferred twice
+        // (PREF=1 and TYPE=PREF, or TYPE=PREF,PREF) is TYPE=PREF once.
+        $preferred = false;
+
         // Adding all parameters.
         foreach ($parameters as $param) {
             // vCard 2.1 allowed parameters with no name
@@ -713,8 +738,25 @@ class VCardConverter
                      * Any other PREF numbers we'll drop.
                      */
                 case 'PREF':
-                    if ('1' === (string) $param->getValue()) {
+                    if (!$preferred && ['1'] === array_values(array_unique(array_map(strval(...), $param->getParts())))) {
                         $newProperty->add('TYPE', 'PREF');
+                        $preferred = true;
+                    }
+                    break;
+
+                case 'TYPE':
+                    $types = [];
+                    foreach ($param->getParts() as $paramPart) {
+                        if ('PREF' === strtoupper((string) $paramPart)) {
+                            if ($preferred) {
+                                continue;
+                            }
+                            $preferred = true;
+                        }
+                        $types[] = $paramPart;
+                    }
+                    if ([] !== $types) {
+                        $newProperty->add($param->name, $types);
                     }
                     break;
 

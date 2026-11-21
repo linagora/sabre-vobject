@@ -1315,4 +1315,67 @@ VCF;
         self::assertSame($expected, (string) $back->PHOTO, $back->serialize());
         self::assertSame('work', (string) $back->PHOTO['TYPE'], $back->serialize());
     }
+
+    public function testDuplicatePrefStaysOnePref(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nEMAIL;PREF=1;TYPE=PREF:a@example.com\r\nEND:VCARD\r\n");
+
+        $vcard3 = $input->convert(Document::VCARD30);
+        self::assertSame(['PREF'], $vcard3->EMAIL['TYPE']->getParts());
+
+        $vcard4 = $vcard3->convert(Document::VCARD40);
+        self::assertSame('1', (string) $vcard4->EMAIL['PREF']);
+
+        $again = $vcard4->convert(Document::VCARD30);
+        self::assertSame('PREF', (string) $again->EMAIL['TYPE']);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function duplicatePrefIn30(): array
+    {
+        return [
+            'one TYPE' => ['EMAIL;TYPE=PREF,PREF:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+            'two TYPE' => ['EMAIL;TYPE=pref;TYPE=PREF:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+            'with another type, PREF first' => ['EMAIL;TYPE=PREF,HOME,PREF:a@example.com', 'EMAIL;PREF=1;TYPE=HOME:a@example.com'],
+            'with another type, PREF last' => ['EMAIL;TYPE=HOME,PREF,PREF:a@example.com', 'EMAIL;TYPE=HOME;PREF=1:a@example.com'],
+            'PREF=1 and TYPE=PREF' => ['EMAIL;PREF=1;TYPE=PREF:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+            'TYPE=PREF and PREF=1' => ['EMAIL;TYPE=PREF;PREF=1:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+        ];
+    }
+
+    #[DataProvider('duplicatePrefIn30')]
+    public function testDuplicatePrefIn30IsOnePrefIn40(string $line, string $expected): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\n".$line."\r\nEND:VCARD\r\n");
+
+        self::assertSame($expected, rtrim($input->convert(Document::VCARD40)->EMAIL->serialize()));
+    }
+
+    public function testPrefWhoseRepeatedPartsAreAllOneStaysPreferredIn30(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nEMAIL;PREF=1,1:a@example.com\r\nEND:VCARD\r\n");
+
+        self::assertSame('EMAIL;TYPE=PREF:a@example.com', rtrim($input->convert(Document::VCARD30)->EMAIL->serialize()));
+    }
+
+    public function testPrefSetAsAnIntegerIsTypePrefIn30(): void
+    {
+        $card = new VCard(['VERSION' => '4.0', 'FN' => 'a', 'UID' => 'a']);
+        $card->add('EMAIL', 'a@example.com', ['PREF' => 1]);
+
+        self::assertSame('EMAIL;TYPE=PREF:a@example.com', rtrim($card->convert(Document::VCARD30)->EMAIL->serialize()));
+    }
+
+    public function testManyTypePartsConvertInLinearTime(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\nEMAIL;TYPE=".str_repeat('a,', 200000)."PREF:a@example.com\r\nEND:VCARD\r\n");
+
+        $start = microtime(true);
+        $output = $input->convert(Document::VCARD40);
+        self::assertLessThan(1.0, microtime(true) - $start);
+        self::assertCount(200000, $output->EMAIL['TYPE']->getParts());
+        self::assertSame('1', (string) $output->EMAIL['PREF']);
+    }
 }
