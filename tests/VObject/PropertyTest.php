@@ -507,6 +507,32 @@ class PropertyTest extends TestCase
         self::assertSame(['FREQ' => 'DAILY', 'COUNT' => '2'], $calendar->VEVENT->RRULE->getParts());
     }
 
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function repairedIntoNonTextWithALineBreakProvider(): array
+    {
+        return [
+            'language tag' => ['G..LANG:en\\Nfr', 'LANG', 'enfr'],
+            'date' => ['G..BDAY:2000\\n0101', 'BDAY', '20000101'],
+            'escaped backslash' => ['G..LANG:en\\\\\\Nfr', 'LANG', 'en\\fr'],
+        ];
+    }
+
+    #[DataProvider('repairedIntoNonTextWithALineBreakProvider')]
+    public function testRepairedNameIntoNonTextKeepsNoLineBreak(string $line, string $name, string $value): void
+    {
+        $card = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nUID:a\r\n$line\r\nEND:VCARD\r\n");
+
+        $card->validate(Node::REPAIR | Node::PROFILE_CARDDAV);
+
+        $property = $card->select($name)[0];
+        self::assertNotInstanceOf(Property\Text::class, $property);
+        self::assertSame($value, $property->getValue());
+        // The validated tree is what gets stored.
+        self::assertSame($value, Reader::read($card->serialize())->select($name)[0]->getValue());
+    }
+
     #[DataProvider('repairedNameProvider')]
     public function testRepairedNameDoesNotValidateTheReplacedProperty(string $line): void
     {
