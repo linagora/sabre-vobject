@@ -20,6 +20,13 @@ class VCardConverter
     private const MEDIA_TYPE_TOKEN = '[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}';
 
     /**
+     * The source card the labelled anniversaries were read from, and them.
+     *
+     * @var array{Component\VCard, array<string, true>}|null
+     */
+    private ?array $labelledAnniversaries = null;
+
+    /**
      * Converts a vCard object to a new version.
      *
      * targetVersion must be one of:
@@ -51,6 +58,7 @@ class VCardConverter
         }
 
         $newVersion = Document::VCARD40 === $targetVersion ? '4.0' : '3.0';
+        $this->labelledAnniversaries = null;
 
         $output = new Component\VCard([
             'VERSION' => $newVersion,
@@ -156,11 +164,16 @@ class VCardConverter
                     }
                     // They are added after X-ANNIVERSARY, so that converting
                     // back to vCard 4.0 keeps that one (and its group).
-                    // It marks the same year as omitted.
+                    // It marks the same year as omitted, also one the
+                    // source marks itself.
                     $extraProperties[] = $output->createProperty(
                         'ITEM'.$x.'.X-ABDATE',
                         $newProperty->getValue(),
-                        ['VALUE' => 'DATE-AND-OR-TIME'] + (isset($newProperty['X-APPLE-OMIT-YEAR']) ? ['X-APPLE-OMIT-YEAR' => '1604'] : [])
+                        ['VALUE' => 'DATE-AND-OR-TIME'] + match (true) {
+                            isset($newProperty['X-APPLE-OMIT-YEAR']) => ['X-APPLE-OMIT-YEAR' => '1604'],
+                            isset($parameters['X-APPLE-OMIT-YEAR']) => ['X-APPLE-OMIT-YEAR' => (string) $parameters['X-APPLE-OMIT-YEAR']->getValue()],
+                            default => [],
+                        }
                     );
                     $extraProperties[] = $output->createProperty('ITEM'.$x.'.X-ABLABEL', '_$!<Anniversary>!$_');
                 }
@@ -274,9 +287,11 @@ class VCardConverter
                         return;
                     }
                     // The date labelled as the anniversary is the one, if any.
-                    $labelled = self::labelledAnniversaries($input);
+                    // It is compared by meaning as well: a year marked as
+                    // omitted is another date than the labelled full date.
+                    $labelled = $this->labelledAnniversaries($input);
                     if (!isset($output->ANNIVERSARY) && !isset($input->ANNIVERSARY)
-                        && ([] === $labelled || in_array((string) $property->getValue(), $labelled, true))) {
+                        && ([] === $labelled || isset($labelled[$anniversary]))) {
                         $newProperty = $this->renameToAnniversary($output, $newProperty, $parameters);
                     }
                     break;
@@ -293,8 +308,9 @@ class VCardConverter
                     }
                     break;
                 case 'X-ABDATE':
-                    // Find out what the label was, if it exists.
-                    if (!$property->group) {
+                    // Find out what the label was, if it exists. A group may
+                    // be named 0.
+                    if (null === $property->group) {
                         break;
                     }
                     $label = $input->{$property->group.'.X-ABLABEL'};
@@ -312,8 +328,10 @@ class VCardConverter
                         || $this->hasAnniversary($input, 'ANNIVERSARY', $anniversary)
                         || $this->hasAnniversary($input, 'X-ANNIVERSARY', $anniversary)
                         // The twin of an X-ANNIVERSARY, as written without
-                        // X-APPLE-OMIT-YEAR before.
-                        || self::hasValue($input, 'X-ANNIVERSARY', (string) $property->getValue())) {
+                        // X-APPLE-OMIT-YEAR before (one that has it says
+                        // what it means).
+                        || (!isset($property['X-APPLE-OMIT-YEAR'])
+                            && self::hasValue($input, 'X-ANNIVERSARY', (string) $property->getValue()))) {
                         return;
                     }
                     if (isset($output->ANNIVERSARY) || isset($input->ANNIVERSARY)) {
@@ -408,20 +426,30 @@ class VCardConverter
     private function hasAnniversary(Component\VCard $card, string $name, string $value): bool
     {
         foreach ($card->select($name) as $property) {
-            $stored = (string) $property->getValue();
-            if (isset($property['X-APPLE-OMIT-YEAR'])
-                && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
-                try {
-                    $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
-                } catch (InvalidDataException) {
-                }
-            }
-            if ($stored === $value) {
+            if ($this->storedAnniversary($property) === $value) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Returns the anniversary a stored property means: its value without the
+     * year X-APPLE-OMIT-YEAR marks as omitted.
+     */
+    private function storedAnniversary(Property $property): string
+    {
+        $stored = (string) $property->getValue();
+        if (isset($property['X-APPLE-OMIT-YEAR'])
+            && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
+            try {
+                $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
+            } catch (InvalidDataException) {
+            }
+        }
+
+        return $stored;
     }
 
     /**
@@ -541,19 +569,48 @@ class VCardConverter
     }
 
     /**
-     * Returns the values of the X-ABDATE properties labelled as an anniversary.
+     * Returns the anniversaries the X-ABDATE properties labelled as an
+     * anniversary mean, as keys.
      *
-     * @return string[]
+     * They are read once per conversion: every X-ANNIVERSARY looks them up.
+     * The label of a group is its first X-ABLABEL.
+     *
+     * @return array<string, true>
      */
-    private static function labelledAnniversaries(Component\VCard $card): array
+    private function labelledAnniversaries(Component\VCard $card): array
     {
-        $values = [];
-        foreach ($card->select('X-ABDATE') as $date) {
-            $label = $date->group ? $card->{$date->group.'.X-ABLABEL'} : null;
-            if ($label && '_$!<Anniversary>!$_' === $label->getValue()) {
-                $values[] = (string) $date->getValue();
+        if (null !== $this->labelledAnniversaries && $this->labelledAnniversaries[0] === $card) {
+            return $this->labelledAnniversaries[1];
+        }
+
+        $labels = [];
+        foreach ($card->select('X-ABLABEL') as $label) {
+            if (null !== $label->group) {
+                $labels[strtoupper($label->group)] ??= '_$!<Anniversary>!$_' === $label->getValue();
             }
         }
+        $extensions = [];
+        $rawExtensions = [];
+        foreach ($card->select('X-ANNIVERSARY') as $extension) {
+            $extensions[$this->storedAnniversary($extension)] = true;
+            $rawExtensions[(string) $extension->getValue()] ??= $this->storedAnniversary($extension);
+        }
+        $values = [];
+        foreach ($card->select('X-ABDATE') as $date) {
+            if (null !== $date->group && ($labels[strtoupper($date->group)] ?? false)) {
+                $value = $this->storedAnniversary($date);
+                // An X-ABDATE written without X-APPLE-OMIT-YEAR next to a
+                // yearless X-ANNIVERSARY (before 47ec822c) is its twin, when
+                // no X-ANNIVERSARY means the date itself.
+                if (!isset($date['X-APPLE-OMIT-YEAR']) && !isset($extensions[$value])
+                    && isset($rawExtensions[(string) $date->getValue()])) {
+                    $value = $rawExtensions[(string) $date->getValue()];
+                }
+                $values[$value] = true;
+            }
+        }
+
+        $this->labelledAnniversaries = [$card, $values];
 
         return $values;
     }
