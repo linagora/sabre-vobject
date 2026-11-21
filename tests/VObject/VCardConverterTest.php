@@ -1510,4 +1510,25 @@ VCF;
 
         self::assertSame(['20000305'], array_map(strval(...), $output->select('ANNIVERSARY')), $output->serialize());
     }
+
+    public function testAnniversaryGroupsInVCard3AreTheLowestFreeOnes(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nITEM1.EMAIL:a@example.com\r\n"
+            ."ITEM2.ANNIVERSARY:20000305\r\nITEM5.ANNIVERSARY:20010305\r\nANNIVERSARY:20020305\r\nANNIVERSARY:20030305\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD30);
+
+        // ITEM1 is used, ITEM2 only by the anniversary itself, ITEM5 by
+        // another one until its own turn.
+        self::assertSame(
+            ['ITEM2' => '20000305', 'ITEM3' => '20010305', 'ITEM4' => '20020305', 'ITEM6' => '20030305'],
+            array_combine(
+                array_map(fn ($date) => $date->group, $output->select('X-ABDATE')),
+                array_map(strval(...), $output->select('X-ABDATE'))
+            ),
+            $output->serialize()
+        );
+    }
 }
