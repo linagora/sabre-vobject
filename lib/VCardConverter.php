@@ -20,6 +20,30 @@ class VCardConverter
     private const MEDIA_TYPE_TOKEN = '[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}';
 
     /**
+     * The source card the anniversaries were read from, and them by kind.
+     *
+     * @var array{Component\VCard, array<string, array<string, true>>}|null
+     */
+    private ?array $sourceAnniversaries = null;
+
+    /**
+     * The source card the X-ABLABEL properties were read from, and the first
+     * one of each group.
+     *
+     * @var array{Component\VCard, array<string, Property>}|null
+     */
+    private ?array $labels = null;
+
+    /**
+     * The groups the vCard 3.0 output may not use for a new ITEMx group: the
+     * output card, the number of properties of the source card in each
+     * group, the ITEMx groups written, and the lowest x that may be free.
+     *
+     * @var array{Component\VCard, array<string, int>, array<string, true>, int}|null
+     */
+    private ?array $itemGroups = null;
+
+    /**
      * Converts a vCard object to a new version.
      *
      * targetVersion must be one of:
@@ -51,6 +75,9 @@ class VCardConverter
         }
 
         $newVersion = Document::VCARD40 === $targetVersion ? '4.0' : '3.0';
+        $this->sourceAnniversaries = null;
+        $this->itemGroups = null;
+        $this->labels = null;
 
         $output = new Component\VCard([
             'VERSION' => $newVersion,
@@ -147,20 +174,19 @@ class VCardConverter
                     // group, so we first need to find a groupname that doesn't
                     // exist yet, neither in the output nor in the source card
                     // (where only the anniversary itself may use it).
-                    $x = 1;
-                    while ($output->select('ITEM'.$x.'.') || array_filter(
-                        $input->select('ITEM'.$x.'.'),
-                        fn ($other) => $other !== $property
-                    )) {
-                        ++$x;
-                    }
+                    $x = $this->freeItemGroup($input, $output, $property);
                     // They are added after X-ANNIVERSARY, so that converting
                     // back to vCard 4.0 keeps that one (and its group).
-                    // It marks the same year as omitted.
+                    // It marks the same year as omitted, also one the
+                    // source marks itself.
                     $extraProperties[] = $output->createProperty(
                         'ITEM'.$x.'.X-ABDATE',
                         $newProperty->getValue(),
-                        ['VALUE' => 'DATE-AND-OR-TIME'] + (isset($newProperty['X-APPLE-OMIT-YEAR']) ? ['X-APPLE-OMIT-YEAR' => '1604'] : [])
+                        ['VALUE' => 'DATE-AND-OR-TIME'] + match (true) {
+                            isset($newProperty['X-APPLE-OMIT-YEAR']) => ['X-APPLE-OMIT-YEAR' => '1604'],
+                            isset($parameters['X-APPLE-OMIT-YEAR']) => ['X-APPLE-OMIT-YEAR' => (string) $parameters['X-APPLE-OMIT-YEAR']->getValue()],
+                            default => [],
+                        }
                     );
                     $extraProperties[] = $output->createProperty('ITEM'.$x.'.X-ABLABEL', '_$!<Anniversary>!$_');
                 }
@@ -189,7 +215,9 @@ class VCardConverter
                 // KIND:org or group are written as one of these extensions:
                 // another one that says otherwise would become the KIND of
                 // the card when converted back to vCard 4.0.
-                $kind = strtolower((string) $input->KIND->getValue());
+                // The first KIND, read without $input->KIND, which copies
+                // them all for each extension.
+                $kind = strtolower((string) current($input->select('KIND'))->getValue());
                 $extensionKind = match (strtoupper($property->name.':'.$property->getValue())) {
                     'X-ABSHOWAS:COMPANY' => 'org',
                     'X-ADDRESSBOOKSERVER-KIND:GROUP' => 'group',
@@ -270,13 +298,15 @@ class VCardConverter
                     // as omitted is another date.
                     $anniversary = $this->anniversaryValue($newProperty, $parameters);
                     if ($this->hasAnniversary($output, 'ANNIVERSARY', $anniversary)
-                        || $this->hasAnniversary($input, 'ANNIVERSARY', $anniversary)) {
+                        || isset($this->sourceAnniversaries($input, 'ANNIVERSARY')[$anniversary])) {
                         return;
                     }
                     // The date labelled as the anniversary is the one, if any.
-                    $labelled = self::labelledAnniversaries($input);
+                    // It is compared by meaning as well: a year marked as
+                    // omitted is another date than the labelled full date.
+                    $labelled = $this->sourceAnniversaries($input, 'labelled');
                     if (!isset($output->ANNIVERSARY) && !isset($input->ANNIVERSARY)
-                        && ([] === $labelled || in_array((string) $property->getValue(), $labelled, true))) {
+                        && ([] === $labelled || isset($labelled[$anniversary]))) {
                         $newProperty = $this->renameToAnniversary($output, $newProperty, $parameters);
                     }
                     break;
@@ -293,11 +323,12 @@ class VCardConverter
                     }
                     break;
                 case 'X-ABDATE':
-                    // Find out what the label was, if it exists.
-                    if (!$property->group) {
+                    // Find out what the label was, if it exists. A group may
+                    // be named 0.
+                    if (null === $property->group) {
                         break;
                     }
-                    $label = $input->{$property->group.'.X-ABLABEL'};
+                    $label = $this->firstLabel($input, $property->group);
 
                     // We only support converting anniversaries.
                     if (!$label || '_$!<Anniversary>!$_' !== $label->getValue()) {
@@ -309,11 +340,13 @@ class VCardConverter
                     // with its own group, whichever is converted first.
                     $anniversary = $this->anniversaryValue($newProperty, $parameters);
                     if ($this->hasAnniversary($output, 'ANNIVERSARY', $anniversary)
-                        || $this->hasAnniversary($input, 'ANNIVERSARY', $anniversary)
-                        || $this->hasAnniversary($input, 'X-ANNIVERSARY', $anniversary)
+                        || isset($this->sourceAnniversaries($input, 'ANNIVERSARY')[$anniversary])
+                        || isset($this->sourceAnniversaries($input, 'X-ANNIVERSARY')[$anniversary])
                         // The twin of an X-ANNIVERSARY, as written without
-                        // X-APPLE-OMIT-YEAR before.
-                        || self::hasValue($input, 'X-ANNIVERSARY', (string) $property->getValue())) {
+                        // X-APPLE-OMIT-YEAR before (one that has it says
+                        // what it means).
+                        || (!isset($property['X-APPLE-OMIT-YEAR'])
+                            && isset($this->sourceAnniversaries($input, 'raw X-ANNIVERSARY')[(string) $property->getValue()]))) {
                         return;
                     }
                     if (isset($output->ANNIVERSARY) || isset($input->ANNIVERSARY)) {
@@ -408,20 +441,30 @@ class VCardConverter
     private function hasAnniversary(Component\VCard $card, string $name, string $value): bool
     {
         foreach ($card->select($name) as $property) {
-            $stored = (string) $property->getValue();
-            if (isset($property['X-APPLE-OMIT-YEAR'])
-                && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
-                try {
-                    $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
-                } catch (InvalidDataException) {
-                }
-            }
-            if ($stored === $value) {
+            if ($this->storedAnniversary($property) === $value) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Returns the anniversary a stored property means: its value without the
+     * year X-APPLE-OMIT-YEAR marks as omitted.
+     */
+    private function storedAnniversary(Property $property): string
+    {
+        $stored = (string) $property->getValue();
+        if (isset($property['X-APPLE-OMIT-YEAR'])
+            && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
+            try {
+                $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
+            } catch (InvalidDataException) {
+            }
+        }
+
+        return $stored;
     }
 
     /**
@@ -541,21 +584,128 @@ class VCardConverter
     }
 
     /**
-     * Returns the values of the X-ABDATE properties labelled as an anniversary.
+     * Returns the anniversaries of a kind in the source card, as keys:
+     * - ANNIVERSARY and X-ANNIVERSARY: what these properties mean,
+     * - raw X-ANNIVERSARY: the values of the X-ANNIVERSARY properties,
+     * - labelled: what the X-ABDATE properties labelled as an anniversary
+     *   mean (the label of a group is its first X-ABLABEL).
      *
-     * @return string[]
+     * They are read once per conversion, as each extension looks them up.
+     *
+     * @return array<string, true>
      */
-    private static function labelledAnniversaries(Component\VCard $card): array
+    private function sourceAnniversaries(Component\VCard $card, string $kind): array
     {
-        $values = [];
-        foreach ($card->select('X-ABDATE') as $date) {
-            $label = $date->group ? $card->{$date->group.'.X-ABLABEL'} : null;
-            if ($label && '_$!<Anniversary>!$_' === $label->getValue()) {
-                $values[] = (string) $date->getValue();
-            }
+        if (null === $this->sourceAnniversaries || $this->sourceAnniversaries[0] !== $card) {
+            $this->sourceAnniversaries = [$card, []];
+        }
+        if (isset($this->sourceAnniversaries[1][$kind])) {
+            return $this->sourceAnniversaries[1][$kind];
         }
 
-        return $values;
+        $values = [];
+        switch ($kind) {
+            case 'raw X-ANNIVERSARY':
+                foreach ($card->select('X-ANNIVERSARY') as $property) {
+                    $values[(string) $property->getValue()] = true;
+                }
+                break;
+            case 'labelled':
+                $extensions = $this->sourceAnniversaries($card, 'X-ANNIVERSARY');
+                $rawExtensions = [];
+                foreach ($card->select('X-ANNIVERSARY') as $extension) {
+                    $rawExtensions[(string) $extension->getValue()] ??= $this->storedAnniversary($extension);
+                }
+                foreach ($card->select('X-ABDATE') as $date) {
+                    if (null === $date->group || '_$!<Anniversary>!$_' !== $this->firstLabel($card, $date->group)?->getValue()) {
+                        continue;
+                    }
+                    $value = $this->storedAnniversary($date);
+                    // An X-ABDATE written without X-APPLE-OMIT-YEAR next to a
+                    // yearless X-ANNIVERSARY (before 47ec822c) is its twin,
+                    // when no X-ANNIVERSARY means the date itself.
+                    if (!isset($date['X-APPLE-OMIT-YEAR']) && !isset($extensions[$value])
+                        && isset($rawExtensions[(string) $date->getValue()])) {
+                        $value = $rawExtensions[(string) $date->getValue()];
+                    }
+                    $values[$value] = true;
+                }
+                break;
+            default:
+                foreach ($card->select($kind) as $property) {
+                    $values[$this->storedAnniversary($property)] = true;
+                }
+        }
+
+        return $this->sourceAnniversaries[1][$kind] = $values;
+    }
+
+    /**
+     * Returns the first X-ABLABEL of a group of the source card, as
+     * $card->{$group.'.X-ABLABEL'} does, from an index of the labels built
+     * once per conversion.
+     */
+    private function firstLabel(Component\VCard $card, string $group): ?Property
+    {
+        if (null === $this->labels || $this->labels[0] !== $card) {
+            $labels = [];
+            foreach ($card->select('X-ABLABEL') as $label) {
+                if ($label instanceof Property && null !== $label->group) {
+                    $labels[strtoupper($label->group)] ??= $label;
+                }
+            }
+            $this->labels = [$card, $labels];
+        }
+
+        return $this->labels[1][strtoupper($group)] ?? null;
+    }
+
+    /**
+     * Returns the lowest x such that the ITEMx group is used neither in the
+     * output nor in the source card, where only the property itself may use
+     * it.
+     *
+     * The groups are indexed once per conversion: looking each candidate up
+     * in both cards made the conversion of n anniversaries cubic. The output
+     * holds the groups of the source and the ITEMx groups written here.
+     */
+    private function freeItemGroup(Component\VCard $input, Component\VCard $output, Property $property): int
+    {
+        if (null === $this->itemGroups || $this->itemGroups[0] !== $output) {
+            $counts = [];
+            $taken = [];
+            foreach ([$input, $output] as $card) {
+                foreach ($card->children() as $child) {
+                    if ($child instanceof Property && null !== $child->group) {
+                        $group = strtoupper($child->group);
+                        if ($card === $input) {
+                            $counts[$group] = ($counts[$group] ?? 0) + 1;
+                        } else {
+                            $taken[$group] = true;
+                        }
+                    }
+                }
+            }
+            $this->itemGroups = [$output, $counts, $taken, 1];
+        }
+        // The arrays are updated in place: a copy of them would be made for
+        // each anniversary.
+        $groups = &$this->itemGroups;
+
+        // A group used by another property stays used: the lowest free one
+        // only moves up, but for the group of the property itself.
+        while (isset($groups[2]['ITEM'.$groups[3]]) || isset($groups[1]['ITEM'.$groups[3]])) {
+            ++$groups[3];
+        }
+        $x = $groups[3];
+        $own = null !== $property->group ? strtoupper($property->group) : '';
+        if (preg_match('/^ITEM([1-9][0-9]*)$/', $own, $matches) && (int) $matches[1] < $x
+            && !isset($groups[2][$own]) && 1 === ($groups[1][$own] ?? 0)) {
+            $x = (int) $matches[1];
+        }
+        $groups[2]['ITEM'.$x] = true;
+
+        return $x;
     }
 
     /**
@@ -665,14 +815,35 @@ class VCardConverter
             switch ($param->name) {
                 // We need to see if there's any TYPE=PREF, because in vCard 4
                 // that's now PREF=1.
+                // A property preferred twice (PREF=1 and TYPE=PREF, or
+                // TYPE=PREF,PREF) is PREF=1 once.
+                //
+                // The other parts are added at once: adding them one by one
+                // would copy the list for each part.
                 case 'TYPE':
+                    $types = [];
+                    $prefFirst = null;
                     foreach ($param->getParts() as $paramPart) {
                         if ('PREF' === strtoupper((string) $paramPart)) {
-                            $newProperty->add('PREF', '1');
+                            $prefFirst ??= true;
                         } else {
-                            $newProperty->add($param->name, $paramPart);
+                            $prefFirst ??= false;
+                            $types[] = $paramPart;
                         }
                     }
+                    if (true === $prefFirst && !isset($newProperty['PREF'])) {
+                        $newProperty->add('PREF', '1');
+                    }
+                    if ([] !== $types) {
+                        $newProperty->add($param->name, $types);
+                    }
+                    if (false === $prefFirst && count($types) < count($param->getParts()) && !isset($newProperty['PREF'])) {
+                        $newProperty->add('PREF', '1');
+                    }
+                    break;
+                case 'PREF':
+                    // An explicit PREF says more than TYPE=PREF.
+                    $newProperty[$param->name] = array_values(array_unique($param->getParts()));
                     break;
                     // These no longer exist in vCard 4
                 case 'ENCODING':
@@ -691,6 +862,10 @@ class VCardConverter
      */
     protected function convertParameters30(Property $newProperty, array $parameters): void
     {
+        // Whether TYPE=PREF is written yet: a property preferred twice
+        // (PREF=1 and TYPE=PREF, or TYPE=PREF,PREF) is TYPE=PREF once.
+        $preferred = false;
+
         // Adding all parameters.
         foreach ($parameters as $param) {
             // vCard 2.1 allowed parameters with no name
@@ -713,8 +888,25 @@ class VCardConverter
                      * Any other PREF numbers we'll drop.
                      */
                 case 'PREF':
-                    if ('1' === (string) $param->getValue()) {
+                    if (!$preferred && ['1'] === array_values(array_unique(array_map(strval(...), $param->getParts())))) {
                         $newProperty->add('TYPE', 'PREF');
+                        $preferred = true;
+                    }
+                    break;
+
+                case 'TYPE':
+                    $types = [];
+                    foreach ($param->getParts() as $paramPart) {
+                        if ('PREF' === strtoupper((string) $paramPart)) {
+                            if ($preferred) {
+                                continue;
+                            }
+                            $preferred = true;
+                        }
+                        $types[] = $paramPart;
+                    }
+                    if ([] !== $types) {
+                        $newProperty->add($param->name, $types);
                     }
                     break;
 

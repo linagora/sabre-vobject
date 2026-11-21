@@ -65,7 +65,7 @@ class GuessFromObservances implements TimezoneGuesser
 
         // UTC instant => [offset from, offset to], from the year before the
         // period on, to know the offset in effect when it starts.
-        $periodStart = gmmktime(0, 0, 0, 1, 1, $firstYear);
+        $periodStart = self::gmTimestamp(0, 0, 0, 1, 1, $firstYear);
         $changes = [];
         $understood = true;
         foreach ($observances as $observance) {
@@ -111,7 +111,7 @@ class GuessFromObservances implements TimezoneGuesser
             if ([] === $transitions) {
                 return $this->offsetName($initial);
             }
-            $name = $this->matchPhpZone($initial, $transitions, $periodStart, gmmktime(0, 0, 0, 1, 1, $lastYear + 1));
+            $name = $this->matchPhpZone($initial, $transitions, $periodStart, self::gmTimestamp(0, 0, 0, 1, 1, $lastYear + 1));
             if (null !== $name) {
                 return $name;
             }
@@ -179,7 +179,7 @@ class GuessFromObservances implements TimezoneGuesser
             foreach ($rdate->getParts() as $value) {
                 $parsed = $this->parseLocal((string) $value);
                 if (null !== $parsed) {
-                    $rdates[] = gmmktime(...$parsed);
+                    $rdates[] = self::gmTimestamp(...$parsed);
                 }
             }
         }
@@ -188,7 +188,7 @@ class GuessFromObservances implements TimezoneGuesser
 
         return [
             'name' => $observance->name,
-            'start' => gmmktime(...$local) - $from,
+            'start' => self::gmTimestamp(...$local) - $from,
             'local' => $local,
             'from' => $from,
             'to' => $to,
@@ -222,7 +222,7 @@ class GuessFromObservances implements TimezoneGuesser
     {
         $onsets = [];
         [$hour, $minute, $second, $month, $day, $startYear] = $observance['local'];
-        $localStart = gmmktime($hour, $minute, $second, $month, $day, $startYear);
+        $localStart = self::gmTimestamp($hour, $minute, $second, $month, $day, $startYear);
         if ($startYear >= $firstYear && $startYear <= $lastYear) {
             $onsets[] = $localStart;
         }
@@ -261,7 +261,7 @@ class GuessFromObservances implements TimezoneGuesser
             }
             // UNTIL is in UTC (RFC 5545 section 3.3.10); a floating UNTIL
             // is read in the observance's offset.
-            $until = gmmktime(...$parsed) - (str_ends_with(strtoupper((string) $rrule['UNTIL']), 'Z') ? 0 : $observance['from']);
+            $until = self::gmTimestamp(...$parsed) - (str_ends_with(strtoupper((string) $rrule['UNTIL']), 'Z') ? 0 : $observance['from']);
         }
         $count = isset($rrule['COUNT']) ? (int) $rrule['COUNT'] : null;
 
@@ -279,7 +279,7 @@ class GuessFromObservances implements TimezoneGuesser
             if (null === $date) {
                 continue;
             }
-            $onset = gmmktime($hour, $minute, $second, $byMonth, $date, $year);
+            $onset = self::gmTimestamp($hour, $minute, $second, $byMonth, $date, $year);
             if ($onset < $localStart || (null !== $until && $onset - $observance['from'] > $until)) {
                 continue;
             }
@@ -295,7 +295,7 @@ class GuessFromObservances implements TimezoneGuesser
      */
     private function dayInYear(array $rrule, int $year, int $month, int $defaultDay): int|false|null
     {
-        $daysInMonth = (int) gmdate('t', gmmktime(0, 0, 0, $month, 1, $year));
+        $daysInMonth = (int) gmdate('t', self::gmTimestamp(0, 0, 0, $month, 1, $year));
         $weekdays = ['SU' => 0, 'MO' => 1, 'TU' => 2, 'WE' => 3, 'TH' => 4, 'FR' => 5, 'SA' => 6];
 
         $monthDays = null;
@@ -332,7 +332,7 @@ class GuessFromObservances implements TimezoneGuesser
                 return false;
             }
             foreach ($monthDays as $monthDay) {
-                if ((int) gmdate('w', gmmktime(0, 0, 0, $month, $monthDay, $year)) === $weekday) {
+                if ((int) gmdate('w', self::gmTimestamp(0, 0, 0, $month, $monthDay, $year)) === $weekday) {
                     return $monthDay;
                 }
             }
@@ -345,10 +345,10 @@ class GuessFromObservances implements TimezoneGuesser
             return false;
         }
         if ($ordinal > 0) {
-            $first = (int) gmdate('w', gmmktime(0, 0, 0, $month, 1, $year));
+            $first = (int) gmdate('w', self::gmTimestamp(0, 0, 0, $month, 1, $year));
             $monthDay = 1 + ($weekday - $first + 7) % 7 + 7 * ($ordinal - 1);
         } else {
-            $last = (int) gmdate('w', gmmktime(0, 0, 0, $month, $daysInMonth, $year));
+            $last = (int) gmdate('w', self::gmTimestamp(0, 0, 0, $month, $daysInMonth, $year));
             $monthDay = $daysInMonth - ($last - $weekday + 7) % 7 + 7 * ($ordinal + 1);
         }
 
@@ -372,7 +372,7 @@ class GuessFromObservances implements TimezoneGuesser
     }
 
     /**
-     * Parses a DATE-TIME (or DATE) value into gmmktime() arguments.
+     * Parses a DATE-TIME (or DATE) value into gmTimestamp() arguments.
      *
      * @return array{int, int, int, int, int, int}|null
      */
@@ -383,6 +383,21 @@ class GuessFromObservances implements TimezoneGuesser
         }
 
         return [(int) ($matches[4] ?? 0), (int) ($matches[5] ?? 0), (int) ($matches[6] ?? 0), (int) $matches[2], (int) $matches[3], (int) $matches[1]];
+    }
+
+    /**
+     * gmmktime() with the year taken as written: gmmktime() reads a year
+     * from 0 to 100 as 1970-2069, so 0050 would be 2050. Such a year is
+     * computed 400 years later, as the Gregorian calendar repeats every 400
+     * years (146097 days), and moved back.
+     */
+    private static function gmTimestamp(int $hour, int $minute, int $second, int $month, int $day, int $year): int
+    {
+        if ($year > 100) {
+            return gmmktime($hour, $minute, $second, $month, $day, $year);
+        }
+
+        return gmmktime($hour, $minute, $second, $month, $day, $year + 400) - 146097 * 86400;
     }
 
     /**

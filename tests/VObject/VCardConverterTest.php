@@ -1315,4 +1315,229 @@ VCF;
         self::assertSame($expected, (string) $back->PHOTO, $back->serialize());
         self::assertSame('work', (string) $back->PHOTO['TYPE'], $back->serialize());
     }
+
+    public function testDuplicatePrefStaysOnePref(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nEMAIL;PREF=1;TYPE=PREF:a@example.com\r\nEND:VCARD\r\n");
+
+        $vcard3 = $input->convert(Document::VCARD30);
+        self::assertSame(['PREF'], $vcard3->EMAIL['TYPE']->getParts());
+
+        $vcard4 = $vcard3->convert(Document::VCARD40);
+        self::assertSame('1', (string) $vcard4->EMAIL['PREF']);
+
+        $again = $vcard4->convert(Document::VCARD30);
+        self::assertSame('PREF', (string) $again->EMAIL['TYPE']);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function duplicatePrefIn30(): array
+    {
+        return [
+            'one TYPE' => ['EMAIL;TYPE=PREF,PREF:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+            'two TYPE' => ['EMAIL;TYPE=pref;TYPE=PREF:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+            'with another type, PREF first' => ['EMAIL;TYPE=PREF,HOME,PREF:a@example.com', 'EMAIL;PREF=1;TYPE=HOME:a@example.com'],
+            'with another type, PREF last' => ['EMAIL;TYPE=HOME,PREF,PREF:a@example.com', 'EMAIL;TYPE=HOME;PREF=1:a@example.com'],
+            'PREF=1 and TYPE=PREF' => ['EMAIL;PREF=1;TYPE=PREF:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+            'TYPE=PREF and PREF=1' => ['EMAIL;TYPE=PREF;PREF=1:a@example.com', 'EMAIL;PREF=1:a@example.com'],
+        ];
+    }
+
+    #[DataProvider('duplicatePrefIn30')]
+    public function testDuplicatePrefIn30IsOnePrefIn40(string $line, string $expected): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\n".$line."\r\nEND:VCARD\r\n");
+
+        self::assertSame($expected, rtrim($input->convert(Document::VCARD40)->EMAIL->serialize()));
+    }
+
+    public function testPrefWhoseRepeatedPartsAreAllOneStaysPreferredIn30(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nEMAIL;PREF=1,1:a@example.com\r\nEND:VCARD\r\n");
+
+        self::assertSame('EMAIL;TYPE=PREF:a@example.com', rtrim($input->convert(Document::VCARD30)->EMAIL->serialize()));
+    }
+
+    public function testPrefSetAsAnIntegerIsTypePrefIn30(): void
+    {
+        $card = new VCard(['VERSION' => '4.0', 'FN' => 'a', 'UID' => 'a']);
+        $card->add('EMAIL', 'a@example.com', ['PREF' => 1]);
+
+        self::assertSame('EMAIL;TYPE=PREF:a@example.com', rtrim($card->convert(Document::VCARD30)->EMAIL->serialize()));
+    }
+
+    public function testManyTypePartsConvertInLinearTime(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\nEMAIL;TYPE=".str_repeat('a,', 200000)."PREF:a@example.com\r\nEND:VCARD\r\n");
+
+        $start = microtime(true);
+        $output = $input->convert(Document::VCARD40);
+        self::assertLessThan(1.0, microtime(true) - $start);
+        self::assertCount(200000, $output->EMAIL['TYPE']->getParts());
+        self::assertSame('1', (string) $output->EMAIL['PREF']);
+    }
+
+    public function testLabelledAnniversaryIsComparedWithoutTheOmittedYear(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\n"
+            ."X-ANNIVERSARY;X-APPLE-OMIT-YEAR=2000:20000305\r\n"
+            ."X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:20000305\r\n"
+            ."ITEM1.X-ABDATE;VALUE=DATE-AND-OR-TIME:20000305\r\n"
+            ."ITEM1.X-ABLABEL:_$!<Anniversary>!\$_\r\n"
+            ."END:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD40);
+
+        self::assertCount(1, $output->select('ANNIVERSARY'));
+        self::assertSame('20000305', (string) $output->ANNIVERSARY);
+        self::assertSame(['20000305'], array_map(strval(...), $output->select('X-ANNIVERSARY')));
+    }
+
+    public function testVCard4WithAnOmittedYearExtensionNextToTheAnniversaryRoundTrips(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\n"
+            ."X-ANNIVERSARY;X-APPLE-OMIT-YEAR=2000:20000305\r\nANNIVERSARY:20000305\r\nEND:VCARD\r\n"
+        );
+
+        $back = $input->convert(Document::VCARD30)->convert(Document::VCARD40);
+
+        self::assertSame(['20000305'], array_map(strval(...), $back->select('ANNIVERSARY')), $back->serialize());
+    }
+
+    public function testLabelledAnniversaryWithAnOmittedYearIsTheYearlessExtension(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\n"
+            ."X-ANNIVERSARY:20000305\r\n"
+            ."X-ANNIVERSARY:--0305\r\n"
+            ."ITEM1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-03-05\r\n"
+            ."ITEM1.X-ABLABEL:_$!<Anniversary>!\$_\r\n"
+            ."END:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD40);
+
+        self::assertSame(['--0305'], array_map(strval(...), $output->select('ANNIVERSARY')), $output->serialize());
+        self::assertSame(['20000305'], array_map(strval(...), $output->select('X-ANNIVERSARY')), $output->serialize());
+    }
+
+    /**
+     * Before 47ec822c, the X-ABDATE written next to a yearless X-ANNIVERSARY
+     * had no X-APPLE-OMIT-YEAR.
+     *
+     * @return array<string, array{string, string}>
+     */
+    public static function legacyTwins(): array
+    {
+        return [
+            'year 1604' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-03-05\r\nITEM1.X-ABDATE:1604-03-05\r\n", '--0305'],
+            'another year' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=2000:20000305\r\nITEM1.X-ABDATE;VALUE=DATE-AND-OR-TIME:20000305\r\n", '--0305'],
+        ];
+    }
+
+    #[DataProvider('legacyTwins')]
+    public function testLabelledTwinWithoutTheOmittedYearIsStillTheAnniversary(string $lines, string $expected): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\n".$lines
+            ."ITEM1.X-ABLABEL:_$!<Anniversary>!\$_\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD40);
+
+        self::assertSame([$expected], array_map(strval(...), $output->select('ANNIVERSARY')), $output->serialize());
+        self::assertSame([], $output->select('X-ANNIVERSARY'), $output->serialize());
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function labelledDatesWithTheirOwnOmittedYear(): array
+    {
+        return [
+            'year 1604' => ["X-ANNIVERSARY:1604-03-05\r\nITEM1.X-ABDATE;X-APPLE-OMIT-YEAR=1604:1604-03-05\r\n", '--0305'],
+            'year 2000' => ["X-ANNIVERSARY:20000305\r\nITEM1.X-ABDATE;X-APPLE-OMIT-YEAR=2000:20000305\r\n", '--0305'],
+            'another omitted year' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=2000:20000305\r\nITEM1.X-ABDATE;X-APPLE-OMIT-YEAR=1999:20000305\r\n", '20000305'],
+        ];
+    }
+
+    /**
+     * A labelled X-ABDATE with its own X-APPLE-OMIT-YEAR is not the twin of
+     * an X-ANNIVERSARY with the same raw value.
+     */
+    #[DataProvider('labelledDatesWithTheirOwnOmittedYear')]
+    public function testLabelledDateWithItsOwnOmittedYearIsTheAnniversary(string $lines, string $expected): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\n".$lines
+            ."ITEM1.X-ABLABEL:_$!<Anniversary>!\$_\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD40);
+
+        self::assertSame([$expected], array_map(strval(...), $output->select('ANNIVERSARY')), $output->serialize());
+        self::assertCount(1, $output->select('X-ANNIVERSARY'), $output->serialize());
+    }
+
+    public function testAnniversaryWithItsOwnOmittedYearRoundTripsNextToItsFullDate(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\n"
+            ."ANNIVERSARY;X-APPLE-OMIT-YEAR=2000:20000305\r\nX-ANNIVERSARY:20000305\r\nEND:VCARD\r\n"
+        );
+
+        $vcard3 = $input->convert(Document::VCARD30);
+        self::assertSame('2000', (string) $vcard3->select('X-ABDATE')[0]['X-APPLE-OMIT-YEAR'], $vcard3->serialize());
+
+        $back = $vcard3->convert(Document::VCARD40);
+        self::assertSame(['--0305'], array_map(strval(...), $back->select('ANNIVERSARY')), $back->serialize());
+        self::assertSame(['20000305'], array_map(strval(...), $back->select('X-ANNIVERSARY')), $back->serialize());
+    }
+
+    public function testLabelInAGroupNamedZero(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nUID:a\r\nX-ANNIVERSARY:19990101\r\n"
+            ."0.X-ABDATE:20000305\r\n0.X-ABLABEL:_$!<Anniversary>!\$_\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD40);
+
+        self::assertSame(['20000305'], array_map(strval(...), $output->select('ANNIVERSARY')), $output->serialize());
+    }
+
+    public function testAnniversaryGroupsInVCard3AreTheLowestFreeOnes(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nITEM1.EMAIL:a@example.com\r\n"
+            ."ITEM2.ANNIVERSARY:20000305\r\nITEM5.ANNIVERSARY:20010305\r\nANNIVERSARY:20020305\r\nANNIVERSARY:20030305\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD30);
+
+        // ITEM1 is used, ITEM2 only by the anniversary itself, ITEM5 by
+        // another one until its own turn.
+        self::assertSame(
+            ['ITEM2' => '20000305', 'ITEM3' => '20010305', 'ITEM4' => '20020305', 'ITEM6' => '20030305'],
+            array_combine(
+                array_map(fn ($date) => $date->group, $output->select('X-ABDATE')),
+                array_map(strval(...), $output->select('X-ABDATE'))
+            ),
+            $output->serialize()
+        );
+    }
+
+    public function testKindIsReadAfterTheFirstOneIsRemoved(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nKIND:org\r\nKIND:individual\r\nX-ABSHOWAS:COMPANY\r\nEND:VCARD\r\n");
+        $input->remove($input->select('KIND')[0]);
+
+        // The native KIND:individual wins over the extension.
+        self::assertSame([], $input->convert(Document::VCARD30)->select('X-ABSHOWAS'));
+    }
 }
