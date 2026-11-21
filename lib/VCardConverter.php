@@ -132,6 +132,16 @@ class VCardConverter
         );
 
         if (Document::VCARD30 === $targetVersion) {
+            // A native ANNIVERSARY that is a date becomes an X-ANNIVERSARY as
+            // well (a text stays an ANNIVERSARY), and
+            // nothing in vCard 3 tells it from an extension that means the
+            // same date: that one would take its place coming back, with its
+            // own parameters and group. vCard 4 merges such a duplicate into
+            // the ANNIVERSARY anyway.
+            if ('X-ANNIVERSARY' === $property->name
+                && isset($this->sourceAnniversaries($input, 'date ANNIVERSARY')[$this->storedAnniversary($property)])) {
+                return;
+            }
             if ($newProperty instanceof Uri && in_array($property->name, ['PHOTO', 'LOGO', 'SOUND'], true)) {
                 $binaryProperty = $this->convertUriToBinary($output, $newProperty);
                 if ($binaryProperty !== $newProperty) {
@@ -588,6 +598,7 @@ class VCardConverter
     /**
      * Returns the anniversaries of a kind in the source card, as keys:
      * - ANNIVERSARY and X-ANNIVERSARY: what these properties mean,
+     * - date ANNIVERSARY: what the ANNIVERSARY properties that are dates mean,
      * - raw X-ANNIVERSARY: the values of the X-ANNIVERSARY properties,
      * - labelled: what the X-ABDATE properties labelled as an anniversary
      *   mean (the label of a group is its first X-ABLABEL).
@@ -607,6 +618,13 @@ class VCardConverter
 
         $values = [];
         switch ($kind) {
+            case 'date ANNIVERSARY':
+                foreach ($card->select('ANNIVERSARY') as $property) {
+                    if ($property instanceof Property\VCard\DateAndOrTime) {
+                        $values[$this->storedAnniversary($property)] = true;
+                    }
+                }
+                break;
             case 'raw X-ANNIVERSARY':
                 foreach ($card->select('X-ANNIVERSARY') as $property) {
                     $values[(string) $property->getValue()] = true;
