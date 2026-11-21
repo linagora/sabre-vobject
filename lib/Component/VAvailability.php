@@ -59,11 +59,20 @@ class VAvailability extends VObject\Component
         $effectiveEnd = null;
 
         if (isset($this->DTSTART)) {
+            if (!$this->DTSTART instanceof VObject\Property\ICalendar\DateTime) {
+                throw new VObject\InvalidDataException('The DTSTART of a VAVAILABILITY component must be a date or date-time');
+            }
             $effectiveStart = $this->DTSTART->getDateTime();
         }
         if (isset($this->DTEND)) {
+            if (!$this->DTEND instanceof VObject\Property\ICalendar\DateTime) {
+                throw new VObject\InvalidDataException('The DTEND of a VAVAILABILITY component must be a date or date-time');
+            }
             $effectiveEnd = $this->DTEND->getDateTime();
         } elseif ($effectiveStart && isset($this->DURATION)) {
+            if (!$this->DURATION instanceof VObject\Property) {
+                throw new VObject\InvalidDataException('The DURATION of a VAVAILABILITY component must be a duration');
+            }
             $effectiveEnd = $effectiveStart->add(VObject\DateTimeParser::parseDuration($this->DURATION));
         }
 

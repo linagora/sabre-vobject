@@ -2,6 +2,8 @@
 
 namespace Sabre\VObject;
 
+use Sabre\VObject\Component\Available;
+use Sabre\VObject\Component\VAvailability;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\Component\VFreeBusy;
@@ -183,28 +185,28 @@ class FreeBusyGenerator
      */
     protected function calculateAvailability(FreeBusyData $fbData, VCalendar $vavailability): void
     {
-        $vavailComps = iterator_to_array($vavailability->VAVAILABILITY);
-        usort(
-            $vavailComps,
-            function ($a, $b) {
-                // We need to order the components by priority. Priority 1
-                // comes first, up until priority 9. Priority 0 comes after
-                // priority 9. No priority implies priority 0.
-                //
-                // Yes, I'm serious.
-                $priorityA = isset($a->PRIORITY) ? (int) $a->PRIORITY->getValue() : 0;
-                $priorityB = isset($b->PRIORITY) ? (int) $b->PRIORITY->getValue() : 0;
-
-                if (0 === $priorityA) {
-                    $priorityA = 10;
-                }
-                if (0 === $priorityB) {
-                    $priorityB = 10;
-                }
-
-                return $priorityA - $priorityB;
+        // Only the components count (RFC 7953 section 3): a property that
+        // happens to be named VAVAILABILITY or AVAILABLE has no time range.
+        // A VAVAILABILITY we cannot place is skipped, as an AVAILABLE is.
+        $vavailComps = [];
+        foreach ($vavailability->select('VAVAILABILITY') as $child) {
+            if (!$child instanceof VAvailability) {
+                continue;
             }
-        );
+            try {
+                [$start, $end] = $child->getEffectiveStartEnd();
+            } catch (InvalidDataException) {
+                continue;
+            }
+            // We need to order the components by priority. Priority 1 comes
+            // first, up until priority 9. Priority 0 comes after priority 9.
+            // No priority implies priority 0.
+            //
+            // Yes, I'm serious.
+            $priority = $child->PRIORITY instanceof Property ? (int) $child->PRIORITY->getValue() : 0;
+            $vavailComps[] = [$child, $start, $end, 0 === $priority ? 10 : $priority];
+        }
+        usort($vavailComps, fn ($a, $b) => $a[3] <=> $b[3]);
 
         // Now we go over all the VAVAILABILITY components and figure if
         // there's any we don't need to consider.
@@ -213,11 +215,10 @@ class FreeBusyGenerator
         // VAVAILABILITY component falls outside the time we are interested in,
         // or a different VAVAILABILITY component with a higher priority has
         // already completely covered the time-range.
-        $old = $vavailComps;
         $new = [];
 
-        foreach ($old as $vavail) {
-            [$compStart, $compEnd] = $vavail->getEffectiveStartEnd();
+        foreach ($vavailComps as $entry) {
+            [, $compStart, $compEnd] = $entry;
 
             // We don't care about date-times that are earlier or later than the
             // start and end of the freebusy report, so this gets normalized
@@ -236,8 +237,7 @@ class FreeBusyGenerator
 
             // Going through our existing list of components to see if there's
             // a higher priority component that already fully covers this one.
-            foreach ($new as $higherVavail) {
-                [$higherStart, $higherEnd] = $higherVavail->getEffectiveStartEnd();
+            foreach ($new as [, $higherStart, $higherEnd]) {
                 if (
                     (is_null($higherStart) || $higherStart < $compStart)
                     && (is_null($higherEnd) || $higherEnd > $compEnd)
@@ -249,7 +249,7 @@ class FreeBusyGenerator
             }
 
             // We're keeping it!
-            $new[] = $vavail;
+            $new[] = $entry;
         }
 
         // Lastly, we need to traverse the remaining components and fill in the
@@ -257,9 +257,8 @@ class FreeBusyGenerator
         //
         // We traverse the components in reverse, because we want the higher
         // priority components to override the lower ones.
-        foreach (array_reverse($new) as $vavail) {
-            $busyType = isset($vavail->BUSYTYPE) ? strtoupper($vavail->BUSYTYPE) : 'BUSY-UNAVAILABLE';
-            [$vavailStart, $vavailEnd] = $vavail->getEffectiveStartEnd();
+        foreach (array_reverse($new) as [$vavail, $vavailStart, $vavailEnd]) {
+            $busyType = $vavail->BUSYTYPE instanceof Property ? strtoupper((string) $vavail->BUSYTYPE) : 'BUSY-UNAVAILABLE';
 
             // Making the component size no larger than the requested free-busy
             // report range.
@@ -279,64 +278,65 @@ class FreeBusyGenerator
             );
 
             // Looping over the AVAILABLE components.
-            if (isset($vavail->AVAILABLE)) {
-                foreach ($vavail->AVAILABLE as $available) {
-                    try {
-                        [$availStart, $availEnd] = $available->getEffectiveStartEnd();
-                    } catch (InvalidDataException) {
-                        // An AVAILABLE we cannot place makes no time free.
-                        continue;
-                    }
-                    $fbData->add(
-                        $availStart->getTimeStamp(),
-                        $availEnd->getTimeStamp(),
-                        'FREE'
+            foreach ($vavail->select('AVAILABLE') as $available) {
+                if (!$available instanceof Available) {
+                    continue;
+                }
+                try {
+                    [$availStart, $availEnd] = $available->getEffectiveStartEnd();
+                } catch (InvalidDataException) {
+                    // An AVAILABLE we cannot place makes no time free.
+                    continue;
+                }
+                $fbData->add(
+                    $availStart->getTimeStamp(),
+                    $availEnd->getTimeStamp(),
+                    'FREE'
+                );
+
+                if ($available->RRULE instanceof Property) {
+                    // Our favourite thing: recurrence!!
+
+                    $rruleIterator = new Recur\RRuleIterator(
+                        $available->RRULE->getValue(),
+                        $availStart
                     );
+                    $startEndDiff = $availStart->diff($availEnd);
+                    $instances = 0;
 
-                    if ($available->RRULE) {
-                        // Our favourite thing: recurrence!!
-
-                        $rruleIterator = new Recur\RRuleIterator(
-                            $available->RRULE->getValue(),
-                            $availStart
-                        );
-                        $startEndDiff = $availStart->diff($availEnd);
-                        $instances = 0;
-
-                        while ($rruleIterator->valid()) {
-                            // Bounded like the instances of an event, the
-                            // ones before the VAVAILABILITY start included.
-                            if (-1 !== Settings::$maxRecurrences && ++$instances > Settings::$maxRecurrences) {
-                                throw new Recur\MaxInstancesExceededException('Recurring AVAILABLE components are only allowed to generate '.Settings::$maxRecurrences.' instances');
-                            }
-
-                            $recurStart = $rruleIterator->current();
-                            if ($recurStart < $vavailStart) {
-                                // Fast-forwarding to the VAVAILABILITY start.
-                                $rruleIterator->next();
-                                continue;
-                            }
-                            $recurEnd = $recurStart->add($startEndDiff);
-
-                            if ($recurStart > $vavailEnd) {
-                                // We're beyond the legal time range.
-                                break;
-                            }
-
-                            if ($recurEnd > $vavailEnd) {
-                                // Truncating the end if it exceeds the
-                                // VAVAILABILITY end.
-                                $recurEnd = $vavailEnd;
-                            }
-
-                            $fbData->add(
-                                $recurStart->getTimeStamp(),
-                                $recurEnd->getTimeStamp(),
-                                'FREE'
-                            );
-
-                            $rruleIterator->next();
+                    while ($rruleIterator->valid()) {
+                        // Bounded like the instances of an event, the
+                        // ones before the VAVAILABILITY start included.
+                        if (-1 !== Settings::$maxRecurrences && ++$instances > Settings::$maxRecurrences) {
+                            throw new Recur\MaxInstancesExceededException('Recurring AVAILABLE components are only allowed to generate '.Settings::$maxRecurrences.' instances');
                         }
+
+                        $recurStart = $rruleIterator->current();
+                        if ($recurStart < $vavailStart) {
+                            // Fast-forwarding to the VAVAILABILITY start.
+                            $rruleIterator->next();
+                            continue;
+                        }
+                        $recurEnd = $recurStart->add($startEndDiff);
+
+                        if ($recurStart > $vavailEnd) {
+                            // We're beyond the legal time range.
+                            break;
+                        }
+
+                        if ($recurEnd > $vavailEnd) {
+                            // Truncating the end if it exceeds the
+                            // VAVAILABILITY end.
+                            $recurEnd = $vavailEnd;
+                        }
+
+                        $fbData->add(
+                            $recurStart->getTimeStamp(),
+                            $recurEnd->getTimeStamp(),
+                            'FREE'
+                        );
+
+                        $rruleIterator->next();
                     }
                 }
             }
