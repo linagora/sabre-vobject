@@ -521,9 +521,11 @@ abstract class Property extends Node implements \Stringable
         $replacement->group = $this->group;
         $replacement->parameters = $this->parameters;
         // A text value is written escaped, which a class that is not text
-        // would keep: it gets the value itself.
+        // would keep: it gets the value itself. Such a class has no escape for
+        // a line break, which serialize() drops: it is dropped here already,
+        // so that the repaired tree is what gets stored.
         $rawValue = $this instanceof Property\Text && !$replacement instanceof Property\Text
-            ? (string) $this->getValue()
+            ? \str_replace(["\r", "\n"], '', (string) $this->getValue())
             : $this->getRawMimeDirValue();
         try {
             $replacement->setRawMimeDirValue($rawValue);
