@@ -435,6 +435,29 @@ HI;
         }
     }
 
+    public function testObservancesStartingInATwoDigitYearAreNotReadAs20xx(): void
+    {
+        $observances = str_replace(['19701025', '19700329'], ['00501025', '00500329'], self::CET_OBSERVANCES);
+        $year = (int) gmdate('Y');
+        foreach ([false, true] as $failIfUncertain) {
+            $tz = TimeZoneUtil::getTimeZone('Custom', self::customVTimeZone($observances), $failIfUncertain);
+            self::assertSame(3600, $tz->getOffset(new \DateTimeImmutable($year.'-01-15T12:00:00Z')));
+            self::assertSame(7200, $tz->getOffset(new \DateTimeImmutable($year.'-07-15T12:00:00Z')));
+        }
+    }
+
+    public function testAnUntilInATwoDigitYearEndsTheRule(): void
+    {
+        $observances = str_replace(
+            ['19701025', '19700329', 'BYMONTH=3;BYDAY=-1SU'],
+            ['00011025', '00010329', 'BYMONTH=3;BYDAY=-1SU;UNTIL=00600328T010000Z'],
+            self::CET_OBSERVANCES
+        );
+        $year = (int) gmdate('Y');
+        $tz = TimeZoneUtil::getTimeZone('Custom', self::customVTimeZone($observances));
+        self::assertSame(3600, $tz->getOffset(new \DateTimeImmutable($year.'-07-15T12:00:00Z')));
+    }
+
     public function testUnknownLicLocationFallsThroughToTheObservances(): void
     {
         $vcal = self::customVTimeZone(self::CET_OBSERVANCES, "X-LIC-LOCATION:Nowhere/Custom\r\n");
