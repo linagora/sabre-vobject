@@ -1172,4 +1172,87 @@ ICS;
             implode(',', array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY')))
         );
     }
+
+    public function testVAvailabilityAndAvailablePropertiesAreIgnored(): void
+    {
+        $availability = Reader::read(
+            "BEGIN:VCALENDAR\r\nVAVAILABILITY:x\r\nBEGIN:VAVAILABILITY\r\nUID:a\r\n"
+            ."BEGIN:AVAILABLE\r\nUID:b\r\nDTSTART:20260105T090000Z\r\nDTEND:20260105T170000Z\r\nEND:AVAILABLE\r\n"
+            ."AVAILABLE:y\r\nEND:VAVAILABILITY\r\nEND:VCALENDAR\r\n"
+        );
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('20260105T000000Z'),
+            new \DateTimeImmutable('20260106T000000Z'),
+            [],
+            new \DateTimeZone('UTC')
+        );
+        $gen->setVAvailability($availability);
+        $result = $gen->getResult();
+
+        self::assertSame(
+            ['20260105T000000Z/20260105T090000Z', '20260105T170000Z/20260106T000000Z'],
+            array_map(strval(...), $result->VFREEBUSY->select('FREEBUSY'))
+        );
+    }
+
+    public function testOnlyAVAvailabilityPropertyGivesNoAvailability(): void
+    {
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('20260105T000000Z'),
+            new \DateTimeImmutable('20260106T000000Z'),
+            [],
+            new \DateTimeZone('UTC')
+        );
+        $gen->setVAvailability(Reader::read("BEGIN:VCALENDAR\r\nVAVAILABILITY:x\r\nEND:VCALENDAR\r\n"));
+
+        self::assertSame([], $gen->getResult()->VFREEBUSY->select('FREEBUSY'));
+    }
+
+    /**
+     * @return array<string, array{string, string, list<string>}>
+     */
+    public static function childrenOfTheWrongKind(): array
+    {
+        $office = ['20260105T000000Z/20260105T090000Z', '20260105T170000Z/20260106T000000Z'];
+        $available = "BEGIN:AVAILABLE\r\nUID:b\r\nDTSTART:20260105T090000Z\r\nDTEND:20260105T170000Z\r\nEND:AVAILABLE\r\n";
+
+        return [
+            'BUSYTYPE component' => ["BEGIN:BUSYTYPE\r\nEND:BUSYTYPE\r\n", $available, $office],
+            'PRIORITY component' => ["BEGIN:PRIORITY\r\nEND:PRIORITY\r\n", $available, $office],
+            'VAVAILABILITY DTSTART component' => ["BEGIN:DTSTART\r\nEND:DTSTART\r\n", $available, []],
+            'VAVAILABILITY DTSTART text' => ["DTSTART;VALUE=TEXT:foo\r\n", $available, []],
+            'VAVAILABILITY DTEND component' => ["BEGIN:DTEND\r\nEND:DTEND\r\n", $available, []],
+            'VAVAILABILITY DTSTART not a date' => ["DTSTART:garbage\r\n", $available, []],
+            'VAVAILABILITY DURATION not a duration' => ["DTSTART:20260105T000000Z\r\nDURATION:xx\r\n", $available, []],
+            'VAVAILABILITY DURATION component' => ["DTSTART:20260105T000000Z\r\nBEGIN:DURATION\r\nEND:DURATION\r\n", $available, []],
+            'RRULE component' => ['', str_replace('UID:b', "UID:b\r\nBEGIN:RRULE\r\nEND:RRULE", $available), $office],
+            'AVAILABLE DTEND component' => ['', str_replace('DTEND:20260105T170000Z', "BEGIN:DTEND\r\nEND:DTEND", $available), ['20260105T000000Z/20260106T000000Z']],
+            'AVAILABLE DTEND text' => ['', str_replace('DTEND:', 'DTEND;VALUE=TEXT:', $available), ['20260105T000000Z/20260106T000000Z']],
+            'AVAILABLE DURATION component' => ['', str_replace('DTEND:20260105T170000Z', "BEGIN:DURATION\r\nEND:DURATION", $available), ['20260105T000000Z/20260106T000000Z']],
+        ];
+    }
+
+    /**
+     * A child that is not the property these components expect is ignored,
+     * or makes its component one that cannot be placed, as a value that does
+     * not parse does: such a VAVAILABILITY is skipped, as an AVAILABLE is.
+     *
+     * @param list<string> $expected
+     */
+    #[DataProvider('childrenOfTheWrongKind')]
+    public function testAvailabilityChildOfTheWrongKindDoesNotThrow(string $vavailabilityChildren, string $available, array $expected): void
+    {
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('20260105T000000Z'),
+            new \DateTimeImmutable('20260106T000000Z'),
+            [],
+            new \DateTimeZone('UTC')
+        );
+        $gen->setVAvailability(Reader::read(
+            "BEGIN:VCALENDAR\r\nBEGIN:VAVAILABILITY\r\nUID:a\r\n".$vavailabilityChildren.$available."END:VAVAILABILITY\r\n"
+            ."BEGIN:VAVAILABILITY\r\nUID:c\r\nPRIORITY:9\r\nDTSTART:20270101T000000Z\r\nEND:VAVAILABILITY\r\nEND:VCALENDAR\r\n"
+        ));
+
+        self::assertSame($expected, array_map(strval(...), $gen->getResult()->VFREEBUSY->select('FREEBUSY')));
+    }
 }

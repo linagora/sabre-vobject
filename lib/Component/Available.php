@@ -39,8 +39,14 @@ class Available extends VObject\Component
         }
         $effectiveStart = $this->DTSTART->getDateTime();
         if (isset($this->DTEND)) {
+            if (!$this->DTEND instanceof VObject\Property\ICalendar\DateTime) {
+                throw new VObject\InvalidDataException('The DTEND of an AVAILABLE component must be a date or date-time');
+            }
             $effectiveEnd = $this->DTEND->getDateTime();
         } elseif (isset($this->DURATION)) {
+            if (!$this->DURATION instanceof VObject\Property) {
+                throw new VObject\InvalidDataException('The DURATION of an AVAILABLE component must be a duration');
+            }
             $effectiveEnd = $effectiveStart->add(VObject\DateTimeParser::parseDuration($this->DURATION));
         } else {
             // Neither DTEND nor DURATION: an instant, as for a VEVENT with a
