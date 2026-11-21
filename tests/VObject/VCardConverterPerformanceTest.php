@@ -30,4 +30,18 @@ class VCardConverterPerformanceTest extends TestCase
         self::assertCount(5000, array_unique(array_map(fn ($date) => $date->group, $output3->select('X-ABDATE'))));
         self::assertSame('20010001', (string) $output4->ANNIVERSARY);
     }
+
+    public function testManyKindsConvertInLinearTime(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\n"
+            .str_repeat("KIND:org\r\n", 10000).str_repeat("X-ABSHOWAS:COMPANY\r\n", 10000)."END:VCARD\r\n"
+        );
+
+        $start = microtime(true);
+        $output = $input->convert(Document::VCARD30);
+        // About 0.4 s when linear, 3 s when each extension copies every KIND.
+        self::assertLessThan(1.5, microtime(true) - $start);
+        self::assertCount(20000, $output->select('X-ABSHOWAS'));
+    }
 }
