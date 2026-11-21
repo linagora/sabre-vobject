@@ -484,8 +484,10 @@ class VCardConverter
             $newProperty->name = 'ANNIVERSARY';
             // An unknown VALUE is kept by convertProperty, but an ANNIVERSARY
             // is only a date-and-or-time or a text: the VALUE is written
-            // back from the class when it is needed.
-            unset($parameters['VALUE']);
+            // back from the class when it is needed. X-APPLE-OMIT-YEAR only
+            // marks the year of a vCard 3 date: it has no meaning on a text,
+            // and a date has lost it already.
+            unset($parameters['VALUE'], $parameters['X-APPLE-OMIT-YEAR']);
 
             return $newProperty;
         }

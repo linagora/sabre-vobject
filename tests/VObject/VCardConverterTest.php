@@ -1540,4 +1540,28 @@ VCF;
         // The native KIND:individual wins over the extension.
         self::assertSame([], $input->convert(Document::VCARD30)->select('X-ABSHOWAS'));
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function textAnniversaryWithAppleOmitYear(): array
+    {
+        return [
+            'ANNIVERSARY' => ['ANNIVERSARY;X-APPLE-OMIT-YEAR=1604;VALUE=TEXT:Wedding'],
+            'X-ANNIVERSARY' => ['X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604;VALUE=TEXT:Wedding'],
+            'labelled X-ABDATE' => ["ITEM1.X-ABDATE;X-APPLE-OMIT-YEAR=1604;VALUE=TEXT:Wedding\r\nITEM1.X-ABLABEL:_$!<Anniversary>!\$_"],
+        ];
+    }
+
+    #[DataProvider('textAnniversaryWithAppleOmitYear')]
+    public function testTextAnniversaryLosesAppleOmitYear(string $line): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nUID:a\r\n$line\r\nEND:VCARD\r\n");
+
+        $output = $input->convert(Document::VCARD40);
+
+        self::assertSame('Wedding', (string) $output->ANNIVERSARY, $output->serialize());
+        self::assertSame('TEXT', $output->ANNIVERSARY->getValueType());
+        self::assertFalse(isset($output->ANNIVERSARY['X-APPLE-OMIT-YEAR']), $output->serialize());
+    }
 }
