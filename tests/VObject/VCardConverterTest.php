@@ -1564,4 +1564,82 @@ VCF;
         self::assertSame('TEXT', $output->ANNIVERSARY->getValueType());
         self::assertFalse(isset($output->ANNIVERSARY['X-APPLE-OMIT-YEAR']), $output->serialize());
     }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function anniversaryAndItsTwinExtension(): array
+    {
+        return [
+            'extension first' => ['X-ANNIVERSARY;X-FOO=a:20000101', 'ANNIVERSARY;X-BAR=b:20000101', '20000101'],
+            'extension last' => ['ANNIVERSARY;X-BAR=b:20000101', 'X-ANNIVERSARY;X-FOO=a:20000101', '20000101'],
+            'anniversary in a group' => ['X-ANNIVERSARY;X-FOO=a:20000101', 'G.ANNIVERSARY;X-BAR=b:20000101', '20000101'],
+            'both with an omitted year' => [
+                'X-ANNIVERSARY;X-FOO=a;X-APPLE-OMIT-YEAR=1604:16040101',
+                'ANNIVERSARY;X-BAR=b;X-APPLE-OMIT-YEAR=1604:16040101',
+                '--0101',
+            ],
+            'without a year' => ['X-ANNIVERSARY;X-FOO=a:--0101', 'ANNIVERSARY;X-BAR=b:--0101', '--0101'],
+            'extension in a group' => ['G.X-ANNIVERSARY;X-FOO=a:20000101', 'ANNIVERSARY;X-BAR=b:20000101', '20000101'],
+        ];
+    }
+
+    #[DataProvider('anniversaryAndItsTwinExtension')]
+    public function testNativeAnniversaryWinsOverItsTwinThroughVCard3(string $first, string $second, string $value): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:a\r\n$first\r\n$second\r\nEND:VCARD\r\n");
+        $native = current($input->select('ANNIVERSARY'));
+
+        $output = $input->convert(Document::VCARD30)->convert(Document::VCARD40);
+
+        self::assertCount(1, $output->select('ANNIVERSARY'), $output->serialize());
+        self::assertSame([], $output->select('X-ANNIVERSARY'), $output->serialize());
+        $anniversary = current($output->select('ANNIVERSARY'));
+        self::assertSame($value, (string) $anniversary);
+        self::assertSame('b', (string) $anniversary['X-BAR'], $output->serialize());
+        self::assertFalse(isset($anniversary['X-FOO']), $output->serialize());
+        self::assertSame($native->group, $anniversary->group, $output->serialize());
+    }
+
+    public function testAnotherAnniversaryExtensionIsKeptInVCard3(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:a\r\n"
+            ."X-ANNIVERSARY;X-APPLE-OMIT-YEAR=2000:20000101\r\nX-ANNIVERSARY:20010101\r\nANNIVERSARY:20000101\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD30);
+
+        self::assertSame(
+            ['20000101', '20010101', '20000101'],
+            array_map(strval(...), $output->select('X-ANNIVERSARY')),
+            $output->serialize()
+        );
+    }
+
+    public function testFirstNativeAnniversaryStaysTheAnniversaryThroughVCard3(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:a\r\n"
+            ."X-ANNIVERSARY;X-FOO=a:20010101\r\nANNIVERSARY:20000101\r\nANNIVERSARY:20010101\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD30)->convert(Document::VCARD40);
+
+        self::assertSame(['20000101'], array_map(strval(...), $output->select('ANNIVERSARY')), $output->serialize());
+    }
+
+    public function testTextAnniversaryKeepsItsTwinExtensionInVCard3(): void
+    {
+        $input = Reader::read(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nUID:a\r\n"
+            ."ANNIVERSARY;VALUE=TEXT:wedding\r\nX-ANNIVERSARY;VALUE=TEXT:wedding\r\nEND:VCARD\r\n"
+        );
+
+        $output = $input->convert(Document::VCARD30);
+
+        // A text stays an ANNIVERSARY, which vCard 3 has not: the extension
+        // is the only one a vCard 3 client reads.
+        self::assertSame(['wedding'], array_map(strval(...), $output->select('X-ANNIVERSARY')), $output->serialize());
+    }
 }
