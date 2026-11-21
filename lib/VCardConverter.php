@@ -215,7 +215,9 @@ class VCardConverter
                 // KIND:org or group are written as one of these extensions:
                 // another one that says otherwise would become the KIND of
                 // the card when converted back to vCard 4.0.
-                $kind = strtolower((string) $input->KIND->getValue());
+                // The first KIND, read without $input->KIND, which copies
+                // them all for each extension.
+                $kind = strtolower((string) current($input->select('KIND'))->getValue());
                 $extensionKind = match (strtoupper($property->name.':'.$property->getValue())) {
                     'X-ABSHOWAS:COMPANY' => 'org',
                     'X-ADDRESSBOOKSERVER-KIND:GROUP' => 'group',

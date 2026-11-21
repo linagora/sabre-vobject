@@ -1531,4 +1531,13 @@ VCF;
             $output->serialize()
         );
     }
+
+    public function testKindIsReadAfterTheFirstOneIsRemoved(): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nKIND:org\r\nKIND:individual\r\nX-ABSHOWAS:COMPANY\r\nEND:VCARD\r\n");
+        $input->remove($input->select('KIND')[0]);
+
+        // The native KIND:individual wins over the extension.
+        self::assertSame([], $input->convert(Document::VCARD30)->select('X-ABSHOWAS'));
+    }
 }
