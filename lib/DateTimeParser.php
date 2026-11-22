@@ -80,6 +80,73 @@ class DateTimeParser
     }
 
     /**
+     * Returns the jCal form (RFC 7265 section 3.3.5) of an iCalendar
+     * DATE-TIME: the same as
+     * parseDateTime($dt, $tz)->format('Y-m-d\\TH:i:s'), plus the Z of a UTC
+     * value. Returns null if $dt does not have the form of a DATE-TIME.
+     *
+     * The digits are reformatted as they are. A parse only moves them for a
+     * local time in a spring-forward gap, so the value is parsed when $tz
+     * has a transition near it.
+     *
+     * @throws InvalidDataException
+     */
+    public static function toJsonDateTime(string $dt, ?\DateTimeZone $tz = null): ?string
+    {
+        if (1 !== preg_match(self::DATE_TIME_REGEX, $dt, $matches)) {
+            return null;
+        }
+        if (!self::isExistingDate($matches[1], $matches[2], $matches[3])) {
+            throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
+        }
+
+        if ('Z' !== $matches[7] && null !== $tz) {
+            // The local digits read as if they were UTC: the instant they
+            // stand for is at most the zone's UTC offset away, and a gap is
+            // at most a day long. Two days on each side cover both.
+            $localAsUtc = self::utcTimestamp((int) $matches[1], (int) $matches[2], (int) $matches[3], (int) $matches[4], (int) $matches[5], (int) $matches[6]);
+            if (self::hasTransitionBetween($tz, $localAsUtc - 2 * 86400, $localAsUtc + 2 * 86400)) {
+                return self::parseDateTime($dt, $tz)->format('Y-m-d\\TH:i:s');
+            }
+        }
+
+        return $matches[1].'-'.$matches[2].'-'.$matches[3].'T'.$matches[4].':'.$matches[5].':'.$matches[6].$matches[7];
+    }
+
+    /**
+     * Returns the jCal form (RFC 7265 section 3.3.4) of an iCalendar DATE:
+     * the same as parseDate($date)->format('Y-m-d'). Returns null if $date
+     * does not have the form of a DATE.
+     *
+     * @throws InvalidDataException
+     */
+    public static function toJsonDate(string $date): ?string
+    {
+        if (1 !== preg_match(self::DATE_REGEX, $date, $matches)) {
+            return null;
+        }
+        if (!self::isExistingDate($matches[1], $matches[2], $matches[3])) {
+            throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
+        }
+
+        return $matches[1].'-'.$matches[2].'-'.$matches[3];
+    }
+
+    /**
+     * gmmktime() for any year: gmmktime() reads the years 0 to 100 as 2000
+     * to 2069 and 1970 to 2000. Such a year is moved by 400 years, the
+     * period of the Gregorian calendar (146097 days).
+     */
+    private static function utcTimestamp(int $year, int $month, int $day, int $hour = 0, int $minute = 0, int $second = 0): int
+    {
+        if ($year >= 0 && $year <= 100) {
+            return (int) gmmktime($hour, $minute, $second, $month, $day, $year + 400) - 146097 * 86400;
+        }
+
+        return (int) gmmktime($hour, $minute, $second, $month, $day, $year);
+    }
+
+    /**
      * Tells if a day exists in the calendar (RFC 5545 section 3.3.4): no
      * day 00, no February 30, no June 31... DateTimeImmutable would move
      * such a day to the next month.
@@ -157,18 +224,50 @@ class DateTimeParser
      */
     private static function hasTransitionNear(\DateTimeZone $tz, int $timestamp): bool
     {
-        $year = (int) gmdate('Y', $timestamp);
+        return self::hasTransitionBetween($tz, $timestamp - 86401, $timestamp + 2);
+    }
+
+    /**
+     * Tells if $tz may have a transition in [$from, $to]. A zone that is a
+     * mere UTC offset or an abbreviation has none.
+     */
+    private static function hasTransitionBetween(\DateTimeZone $tz, int $from, int $to): bool
+    {
+        $lastYear = (int) gmdate('Y', $to);
+        for ($year = (int) gmdate('Y', $from); $year <= $lastYear; ++$year) {
+            $transitions = self::transitionsOfYear($tz, $year);
+            if (null === $transitions) {
+                return false;
+            }
+            foreach ($transitions as $transition) {
+                if ($transition >= $from && $transition <= $to) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns the cached transition timestamps of $tz in a UTC year, with a
+     * margin of two days on each side, or null if $tz has no transitions.
+     *
+     * @return list<int>|null
+     */
+    private static function transitionsOfYear(\DateTimeZone $tz, int $year): ?array
+    {
         $key = $tz->getName().'|'.$year;
 
         if (!isset(self::$transitionCache[$key])) {
             $transitions = $tz->getTransitions(
-                gmmktime(0, 0, 0, 1, 1, $year) - 2 * 86400,
-                gmmktime(0, 0, 0, 1, 1, $year + 1) + 2 * 86400
+                self::utcTimestamp($year, 1, 1) - 2 * 86400,
+                self::utcTimestamp($year + 1, 1, 1) + 2 * 86400
             );
             if (!is_array($transitions)) {
                 // An offset or an abbreviation: nothing is cached, as such a
                 // zone can share its name with a zone that has transitions.
-                return false;
+                return null;
             }
             if (count(self::$transitionCache) >= self::TRANSITION_CACHE_LIMIT) {
                 self::$transitionCache = [];
@@ -176,13 +275,7 @@ class DateTimeParser
             self::$transitionCache[$key] = array_column($transitions, 'ts');
         }
 
-        foreach (self::$transitionCache[$key] as $transition) {
-            if ($transition >= $timestamp - 86401 && $transition <= $timestamp + 2) {
-                return true;
-            }
-        }
-
-        return false;
+        return self::$transitionCache[$key];
     }
 
     /**

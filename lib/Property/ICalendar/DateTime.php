@@ -286,27 +286,40 @@ class DateTime extends Property
      */
     public function getJsonValue(): array
     {
-        $dts = $this->getDateTimes();
         $hasTime = $this->hasTime();
-        // Only a value written in UTC gets a Z: a value with a TZID is a
-        // local time, even when the TZID could not be resolved (and was
-        // replaced by the default time zone). This is decided for each
-        // value, as a multi-valued property may mix both forms.
-        $parts = array_values($this->getParts());
+        // The time zone of getDateTimes(): TZID only applies to DATE-TIME
+        // values.
+        $timeZone = null;
+        $tzid = $this['TZID'];
+        if ($tzid && $hasTime) {
+            $timeZone = TimeZoneUtil::getTimeZone((string) $tzid, $this->root);
+        }
 
-        return array_map(
-            function (\DateTimeInterface $dt, int $i) use ($hasTime, $parts) {
-                if ($hasTime) {
-                    $isUtc = str_ends_with(strtoupper((string) ($parts[$i] ?? '')), 'Z');
-
-                    return $dt->format('Y-m-d\\TH:i:s').($isUtc ? 'Z' : '');
+        $values = [];
+        foreach ($this->getParts() as $part) {
+            $part = (string) $part;
+            // A value of the form of the value type is reformatted from its
+            // text, which gives the digits a parse would.
+            $value = $hasTime ? DateTimeParser::toJsonDateTime($part, $timeZone) : DateTimeParser::toJsonDate($part);
+            if (null === $value) {
+                // Any other value is read as getDateTimes() does.
+                $dt = DateTimeParser::parse($part, $timeZone);
+                if (!$dt instanceof \DateTimeImmutable) {
+                    throw new InvalidDataException('The supplied value ('.$part.') is not a correct '.$this->getValueType());
                 }
+                // Only a value written in UTC gets a Z: a value with a TZID
+                // is a local time, even when the TZID could not be resolved
+                // (and was replaced by the default time zone). This is
+                // decided for each value, as a multi-valued property may mix
+                // both forms.
+                $value = $hasTime
+                    ? $dt->format('Y-m-d\\TH:i:s').(str_ends_with(strtoupper($part), 'Z') ? 'Z' : '')
+                    : $dt->format('Y-m-d');
+            }
+            $values[] = $value;
+        }
 
-                return $dt->format('Y-m-d');
-            },
-            $dts,
-            array_keys($dts)
-        );
+        return $values;
     }
 
     /**
