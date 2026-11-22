@@ -539,10 +539,19 @@ class DateTimeParser
      */
     public static function parseVCardTime(string $date): array
     {
+        // The forms RFC 6350 section 4.3.2 lists, where a part is left out on
+        // the left only, and HH-SS, which reads and writes back as is. A dash
+        // always stands for a part that follows it.
         $regex = '/^
-            (?<hour> [0-9]{2} | -)
-            (?<minute> [0-9]{2} | -)?
-            (?<second> [0-9]{2})?
+            (?|
+                (?<hour> [0-9]{2}) (?<minute> [0-9]{2}) (?<second> [0-9]{2}) # HHMMSS
+                | ([0-9]{2}) ([0-9]{2}) () # HHMM
+                | ([0-9]{2}) - () ([0-9]{2}) # HH-SS
+                | ([0-9]{2}) () () # HH
+                | () - ([0-9]{2}) ([0-9]{2}) # -MMSS
+                | () - ([0-9]{2}) () # -MM
+                | () -- () ([0-9]{2}) # --SS
+            )
 
             (?: \.[0-9]{3})? # milliseconds
             (?P<timezone> # timezone offset

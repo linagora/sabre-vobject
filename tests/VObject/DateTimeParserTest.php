@@ -918,6 +918,10 @@ class DateTimeParserTest extends TestCase
             'basic HHMM' => ['1022', '10', '22', null, null],
             'basic HH-SS' => ['10-22', '10', null, '22', null],
             'basic --SS' => ['--33', null, null, '33', null],
+            'basic HHMMSS' => ['102233', '10', '22', '33', null],
+            'basic HH with an offset' => ['10-0500', '10', null, null, '-0500'],
+            'basic -MMSS' => ['-2233', null, '22', '33', null],
+            'basic -MM in UTC' => ['-22Z', null, '22', null, 'Z'],
         ];
     }
 
@@ -939,6 +943,11 @@ class DateTimeParserTest extends TestCase
             'no minute after the colon' => ['10:'],
             'no second after the colon' => ['10:22:'],
             'three digits' => ['10:223'],
+            'a dash after the hour' => ['10-'],
+            'a dash after the hour, with an offset' => ['10-+0100'],
+            'a dash after the minute' => ['-22-'],
+            'a dash alone' => ['-'],
+            'two dashes alone' => ['--'],
         ];
     }
 
