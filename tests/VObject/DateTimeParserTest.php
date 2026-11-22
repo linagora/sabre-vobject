@@ -1059,4 +1059,19 @@ class DateTimeParserTest extends TestCase
             self::assertSame($parses, $check($value), $value);
         }
     }
+
+    public function testJsonDateTimeOfALocalTimeInASpringForwardGapIsTheParsedOne(): void
+    {
+        $tz = new \DateTimeZone('Europe/Paris');
+        self::assertSame('2026-03-29T03:30:00', DateTimeParser::toJsonDateTime('20260329T023000', $tz));
+        self::assertSame('2050-03-27T03:30:00', DateTimeParser::toJsonDateTime('20500327T023000', $tz));
+        self::assertSame('9999-03-28T03:30:00', DateTimeParser::toJsonDateTime('99990328T023000', $tz));
+        self::assertSame('0050-03-27T02:30:00', DateTimeParser::toJsonDateTime('00500327T023000', $tz));
+        self::assertSame('2026-03-29T02:30:00Z', DateTimeParser::toJsonDateTime('20260329T023000Z', $tz));
+        self::assertSame('2026-03-29T02:30:00', DateTimeParser::toJsonDateTime('20260329T023000'));
+        self::assertSame('2026-10-25T02:30:00', DateTimeParser::toJsonDateTime('20261025T023000', $tz));
+        self::assertNull(DateTimeParser::toJsonDateTime('20260329', $tz));
+        self::assertSame('2026-03-29', DateTimeParser::toJsonDate('20260329'));
+        self::assertNull(DateTimeParser::toJsonDate('20260329T023000'));
+    }
 }

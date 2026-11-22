@@ -582,4 +582,35 @@ class DateTimeTest extends TestCase
         self::assertFalse(isset($prop['TZID']));
         self::assertSame('20261101T061500Z', $prop->getValue());
     }
+
+    public function testJsonValueKeepsWhatAParseGives(): void
+    {
+        $vcal = new VCalendar();
+        $cases = [
+            // A local time in the spring-forward gap is moved by the parse.
+            [['TZID' => 'Europe/Paris'], '20260329T023000', ['2026-03-29T03:30:00']],
+            [['TZID' => 'Europe/Paris'], '20261025T023000,20260101T090000Z', ['2026-10-25T02:30:00', '2026-01-01T09:00:00Z']],
+            // A DATE written in a DATE-TIME property is read as a date in its
+            // zone: midnight did not exist on that day in Sao Paulo.
+            [['TZID' => 'America/Sao_Paulo'], '20181104', ['2018-11-04T01:00:00']],
+            [['VALUE' => 'DATE', 'TZID' => 'Europe/Paris'], '20260329,20260330T023000', ['2026-03-29', '2026-03-30']],
+            [[], '20260329T023000', ['2026-03-29T02:30:00']],
+        ];
+        foreach ($cases as [$parameters, $value, $expected]) {
+            $property = $vcal->createProperty('DTSTART', null, $parameters);
+            $property->setRawMimeDirValue($value);
+            self::assertSame($expected, $property->getJsonValue(), $value);
+        }
+
+        foreach (['20260230T090000', 'P1D', '2026032'] as $invalid) {
+            $property = $vcal->createProperty('DTSTART', null, ['TZID' => 'Europe/Paris']);
+            $property->setRawMimeDirValue($invalid);
+            try {
+                $property->getJsonValue();
+                self::fail($invalid);
+            } catch (InvalidDataException) {
+                self::assertTrue(true);
+            }
+        }
+    }
 }
