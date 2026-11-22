@@ -1041,6 +1041,7 @@ This release supports PHP 8.2 and up.
 * Reordering RRULE lists, or writing numbers with leading zeros (`COUNT=05`, `BYMONTHDAY=5,05`), is no longer a significant change
 * A CANCEL never carries a lower SEQUENCE than the stored one, and an absent SEQUENCE is read as 0
 * `FloatValue` is written with the fewest plain digits, with no exponent; an infinite value is written `1e999`
+* Parsing is faster: TZID lookups, DATE-TIME parsing in time zones with repeated hours, and the reading of properties and parameter values are cheaper
 
 ### Fixed
 * YEARLY RRULE with BYMONTH when DTSTART is in another month starts at the first valid date
@@ -1050,6 +1051,7 @@ This release supports PHP 8.2 and up.
 * iTIP: a REPLY copies the RECURRENCE-ID of the answered override; a CANCEL of one occurrence keeps every EXDATE line
 * iTIP: a CANCEL of an override without master marks it STATUS:CANCELLED instead of leaving no VEVENT (#121); a REPLY to a series with no instances no longer fails (#190)
 * iTIP: an EXDATE in another time zone declines the right instance; an empty PARTSTAT reads as NEEDS-ACTION; `DTSTART` of a wrong type is rejected
+* iTIP: a DATE EXDATE on a DATE-TIME series no longer sends a DECLINED REPLY for an instance that does not exist
 * Recurrence: no extra monthly occurrence at an UNTIL on a skipped day; instances at a repeated local time use their first occurrence (RFC 5545 3.3.5)
 * Recurrence: instance ends keep their exact duration across DST changes; an end before the start is taken as the start; overrides use their own DURATION and drop their recurrence properties
 * Recurrence: RDATE instances are yielded in chronological order, resolved in their own time zone, accept PERIOD values, and are all-day for an all-day event (#144)
@@ -1064,6 +1066,7 @@ This release supports PHP 8.2 and up.
 * A cloned document is the root of its own nodes
 * Free-busy: overrides, RDATE-only events and recurring AVAILABLE are counted; STATUS and TRANSP are read per instance (#125); malformed VFREEBUSY, empty or inverted intervals and AVAILABLE without DTSTART, DTEND or DURATION are ignored (#77)
 * VALARM: `isInTimeRange()` is bounded by the range, not by REPEAT; an alarm with no anchor throws `InvalidDataException`; `validate()` refuses a relative TRIGGER with nothing to relate to
+* VALARM: a TRIGGER related to an end that is before the start is taken at the start, so reminders of such events are found in the same calendar-query windows as their instances
 * VEVENT, VTODO and VJOURNAL `isInTimeRange()` ignore DTSTART, DUE or DTEND values that are not dates
 * Parser: quoted-printable is decoded once, a bare CR is dropped from TEXT and parameter values, a line `0` is no longer lost, and a vCard is read the same way wherever VERSION is (#140, #147, #154, #156)
 * Parser: properties named BEGIN or END, nested VCALENDAR/VCARD and a multi-valued VALUE parameter are rejected; nameless parameters are resolved before the property is created
@@ -1083,6 +1086,7 @@ This release supports PHP 8.2 and up.
 ### Security
 * A REQUEST or CANCEL is refused unless its sender organizes the stored event; it is also refused onto a stored object that is not only events
 * A REPLY from someone who is not an attendee no longer adds them to the event
+* A REPLY carrying thousands of RECURRENCE-IDs no longer holds a worker for minutes: the series is expanded once for all of them
 * jCal/jCard names and values can no longer inject properties or break the stored object with CR/LF or other separators
 * Parsing and serializing no longer exhaust memory or CPU on crafted input: parameter tokens are read one at a time, parameter value lists serialize in linear time, and RRULE scans stop after a 400-year cycle
 * A VALARM with a huge REPEAT and an RRULE with a huge INTERVAL or a SECONDLY AVAILABLE no longer stall time-range and free-busy requests
