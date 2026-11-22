@@ -311,4 +311,46 @@ BLA;
         self::assertFalse($alarm->isInTimeRange(new \DateTimeImmutable('2026-01-05', $utc), new \DateTimeImmutable('2026-01-06', $utc)));
         self::assertTrue($alarm->isInTimeRange(new \DateTimeImmutable('2026-01-10', $utc), new \DateTimeImmutable('2026-01-11', $utc)));
     }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function endlessComponents(): array
+    {
+        return [
+            'all-day VEVENT' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;VALUE=DATE:20260106\r\n%sEND:VEVENT\r\n", '2026-01-06T17:00:00Z'],
+            'timed VEVENT' => ["BEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260106T000000Z\r\n%sEND:VEVENT\r\n", '2026-01-05T17:00:00Z'],
+            'VTODO on a date' => ["BEGIN:VTODO\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;VALUE=DATE:20260106\r\n%sEND:VTODO\r\n", '2026-01-05T17:00:00Z'],
+        ];
+    }
+
+    #[DataProvider('endlessComponents')]
+    public function testTriggerRelatedToTheEndOfAComponentWithoutEnd(string $component, string $trigger): void
+    {
+        $alarm = "BEGIN:VALARM\r\nTRIGGER;RELATED=END:-PT7H\r\nACTION:DISPLAY\r\nDESCRIPTION:r\r\nEND:VALARM\r\n";
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n".sprintf($component, $alarm)."END:VCALENDAR\r\n");
+        $alarm = $vcal->getBaseComponent()->VALARM;
+        $expected = new \DateTimeImmutable($trigger);
+
+        self::assertEquals($expected, $alarm->getEffectiveTriggerTime());
+        self::assertTrue($alarm->isInTimeRange($expected->modify('-1 hour'), $expected->modify('+1 hour')));
+        self::assertFalse($alarm->isInTimeRange($expected->modify('-2 days'), $expected->modify('-1 hour')));
+    }
+
+    public function testTriggerRelatedToTheEndOfEachAllDayInstanceWithoutEnd(): void
+    {
+        $vcal = Reader::read(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART;VALUE=DATE:20260106\r\nRRULE:FREQ=DAILY;COUNT=2\r\n"
+            ."BEGIN:VALARM\r\nTRIGGER;RELATED=END:-PT7H\r\nACTION:DISPLAY\r\nDESCRIPTION:r\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        $iterator = new \Sabre\VObject\Recur\EventIterator($vcal, 'e1');
+
+        $triggers = [];
+        foreach ($iterator as $ignored) {
+            $triggers[] = $iterator->getEventObject()->VALARM->getEffectiveTriggerTime()->format('Y-m-d\TH:i:sP');
+        }
+
+        self::assertSame(['2026-01-06T17:00:00+00:00', '2026-01-07T17:00:00+00:00'], $triggers);
+    }
 }
