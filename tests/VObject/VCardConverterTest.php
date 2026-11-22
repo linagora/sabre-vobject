@@ -1642,4 +1642,33 @@ VCF;
         // is the only one a vCard 3 client reads.
         self::assertSame(['wedding'], array_map(strval(...), $output->select('X-ANNIVERSARY')), $output->serialize());
     }
+
+    /**
+     * @return array<string, array{string, string, string, string}>
+     */
+    public static function yearlessDateWithItsOwnAppleOmitYear(): array
+    {
+        return [
+            'BDAY' => ['BDAY;X-APPLE-OMIT-YEAR=1604:--0203', 'BDAY', 'BDAY', '1604-02-03'],
+            'BDAY with another year' => ['BDAY;X-APPLE-OMIT-YEAR=2000:--0203', 'BDAY', 'BDAY', '1604-02-03'],
+            'BDAY with a time' => ['BDAY;X-APPLE-OMIT-YEAR=1604:--0203T1000', 'BDAY', 'BDAY', '16040203T1000'],
+            'ANNIVERSARY' => ['ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:--0203', 'X-ANNIVERSARY', 'ANNIVERSARY', '1604-02-03'],
+        ];
+    }
+
+    #[DataProvider('yearlessDateWithItsOwnAppleOmitYear')]
+    public function testYearlessDateKeepsOneAppleOmitYear(string $line, string $name3, string $name4, string $value3): void
+    {
+        $input = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:foo\r\n$line\r\nEND:VCARD\r\n");
+
+        $vcard3 = Reader::read($input->convert(Document::VCARD30)->serialize());
+        $property = current($vcard3->select($name3));
+        self::assertSame($value3, (string) $property, $vcard3->serialize());
+        self::assertSame(['1604'], $property['X-APPLE-OMIT-YEAR']->getParts(), $vcard3->serialize());
+
+        $vcard4 = $vcard3->convert(Document::VCARD40);
+        $property = current($vcard4->select($name4));
+        self::assertSame(substr($line, strrpos($line, ':') + 1), (string) $property, $vcard4->serialize());
+        self::assertFalse(isset($property['X-APPLE-OMIT-YEAR']), $vcard4->serialize());
+    }
 }

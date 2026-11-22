@@ -173,6 +173,10 @@ class VCardConverter
                         : '1604'.$parts['month'].$parts['date'].$time;
                     $newProperty->setValue($newValue);
                     $newProperty['X-APPLE-OMIT-YEAR'] = '1604';
+                    // The source's own X-APPLE-OMIT-YEAR marks no year on a
+                    // value without one: added to this one, it would make it
+                    // 1604,1604, which marks no year either.
+                    unset($parameters['X-APPLE-OMIT-YEAR']);
                 }
 
                 if ('ANNIVERSARY' === $newProperty->name) {
