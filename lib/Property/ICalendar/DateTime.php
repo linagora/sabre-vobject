@@ -336,15 +336,13 @@ class DateTime extends Property
      */
     private static function firstInvalidValue(array $values, string $valueType): ?string
     {
+        // Only the syntax is checked: once it is right, building the date
+        // (with its repeated-hour check) cannot fail.
+        $isDate = 'DATE' === $valueType;
         foreach ($values as $value) {
-            try {
-                if ('DATE' === $valueType) {
-                    DateTimeParser::parseDate((string) $value);
-                } else {
-                    DateTimeParser::parseDateTime((string) $value);
-                }
-            } catch (InvalidDataException) {
-                return (string) $value;
+            $value = (string) $value;
+            if (!($isDate ? DateTimeParser::isDate($value) : DateTimeParser::isDateTime($value))) {
+                return $value;
             }
         }
 
