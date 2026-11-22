@@ -57,6 +57,12 @@ class VAlarm extends VObject\Component
                     $effectiveTrigger = $effectiveTrigger->add($duration);
                 } else {
                     $effectiveTrigger = self::getAnchor($parentComponent, 'DTSTART');
+                    // An event starting on a date without an end lasts that
+                    // day (RFC 5545 section 3.6.1), as VEvent::isInTimeRange
+                    // and EventIterator take it. A VTODO has no such default.
+                    if ('VEVENT' === $parentComponent->name && !$parentComponent->DTSTART->hasTime()) {
+                        $effectiveTrigger = $effectiveTrigger->modify('+1 day');
+                    }
                 }
                 // An end before the start is invalid (RFC 5545 sections
                 // 3.8.2.2 and 3.8.2.3): the component is taken as lasting
