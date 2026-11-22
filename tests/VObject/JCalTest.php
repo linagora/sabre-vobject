@@ -185,4 +185,12 @@ class JCalTest extends TestCase
 
         self::assertSame('00:30', $calendar->VTODO->{'X-A'}->jsonSerialize()[3]);
     }
+
+    public function testTimeWithADashAfterTheHourIsInvalid(): void
+    {
+        $calendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VTODO\r\nUID:a\r\nX-A;VALUE=TIME:10-\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        // It was written to jCal as 10, without its dash.
+        self::assertContains(3, array_column($calendar->VTODO->{'X-A'}->validate(), 'level'));
+    }
 }
