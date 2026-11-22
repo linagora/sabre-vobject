@@ -34,6 +34,12 @@ class DateTime extends Property
     public string $delimiter = ',';
 
     /**
+     * The names of the time zones that setDateTimes() writes as UTC, with a
+     * Z and no TZID.
+     */
+    public const UTC_ZONE_NAMES = ['UTC', 'GMT', 'Z', '+00:00'];
+
+    /**
      * Sets a multi-valued property.
      *
      * You may also specify DateTime objects here.
@@ -214,7 +220,7 @@ class DateTime extends Property
                 }
                 if (is_null($tz)) {
                     $tz = $d->getTimeZone();
-                    $isUtc = in_array($tz->getName(), ['UTC', 'GMT', 'Z', '+00:00'], true);
+                    $isUtc = in_array($tz->getName(), self::UTC_ZONE_NAMES, true);
                     if (!$isUtc) {
                         $this->offsetSet('TZID', $tz->getName());
                     }
