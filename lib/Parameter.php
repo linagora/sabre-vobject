@@ -201,43 +201,44 @@ class Parameter extends Node implements \Stringable
         // Each value is encoded on its own and the list is joined once:
         // concatenating in an array_reduce() callback copied the whole
         // string for every value (quadratic time on long lists).
-        return $this->name.'='.implode(',', array_map(
-            function ($item) {
-                $item = (string) $item;
+        $encoded = [];
+        foreach ($value as $item) {
+            $item = (string) $item;
 
-                // If there's no special characters in the string, we'll use the simple
-                // format.
-                //
-                // The list of special characters is defined as:
-                //
-                // Any character except CONTROL, DQUOTE, ";", ":", ","
-                //
-                // by the iCalendar spec:
-                // https://tools.ietf.org/html/rfc5545#section-3.1
-                //
-                // And we add ^ to that because of:
-                // https://tools.ietf.org/html/rfc6868
-                //
-                // But we've found that iCal (7.0, shipped with OSX 10.9)
-                // severely trips on + characters not being quoted, so we
-                // added + as well.
-                if (!preg_match('#(?: [\n":;\^,\+] )#x', $item)) {
-                    return $item;
-                }
+            // If there's no special characters in the string, we'll use the simple
+            // format.
+            //
+            // The list of special characters is defined as:
+            //
+            // Any character except CONTROL, DQUOTE, ";", ":", ","
+            //
+            // by the iCalendar spec:
+            // https://tools.ietf.org/html/rfc5545#section-3.1
+            //
+            // And we add ^ to that because of:
+            // https://tools.ietf.org/html/rfc6868
+            //
+            // But we've found that iCal (7.0, shipped with OSX 10.9)
+            // severely trips on + characters not being quoted, so we
+            // added + as well.
+            if (false === strpbrk($item, "\n\":;^,+")) {
+                $encoded[] = $item;
+                continue;
+            }
 
-                // Enclosing in double-quotes, and using RFC6868 for encoding any
-                // special characters
-                return '"'.strtr(
-                    $item,
-                    [
-                        '^' => '^^',
-                        "\n" => '^n',
-                        '"' => '^\'',
-                    ]
-                ).'"';
-            },
-            $value
-        ));
+            // Enclosing in double-quotes, and using RFC6868 for encoding any
+            // special characters
+            $encoded[] = '"'.strtr(
+                $item,
+                [
+                    '^' => '^^',
+                    "\n" => '^n',
+                    '"' => '^\'',
+                ]
+            ).'"';
+        }
+
+        return $this->name.'='.implode(',', $encoded);
     }
 
     /**
