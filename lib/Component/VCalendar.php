@@ -308,6 +308,13 @@ class VCalendar extends VObject\Document
         $stripTimezones = function (Component $component) use ($timeZone, &$stripTimezones): Component {
             foreach ($component->children() as $componentChild) {
                 if ($componentChild instanceof Property\ICalendar\DateTime && $componentChild->hasTime()) {
+                    $utcParts = self::utcParts($componentChild);
+                    if (null !== $utcParts) {
+                        // Reading back and writing a UTC value gives its
+                        // text again.
+                        $componentChild->setParts($utcParts);
+                        continue;
+                    }
                     $dt = $componentChild->getDateTimes($timeZone);
                     // We only need to update the first timezone, because
                     // setDateTimes will match all other timezones to the
@@ -387,7 +394,7 @@ class VCalendar extends VObject\Document
 
             while ($it->valid() && $it->getDTStart() < $end) {
                 if ($it->getDTEnd() > $start) {
-                    $newChildren[] = self::withoutInvertedEnd($stripTimezones($it->getEventObject()));
+                    $newChildren[] = self::withoutInvertedEnd($stripTimezones($it->getEventObjectInUtc()));
                 }
                 $it->next();
             }
@@ -404,7 +411,7 @@ class VCalendar extends VObject\Document
     private static function withoutInvertedEnd(VEvent $event): VEvent
     {
         if ($event->DTEND instanceof Property\ICalendar\DateTime && $event->DTSTART instanceof Property\ICalendar\DateTime
-            && $event->DTEND->getDateTime() < $event->DTSTART->getDateTime()) {
+            && self::endsBeforeItStarts($event->DTSTART, $event->DTEND)) {
             $end = clone $event->DTSTART;
             $end->name = 'DTEND';
             unset($event->DTEND);
@@ -414,6 +421,42 @@ class VCalendar extends VObject\Document
         }
 
         return $event;
+    }
+
+    private static function endsBeforeItStarts(Property\ICalendar\DateTime $start, Property\ICalendar\DateTime $end): bool
+    {
+        $startParts = $start->hasTime() ? self::utcParts($start) : null;
+        $endParts = $end->hasTime() ? self::utcParts($end) : null;
+        if (null !== $startParts && null !== $endParts) {
+            // YYYYMMDDTHHMMSSZ texts sort as their instants.
+            return $endParts[0] < $startParts[0];
+        }
+
+        return $end->getDateTime() < $start->getDateTime();
+    }
+
+    /**
+     * Returns the parts of a DATE-TIME property that has no TZID and whose
+     * values (at least one) are all correct DATE-TIMEs in UTC, as strings.
+     * Returns null for any other property.
+     *
+     * @return non-empty-list<string>|null
+     */
+    private static function utcParts(Property\ICalendar\DateTime $property): ?array
+    {
+        if (isset($property['TZID']) || [] === $property->getParts()) {
+            return null;
+        }
+        $parts = [];
+        foreach ($property->getParts() as $part) {
+            $part = (string) $part;
+            if (!str_ends_with($part, 'Z') || !VObject\DateTimeParser::isDateTime($part)) {
+                return null;
+            }
+            $parts[] = $part;
+        }
+
+        return $parts;
     }
 
     /**

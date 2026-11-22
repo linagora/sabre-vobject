@@ -401,6 +401,31 @@ class EventIterator implements \Iterator
      */
     public function getEventObject(): VEvent
     {
+        return $this->buildEventObject(false);
+    }
+
+    /**
+     * getEventObject() for VCalendar::expand(): the DTSTART, DTEND and
+     * RECURRENCE-ID of an instance from the master are written in UTC
+     * whenever that is the text expand() would make of them by reading back
+     * their local time, so that it has nothing to parse again.
+     *
+     * @internal
+     *
+     * @throws MaxInstancesExceededException
+     * @throws InvalidDataException
+     */
+    public function getEventObjectInUtc(): VEvent
+    {
+        return $this->buildEventObject(true);
+    }
+
+    /**
+     * @throws MaxInstancesExceededException
+     * @throws InvalidDataException
+     */
+    private function buildEventObject(bool $inUtc): VEvent
+    {
         if ($this->currentOverriddenEvent) {
             // An instance does not recur: recurrence properties of an
             // overridden instance are dropped, as from the master's copies.
@@ -432,6 +457,13 @@ class EventIterator implements \Iterator
         );
         // @codeCoverageIgnoreEnd
 
+        // A timed start with a DATE end: the end below is floating when the
+        // start, as written, is. That depends on the text of the start, so
+        // both are written as they always were.
+        if (isset($event->DTEND) && $event->DTSTART->hasTime() && !$event->DTEND->hasTime()) {
+            $inUtc = false;
+        }
+
         // A floating time is written as the wall-clock time in the reference
         // time zone: an RDATE instance keeps the time zone of its RDATE, a
         // TZID or UTC, which must not be written as floating time.
@@ -439,7 +471,7 @@ class EventIterator implements \Iterator
         if ($event->DTSTART->hasTime() && $event->DTSTART->isFloating()) {
             $dtStart = $dtStart->setTimezone($this->timeZone);
         }
-        $event->DTSTART->setDateTime($dtStart, $event->DTSTART->isFloating());
+        $this->setInstanceDate($event->DTSTART, $dtStart, $event->DTSTART->isFloating(), $inUtc);
         if (isset($event->DTEND)) {
             $dtEnd = $this->getDtEnd();
             $floating = $event->DTEND->isFloating();
@@ -452,13 +484,78 @@ class EventIterator implements \Iterator
             if ($event->DTEND->hasTime() && $floating) {
                 $dtEnd = $dtEnd->setTimezone($this->timeZone);
             }
-            $event->DTEND->setDateTime(self::notAfterYear9999($dtEnd), $floating);
+            $this->setInstanceDate($event->DTEND, self::notAfterYear9999($dtEnd), $floating, $inUtc);
         }
         $recurid = clone $event->DTSTART;
         $recurid->name = 'RECURRENCE-ID';
         $event->add($recurid);
 
         return $event;
+    }
+
+    /**
+     * Sets a date of an instance from the master, in UTC with $inUtc when
+     * VCalendar::expand() would read it back as the same instant.
+     */
+    private function setInstanceDate(Property\ICalendar\DateTime $property, \DateTimeImmutable $date, bool $floating, bool $inUtc): void
+    {
+        if ($inUtc && $property->hasTime() && $this->readsBackAsTheSameInstant($property, $date, $floating)) {
+            $property->setDateTime($date->setTimezone(new \DateTimeZone('UTC')));
+
+            return;
+        }
+        $property->setDateTime($date, $floating);
+    }
+
+    /**
+     * Zone names whose TZID resolves back to the same zone, see
+     * readsBackAsTheSameInstant().
+     *
+     * @var array<string, bool>
+     */
+    private array $zoneResolvesToItself = [];
+
+    /**
+     * Tells if writing $date as setDateTime($date, $floating) does, then
+     * reading it back as VCalendar::expand() does, gives $date's instant.
+     *
+     * The local text is read back in the reference zone when floating, else
+     * in the zone its TZID resolves to. setDateTimes() writes a local time
+     * that would read back as another instant (the second occurrence of a
+     * repeated hour) in UTC. So the instant is kept when the zone read back
+     * is the zone written and both texts have a 4-digit year.
+     */
+    private function readsBackAsTheSameInstant(Property\ICalendar\DateTime $property, \DateTimeImmutable $date, bool $floating): bool
+    {
+        if ($floating) {
+            // getEventObject() moved a floating $date to the reference zone,
+            // the zone expand() reads it back in.
+            $zone = $this->timeZone;
+        } else {
+            $zone = $date->getTimezone();
+        }
+        foreach ([$date->setTimezone($zone), $date->setTimezone(new \DateTimeZone('UTC'))] as $text) {
+            $year = (int) $text->format('Y');
+            if ($year < 0 || $year > 9999) {
+                return false;
+            }
+        }
+        if ($floating) {
+            return $date->getTimezone()->getName() === $zone->getName();
+        }
+
+        $name = $zone->getName();
+        if (in_array($name, Property\ICalendar\DateTime::UTC_ZONE_NAMES, true)) {
+            return true;
+        }
+        // The TZID resolves through the finders, the VTIMEZONEs of the
+        // calendar, then the default zone: it can name another zone.
+        if (!isset($this->zoneResolvesToItself[$name])) {
+            $resolved = TimeZoneUtil::getTimeZone($name, $property->root);
+            $this->zoneResolvesToItself[$name] = $resolved->__serialize() === $zone->__serialize();
+        }
+
+        return $this->zoneResolvesToItself[$name];
     }
 
     /**

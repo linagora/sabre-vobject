@@ -1123,4 +1123,26 @@ ICS);
         self::assertSame($end, (string) $events[1]->DTEND);
         VObject\Reader::read($expanded->serialize());
     }
+
+    public function testExpandWritesInstancesInUtcAroundARepeatedHour(): void
+    {
+        $expected = ['DTSTART:20261025T003000Z', 'DTEND:20261025T020000Z', 'RECURRENCE-ID:20261025T003000Z',
+            'DTSTART:20261026T013000Z', 'DTEND:20261026T030000Z', 'RECURRENCE-ID:20261026T013000Z'];
+        foreach ([
+            [';TZID=Europe/Paris', null],
+            ['', new \DateTimeZone('Europe/Paris')],
+        ] as [$tzid, $reference]) {
+            $vcal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTAMP:20260101T000000Z\r\n"
+                ."DTSTART$tzid:20261025T023000\r\nDTEND$tzid:20261025T030000\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+            $expanded = $vcal->expand(new \DateTimeImmutable('2026-10-01Z'), new \DateTimeImmutable('2026-11-01Z'), $reference);
+            $lines = [];
+            foreach ($expanded->VEVENT as $vevent) {
+                self::assertSame('20260101T000000Z', (string) $vevent->DTSTAMP);
+                foreach (['DTSTART', 'DTEND', 'RECURRENCE-ID'] as $name) {
+                    $lines[] = rtrim($vevent->$name->serialize());
+                }
+            }
+            self::assertSame($expected, $lines, $tzid);
+        }
+    }
 }
