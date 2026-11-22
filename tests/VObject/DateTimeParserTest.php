@@ -1032,4 +1032,31 @@ class DateTimeParserTest extends TestCase
 
         self::assertContains(3, array_column($card->validate(), 'level'));
     }
+
+    public static function syntaxCheckValues(): array
+    {
+        return [
+            ['20261122T093000'], ['20261122T093000Z'], ['00000229T000000'], ['99991231T235959Z'],
+            ['20260230T093000'], ['20261122T243000'], ['20261122T096000'], ['20261122T093000z'],
+            ['20261122T093000Z '], ["20261122T093000\n"], ['20261122'], ['20260229'], ['00000229'],
+            ['20261322'], ['20261100'], ['2026112'], [''], ['P1D'], ['2026-11-22'],
+        ];
+    }
+
+    #[DataProvider('syntaxCheckValues')]
+    public function testSyntaxChecksAcceptWhatTheParsersAccept(string $value): void
+    {
+        foreach ([
+            [DateTimeParser::isDateTime(...), DateTimeParser::parseDateTime(...)],
+            [DateTimeParser::isDate(...), DateTimeParser::parseDate(...)],
+        ] as [$check, $parse]) {
+            try {
+                $parse($value);
+                $parses = true;
+            } catch (InvalidDataException) {
+                $parses = false;
+            }
+            self::assertSame($parses, $check($value), $value);
+        }
+    }
 }

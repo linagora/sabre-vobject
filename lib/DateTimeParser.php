@@ -18,6 +18,17 @@ use DateTimeImmutable;
 class DateTimeParser
 {
     /**
+     * An iCalendar DATE-TIME (RFC 5545 section 3.3.5): YYYYMMDD + "T" +
+     * hhmmss, with an optional Z.
+     */
+    private const DATE_TIME_REGEX = '/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([01][0-9]|2[0-3])([0-5][0-9])([0-5][0-9])([Z]?)\z/';
+
+    /**
+     * An iCalendar DATE (RFC 5545 section 3.3.4): YYYYMMDD.
+     */
+    private const DATE_REGEX = '/^([0-9]{4})([0-1][0-9])([0-3][0-9])\z/';
+
+    /**
      * Parses an iCalendar (rfc5545) formatted datetime and returns a
      * DateTimeImmutable object.
      *
@@ -29,8 +40,7 @@ class DateTimeParser
      */
     public static function parseDateTime(string $dt, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
-        // Format is YYYYMMDD + "T" + hhmmss
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([01][0-9]|2[0-3])([0-5][0-9])([0-5][0-9])([Z]?)\z/', $dt, $matches);
+        $result = preg_match(self::DATE_TIME_REGEX, $dt, $matches);
 
         if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
@@ -47,6 +57,26 @@ class DateTimeParser
         }
 
         return self::firstOccurrenceOfLocalTime($date);
+    }
+
+    /**
+     * Tells if $dt is a correct iCalendar DATE-TIME, the values that
+     * parseDateTime() accepts, without building a date.
+     */
+    public static function isDateTime(string $dt): bool
+    {
+        return 1 === preg_match(self::DATE_TIME_REGEX, $dt, $matches)
+            && self::isExistingDate($matches[1], $matches[2], $matches[3]);
+    }
+
+    /**
+     * Tells if $date is a correct iCalendar DATE, the values that
+     * parseDate() accepts, without building a date.
+     */
+    public static function isDate(string $date): bool
+    {
+        return 1 === preg_match(self::DATE_REGEX, $date, $matches)
+            && self::isExistingDate($matches[1], $matches[2], $matches[3]);
     }
 
     /**
@@ -162,8 +192,7 @@ class DateTimeParser
      */
     public static function parseDate(string $date, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
-        // Format is YYYYMMDD
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])\z/', $date, $matches);
+        $result = preg_match(self::DATE_REGEX, $date, $matches);
 
         if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
