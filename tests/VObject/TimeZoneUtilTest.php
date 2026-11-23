@@ -677,4 +677,91 @@ HI;
         self::assertSame('Europe/Paris', TimeZoneUtil::getTimeZone('Europe/Paris')->getName());
         self::assertSame('Europe/Paris', TimeZoneUtil::getTimeZone('Europe/Paris')->getName());
     }
+
+    /**
+     * Each zone has its own offset and a DST rule no PHP zone follows, so
+     * that it is matched against all the PHP zones. Past 100 of them in
+     * rotation, the process-wide cache used to empty itself before a zone
+     * was used again, and every lookup scanned all the PHP zones.
+     */
+    public function testManyCustomVTimezonesInRotationAreGuessedOncePerDocument(): void
+    {
+        $zones = 150;
+        $overrides = 300;
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:test\r\n";
+        for ($i = 0; $i < $zones; ++$i) {
+            $standard = sprintf('+01%02d', $i % 60);
+            $daylight = sprintf('+02%02d', $i % 60);
+            $month = 2 + intdiv($i, 60);
+            $ics .= "BEGIN:VTIMEZONE\r\nTZID:X-$i\r\n"
+                ."BEGIN:STANDARD\r\nDTSTART:19701025T030000\r\nRRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU\r\n"
+                ."TZOFFSETFROM:$daylight\r\nTZOFFSETTO:$standard\r\nEND:STANDARD\r\n"
+                ."BEGIN:DAYLIGHT\r\nDTSTART:19700201T020000\r\nRRULE:FREQ=YEARLY;BYMONTH=$month;BYDAY=1SU\r\n"
+                ."TZOFFSETFROM:$standard\r\nTZOFFSETTO:$daylight\r\nEND:DAYLIGHT\r\nEND:VTIMEZONE\r\n";
+        }
+        $ics .= "BEGIN:VEVENT\r\nUID:a\r\nDTSTART;TZID=X-0:20260101T100000\r\nDTEND;TZID=X-0:20260101T110000\r\n"
+            ."RRULE:FREQ=DAILY;COUNT=$overrides\r\nEND:VEVENT\r\n";
+        $first = new \DateTimeImmutable('2026-01-01');
+        for ($i = 0; $i < $overrides; ++$i) {
+            $tzid = 'X-'.($i % $zones);
+            $day = $first->modify("+$i day")->format('Ymd');
+            $ics .= "BEGIN:VEVENT\r\nUID:a\r\nRECURRENCE-ID;TZID=X-0:{$day}T100000\r\n"
+                ."DTSTART;TZID=$tzid:{$day}T120000\r\nDTEND;TZID=$tzid:{$day}T130000\r\nEND:VEVENT\r\n";
+        }
+        $vcal = Reader::read($ics);
+
+        $start = microtime(true);
+        $expanded = $vcal->expand(new \DateTime('2025-01-01'), new \DateTime('2028-01-01'));
+        // About 0.1 s; it took 3.5 s when every lookup missed the cache.
+        self::assertLessThan(1.5, microtime(true) - $start);
+
+        self::assertCount($overrides, $expanded->VEVENT);
+        // X-1 is at +01:01 in winter.
+        self::assertSame('20260102T105900Z', (string) $expanded->VEVENT[1]->DTSTART);
+    }
+
+    public function testTzidRenamedAfterALookupIsFoundUnderItsNewName(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n");
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+
+        $vcal->VTIMEZONE->TZID = 'Renamed';
+
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Renamed', $vcal)->getName());
+    }
+
+    public function testVTimezoneRemovedAfterALookupIsNotUsed(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n");
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+
+        $vcal->remove($vcal->VTIMEZONE);
+
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
+
+    public function testVTimezoneChangedAfterALookupIsGuessedAgain(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n");
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+
+        $vcal->VTIMEZONE->STANDARD->TZOFFSETTO = '+0545';
+
+        self::assertSame('+05:45', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
+
+    public function testDuplicateTzidFallsThroughToTheNextVTimezone(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            ."BEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:bad\r\nTZOFFSETTO:bad\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            ."BEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            ."END:VCALENDAR\r\n");
+        self::assertInstanceOf(Component\VCalendar::class, $vcal);
+
+        foreach ([false, true] as $failIfUncertain) {
+            self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal, $failIfUncertain)->getName());
+            self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal, $failIfUncertain)->getName());
+        }
+    }
 }
