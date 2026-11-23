@@ -337,4 +337,82 @@ class FreeBusyDataTest extends TestCase
             ['start' => 30, 'end' => 70, 'type' => 'BUSY'],
         ], $fb->getData());
     }
+
+    public function testPeriodAddedAfterGetDataOverridesTheEarlierOnes(): void
+    {
+        $fb = new FreeBusyData(0, 100);
+        $fb->add(10, 50, 'BUSY');
+        $fb->add(30, 40, 'BUSY-TENTATIVE');
+        self::assertEquals([
+            ['start' => 0, 'end' => 10, 'type' => 'FREE'],
+            ['start' => 10, 'end' => 30, 'type' => 'BUSY'],
+            ['start' => 30, 'end' => 40, 'type' => 'BUSY-TENTATIVE'],
+            ['start' => 40, 'end' => 50, 'type' => 'BUSY'],
+            ['start' => 50, 'end' => 100, 'type' => 'FREE'],
+        ], $fb->getData());
+
+        $fb->add(20, 45, 'FREE');
+        self::assertEquals([
+            ['start' => 0, 'end' => 10, 'type' => 'FREE'],
+            ['start' => 10, 'end' => 20, 'type' => 'BUSY'],
+            ['start' => 20, 'end' => 45, 'type' => 'FREE'],
+            ['start' => 45, 'end' => 50, 'type' => 'BUSY'],
+            ['start' => 50, 'end' => 100, 'type' => 'FREE'],
+        ], $fb->getData());
+    }
+
+    /**
+     * Each add() used to scan and splice the whole list: 2 * 10^4 periods in
+     * order took about 20 seconds.
+     */
+    public function testManyPeriodsAreMergedInOneSweep(): void
+    {
+        $maxFreeBusyPeriods = Settings::$maxFreeBusyPeriods;
+        Settings::$maxFreeBusyPeriods = -1;
+        try {
+            $count = 20000;
+            $fb = new FreeBusyData(0, 10 * $count);
+            for ($i = 0; $i < $count; ++$i) {
+                $fb->add(10 * $i, 10 * $i + 5, 0 === $i % 2 ? 'BUSY' : 'BUSY-TENTATIVE');
+            }
+            $data = $fb->getData();
+        } finally {
+            Settings::$maxFreeBusyPeriods = $maxFreeBusyPeriods;
+        }
+
+        self::assertCount(2 * $count, $data);
+        self::assertEquals(['start' => 0, 'end' => 5, 'type' => 'BUSY'], $data[0]);
+        self::assertEquals(['start' => 10 * $count - 10, 'end' => 10 * $count - 5, 'type' => 'BUSY-TENTATIVE'], $data[2 * $count - 2]);
+        self::assertEquals(['start' => 10 * $count - 5, 'end' => 10 * $count, 'type' => 'FREE'], $data[2 * $count - 1]);
+    }
+
+    public function testTooManyPeriodsInTheTimeRangeThrow(): void
+    {
+        $maxFreeBusyPeriods = Settings::$maxFreeBusyPeriods;
+        Settings::$maxFreeBusyPeriods = 2;
+        try {
+            $fb = new FreeBusyData(10, 100);
+            // Outside the time range, empty or inverted: not counted.
+            $fb->add(100, 200, 'BUSY');
+            $fb->add(0, 10, 'BUSY');
+            $fb->add(50, 50, 'BUSY');
+            $fb->add(60, 50, 'BUSY');
+            $fb->add(20, 30, 'BUSY');
+            $fb->add(40, 50, 'BUSY');
+
+            $this->expectException(Recur\MaxInstancesExceededException::class);
+            $fb->add(60, 70, 'BUSY');
+        } finally {
+            Settings::$maxFreeBusyPeriods = $maxFreeBusyPeriods;
+        }
+    }
+
+    public function testInvertedTimeRangeIgnoresThePeriods(): void
+    {
+        $fb = new FreeBusyData(100, 50);
+        $fb->add(0, 200, 'BUSY');
+        self::assertEquals([
+            ['start' => 100, 'end' => 50, 'type' => 'FREE'],
+        ], $fb->getData());
+    }
 }
