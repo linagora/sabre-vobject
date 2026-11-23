@@ -5,6 +5,10 @@ namespace Sabre\VObject;
 /**
  * FreeBusyData is a helper class that manages freebusy information.
  *
+ * add() only records a period. getData() computes the list in one sorted
+ * sweep, in O(n log n) for n periods: inserting each period in the list as
+ * it came was O(n) per period, so O(n²) for a free-busy query.
+ *
  * @copyright Copyright (C) fruux GmbH (https://fruux.com/)
  * @author Evert Pot (http://evertpot.com/)
  * @license http://sabre.io/license/ Modified BSD License
@@ -12,9 +16,24 @@ namespace Sabre\VObject;
 class FreeBusyData
 {
     /**
-     * A list of free-busy times.
+     * A list of free-busy times. add() does not update it: only getData()
+     * brings it up to date.
      */
     protected array $data;
+
+    /**
+     * All the periods added, as [start, end, type], clamped to the time
+     * range, in the order they were added. getData() sweeps them all again
+     * after an add().
+     *
+     * @var list<array{int, int, string}>
+     */
+    private array $periods = [];
+
+    /**
+     * Whether $data holds the periods added so far.
+     */
+    private bool $computed = true;
 
     public function __construct(/**
      * Start timestamp.
@@ -36,136 +55,88 @@ class FreeBusyData
     /**
      * Adds free or busy time to the data.
      *
+     * A period overrides the parts of the periods added before it that it
+     * overlaps.
+     *
      * @param string $type FREE, BUSY, BUSY-UNAVAILABLE or BUSY-TENTATIVE
+     *
+     * @throws Recur\MaxInstancesExceededException when more than
+     *                                             Settings::$maxFreeBusyPeriods periods fall in the time range
      */
     public function add(int $start, int $end, string $type): void
     {
-        if ($start >= $this->end || $end <= $this->start || $start >= $end) {
-            // This new data is outside our time range, or empty, or inverted.
+        if ($start >= $this->end || $end <= $this->start || $start >= $end || $this->start >= $this->end) {
+            // This new data is outside our time range, or empty, or inverted,
+            // or the time range itself is.
             return;
         }
 
-        if ($start < $this->start) {
-            // The item starts before our requested time range
-            $start = $this->start;
-        }
-        if ($end > $this->end) {
-            // The item ends after our requested time range
-            $end = $this->end;
+        if (Settings::$maxFreeBusyPeriods >= 0 && count($this->periods) >= Settings::$maxFreeBusyPeriods) {
+            throw new Recur\MaxInstancesExceededException('Free-busy data is only allowed to hold '.Settings::$maxFreeBusyPeriods.' periods');
         }
 
-        // Finding out where we need to insert the new item.
-        $currentIndex = 0;
-        while ($start > $this->data[$currentIndex]['end']) {
-            ++$currentIndex;
-        }
-
-        // The standard insertion point will be one _after_ the first
-        // overlapping item.
-        $insertStartIndex = $currentIndex + 1;
-
-        $newItem = [
-            'start' => $start,
-            'end' => $end,
-            'type' => $type,
+        $this->periods[] = [
+            max($start, $this->start),
+            min($end, $this->end),
+            $type,
         ];
-
-        $precedingItem = $this->data[$insertStartIndex - 1];
-        if ($this->data[$insertStartIndex - 1]['start'] === $start) {
-            // The old item starts at the exact same point as the new item.
-            --$insertStartIndex;
-        }
-
-        // Now we know where to insert the item, we need to know where it
-        // starts overlapping with items on the tail end. We need to start
-        // looking one item before the insertStartIndex, because it's possible
-        // that the new item 'sits inside' the previous old item.
-        if ($insertStartIndex > 0) {
-            $currentIndex = $insertStartIndex - 1;
-        } else {
-            $currentIndex = 0;
-        }
-
-        while ($end > $this->data[$currentIndex]['end']) {
-            ++$currentIndex;
-        }
-
-        // What we are about to insert into the array
-        $newItems = [
-            $newItem,
-        ];
-
-        // This is the amount of items that are completely overwritten by the
-        // new item.
-        $itemsToDelete = $currentIndex - $insertStartIndex;
-        if ($this->data[$currentIndex]['end'] <= $end) {
-            ++$itemsToDelete;
-        }
-
-        // If itemsToDelete was -1, it means that the newly inserted item is
-        // actually sitting inside an existing one. This means we need to split
-        // the item at the current position in two and insert the new item in
-        // between.
-        if (-1 === $itemsToDelete) {
-            $itemsToDelete = 0;
-            if ($newItem['end'] < $precedingItem['end']) {
-                $newItems[] = [
-                    'start' => $newItem['end'] + 1,
-                    'end' => $precedingItem['end'],
-                    'type' => $precedingItem['type'],
-                ];
-            }
-        }
-
-        array_splice(
-            $this->data,
-            $insertStartIndex,
-            $itemsToDelete,
-            $newItems
-        );
-
-        $doMerge = false;
-        $mergeOffset = $insertStartIndex;
-        $mergeItem = $newItem;
-        $mergeDelete = 1;
-
-        if (isset($this->data[$insertStartIndex - 1])) {
-            // Updating the start time of the previous item.
-            $this->data[$insertStartIndex - 1]['end'] = $start;
-
-            // If the previous and the current are of the same type, we can
-            // merge them into one item.
-            if ($this->data[$insertStartIndex - 1]['type'] === $this->data[$insertStartIndex]['type']) {
-                $doMerge = true;
-                --$mergeOffset;
-                ++$mergeDelete;
-                $mergeItem['start'] = $this->data[$insertStartIndex - 1]['start'];
-            }
-        }
-        if (isset($this->data[$insertStartIndex + 1])) {
-            // Updating the start time of the next item.
-            $this->data[$insertStartIndex + 1]['start'] = $end;
-
-            // If the next and the current are of the same type, we can
-            // merge them into one item.
-            if ($this->data[$insertStartIndex + 1]['type'] === $this->data[$insertStartIndex]['type']) {
-                $doMerge = true;
-                ++$mergeDelete;
-                $mergeItem['end'] = $this->data[$insertStartIndex + 1]['end'];
-            }
-        }
-        if ($doMerge) {
-            array_splice(
-                $this->data,
-                $mergeOffset,
-                $mergeDelete,
-                [$mergeItem]
-            );
-        }
+        $this->computed = false;
     }
 
     public function getData(): array
     {
+        if (!$this->computed) {
+            $this->data = $this->sweep();
+            $this->computed = true;
+        }
+
         return $this->data;
+    }
+
+    /**
+     * Cuts the time range at every start and end of a period. Each piece
+     * takes the type of the last added period that covers it, or FREE, and
+     * adjacent pieces of the same type are merged.
+     */
+    private function sweep(): array
+    {
+        $starts = [];
+        $ends = [];
+        foreach ($this->periods as $index => [$start, $end]) {
+            $starts[$start][] = $index;
+            $ends[$end] = true;
+        }
+        $ends[$this->start] = true;
+        $ends[$this->end] = true;
+        $times = array_keys($starts + $ends);
+        sort($times);
+
+        // The periods that started, the last added on top. A period that
+        // ended is only taken out when it reaches the top.
+        $active = new \SplMaxHeap();
+        $data = [];
+        $last = count($times) - 1;
+        for ($i = 0; $i < $last; ++$i) {
+            $time = $times[$i];
+            foreach ($starts[$time] ?? [] as $index) {
+                $active->insert($index);
+            }
+            while (!$active->isEmpty() && $this->periods[$active->top()][1] <= $time) {
+                $active->extract();
+            }
+            $type = $active->isEmpty() ? 'FREE' : $this->periods[$active->top()][2];
+
+            if ([] !== $data && $data[count($data) - 1]['type'] === $type) {
+                $data[count($data) - 1]['end'] = $times[$i + 1];
+            } else {
+                $data[] = [
+                    'start' => $time,
+                    'end' => $times[$i + 1],
+                    'type' => $type,
+                ];
+            }
+        }
+
+        return $data;
     }
 }

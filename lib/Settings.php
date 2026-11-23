@@ -52,4 +52,19 @@ class Settings
      * Set this value to -1 to disable this control altogether.
      */
     public static int $maxRecurrences = 3500;
+
+    /**
+     * The maximum number of periods a free-busy calculation will merge.
+     *
+     * FreeBusyGenerator caps each recurring event at $maxRecurrences
+     * instances, but not the number of events, nor the FREEBUSY values of a
+     * VFREEBUSY. Past this many periods in the requested time range, it
+     * throws a Recur\MaxInstancesExceededException.
+     *
+     * This is a security measure, like $maxRecurrences. The default is ten
+     * times its own.
+     *
+     * Set this value to -1 to disable this control altogether.
+     */
+    public static int $maxFreeBusyPeriods = 35000;
 }

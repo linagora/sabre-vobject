@@ -161,6 +161,8 @@ class FreeBusyGenerator
     /**
      * Parses the input data and returns a correct VFREEBUSY object, wrapped in
      * a VCALENDAR.
+     *
+     * @throws InvalidDataException|Recur\MaxInstancesExceededException
      */
     public function getResult(): Component
     {

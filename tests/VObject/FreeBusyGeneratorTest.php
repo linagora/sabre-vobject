@@ -1255,4 +1255,31 @@ ICS;
 
         self::assertSame($expected, array_map(strval(...), $gen->getResult()->VFREEBUSY->select('FREEBUSY')));
     }
+
+    /**
+     * A VFREEBUSY stored next to an event counts against the bound with the
+     * values of its FREEBUSY properties.
+     */
+    public function testTooManyFreeBusyValuesThrow(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VFREEBUSY\r\nUID:fb\r\n"
+            ."FREEBUSY;FBTYPE=BUSY:20260106T080000Z/PT1H,20260107T080000Z/PT1H\r\n"
+            ."FREEBUSY;FBTYPE=X-OTHER:20260108T080000Z/PT1H,20260109T080000Z/PT1H\r\n"
+            ."END:VFREEBUSY\r\nEND:VCALENDAR\r\n");
+        $generator = new FreeBusyGenerator(
+            new \DateTimeImmutable('20260101T000000Z'),
+            new \DateTimeImmutable('20260201T000000Z'),
+            $vcal,
+            new \DateTimeZone('UTC')
+        );
+
+        $maxFreeBusyPeriods = Settings::$maxFreeBusyPeriods;
+        Settings::$maxFreeBusyPeriods = 3;
+        try {
+            $this->expectException(Recur\MaxInstancesExceededException::class);
+            $generator->getResult();
+        } finally {
+            Settings::$maxFreeBusyPeriods = $maxFreeBusyPeriods;
+        }
+    }
 }
