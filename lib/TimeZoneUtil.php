@@ -38,20 +38,34 @@ class TimeZoneUtil
      * cached: the guessers and the default-zone fallback depend on the
      * document and on date_default_timezone_get().
      *
-     * @var array<int, array<string, \DateTimeZone|false>>
+     * Keyed by $failIfUncertain ("0" or "1") followed by the TZID, least
+     * recently used first.
+     *
+     * @var array<string, \DateTimeZone|false>
      */
     private array $finderCache = [];
 
-    private int $finderCacheSize = 0;
-
     /**
      * Bound of $finderCache, so that a document with many distinct TZIDs
-     * cannot grow it without limit.
+     * cannot grow it without limit: past it, the least recently used entry
+     * is evicted.
      */
     private const FINDER_CACHE_LIMIT = 100;
 
+    /**
+     * The VTIMEZONE found per TZID, per document, so that a lookup does not
+     * scan all the VTIMEZONEs of a document that holds many. Weak
+     * references: on PHP 8.2, a WeakMap value that references its key (a
+     * node references its parent) keeps the entry alive. A hit is checked
+     * against the document, which may have changed since.
+     *
+     * @var \WeakMap<Component, array<string, array<\WeakReference<Component\VTimeZone>>>>
+     */
+    private \WeakMap $vtimezoneIndex;
+
     private function __construct()
     {
+        $this->vtimezoneIndex = new \WeakMap();
         $this->addGuesser('lic', new GuessFromLicEntry());
         $this->addGuesser('msTzId', new GuessFromMsTzId());
         $this->addGuesser('observances', new GuessFromObservances());
@@ -76,7 +90,6 @@ class TimeZoneUtil
     {
         $this->timezoneFinders[$key] = $finder;
         $this->finderCache = [];
-        $this->finderCacheSize = 0;
     }
 
     /**
@@ -100,19 +113,13 @@ class TimeZoneUtil
             return $timezone;
         }
 
-        if ($vcalendar) {
-            // If that didn't work, we will scan VTIMEZONE objects
-            foreach ($vcalendar->select('VTIMEZONE') as $vtimezone) {
-                // select() also returns a property of that name.
-                if ($vtimezone instanceof Component\VTimeZone && $vtimezone->TZID instanceof Property && (string) $vtimezone->TZID === $tzid) {
-                    foreach ($this->timezoneGuessers as $timezoneGuesser) {
-                        $timezone = $timezoneGuesser->guess($vtimezone, $failIfUncertain);
-                        if (!$timezone instanceof \DateTimeZone) {
-                            continue;
-                        }
-
-                        return $timezone;
-                    }
+        // Each VTIMEZONE with that TZID in turn, as a guesser may fail on
+        // one of them.
+        foreach ($vcalendar ? $this->findVTimeZones($tzid, $vcalendar) : [] as $vtimezone) {
+            foreach ($this->timezoneGuessers as $timezoneGuesser) {
+                $timezone = $timezoneGuesser->guess($vtimezone, $failIfUncertain);
+                if ($timezone instanceof \DateTimeZone) {
+                    return $timezone;
                 }
             }
         }
@@ -126,16 +133,67 @@ class TimeZoneUtil
     }
 
     /**
+     * Returns the VTIMEZONEs of the document with that TZID, in document
+     * order. Those found for a TZID are remembered for the document, and
+     * used while they are all still in it under that TZID. A VTIMEZONE
+     * added or renamed to that TZID afterwards is only seen once one of
+     * them changes.
+     *
+     * @return array<Component\VTimeZone>
+     */
+    private function findVTimeZones(string $tzid, Component $vcalendar): array
+    {
+        // select() also returns a property of that name.
+        $vtimezones = $vcalendar->select('VTIMEZONE');
+        $index = $this->vtimezoneIndex[$vcalendar] ?? [];
+        if (isset($index[$tzid])) {
+            $known = [];
+            foreach ($index[$tzid] as $reference) {
+                $vtimezone = $reference->get();
+                if (null === $vtimezone || self::tzidOf($vtimezone) !== $tzid || !in_array($vtimezone, $vtimezones, true)) {
+                    $known = null;
+                    break;
+                }
+                $known[] = $vtimezone;
+            }
+            if (null !== $known) {
+                return $known;
+            }
+        }
+
+        $found = [];
+        foreach ($vtimezones as $vtimezone) {
+            if ($vtimezone instanceof Component\VTimeZone && self::tzidOf($vtimezone) === $tzid) {
+                $found[] = $vtimezone;
+            }
+        }
+        if ([] !== $found) {
+            $index[$tzid] = array_map(\WeakReference::create(...), $found);
+            $this->vtimezoneIndex[$vcalendar] = $index;
+        }
+
+        return $found;
+    }
+
+    private static function tzidOf(Component\VTimeZone $vtimezone): ?string
+    {
+        return $vtimezone->TZID instanceof Property ? (string) $vtimezone->TZID : null;
+    }
+
+    /**
      * Runs the finders, memoized per TZID. Returning the same instance again
      * is safe: DateTimeZone is immutable.
      */
     private function findWithFinders(string $tzid, bool $failIfUncertain): ?\DateTimeZone
     {
-        $key = (int) $failIfUncertain;
-        if (isset($this->finderCache[$key][$tzid])) {
-            $cached = $this->finderCache[$key][$tzid];
+        $key = ($failIfUncertain ? '1' : '0').$tzid;
+        if (isset($this->finderCache[$key])) {
+            $found = $this->finderCache[$key];
+            // Moved to the end: the most recently used.
+            unset($this->finderCache[$key]);
+            $this->finderCache[$key] = $found;
 
-            return false === $cached ? null : $cached;
+            return false === $found ? null : $found;
         }
 
         $found = false;
@@ -147,12 +205,10 @@ class TimeZoneUtil
             }
         }
 
-        if ($this->finderCacheSize >= self::FINDER_CACHE_LIMIT) {
-            $this->finderCache = [];
-            $this->finderCacheSize = 0;
+        if (count($this->finderCache) >= self::FINDER_CACHE_LIMIT) {
+            unset($this->finderCache[array_key_first($this->finderCache)]);
         }
-        $this->finderCache[$key][$tzid] = $found;
-        ++$this->finderCacheSize;
+        $this->finderCache[$key] = $found;
 
         return false === $found ? null : $found;
     }

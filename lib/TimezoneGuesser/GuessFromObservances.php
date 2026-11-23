@@ -27,20 +27,91 @@ use Sabre\VObject\Property;
  */
 class GuessFromObservances implements TimezoneGuesser
 {
-    /** @var array<string, string|null> */
+    /**
+     * The zone names found, keyed by $failIfUncertain, the current year
+     * (findZoneName() compares the years around it) and the md5 of the
+     * observances (see fingerprint()), least recently used first.
+     *
+     * @var array<string, string|null>
+     */
     private static array $cache = [];
+
+    private const CACHE_LIMIT = 100;
+
+    /**
+     * The last key and zone name per VTIMEZONE object, so that a document
+     * pays for each of its VTIMEZONEs once, however many distinct ones it
+     * holds: past CACHE_LIMIT, the process-wide cache alone would evict
+     * them before they are used again. The values hold no node, so that
+     * the entry goes away with its VTIMEZONE.
+     *
+     * @var \WeakMap<VTimeZone, array{string, string|null}>|null
+     */
+    private ?\WeakMap $memo = null;
 
     public function guess(VTimeZone $vtimezone, ?bool $failIfUncertain = false): ?\DateTimeZone
     {
-        $key = ($failIfUncertain ? '1' : '0').md5($vtimezone->serialize());
-        if (!array_key_exists($key, self::$cache)) {
-            if (count(self::$cache) >= 100) {
-                self::$cache = [];
-            }
-            self::$cache[$key] = $this->findZoneName($vtimezone, (bool) $failIfUncertain);
+        $key = ($failIfUncertain ? '1' : '0').gmdate('Y').md5($this->fingerprint($vtimezone));
+        $this->memo ??= new \WeakMap();
+        $memo = $this->memo[$vtimezone] ?? null;
+        if (null !== $memo && $memo[0] === $key) {
+            $name = $memo[1];
+        } else {
+            $name = $this->cachedZoneName($key, $vtimezone, (bool) $failIfUncertain);
+            $this->memo[$vtimezone] = [$key, $name];
         }
 
-        return null === self::$cache[$key] ? null : new \DateTimeZone(self::$cache[$key]);
+        return null === $name ? null : new \DateTimeZone($name);
+    }
+
+    /**
+     * The values findZoneName() reads, in the order it reads them: cheaper
+     * than serializing the VTIMEZONE, and changes whenever its result may.
+     */
+    private function fingerprint(VTimeZone $vtimezone): string
+    {
+        $values = [];
+        foreach ($vtimezone->children() as $child) {
+            if (!$child instanceof Component || !in_array($child->name, ['STANDARD', 'DAYLIGHT'], true)) {
+                continue;
+            }
+            $rdates = [];
+            foreach ($child->select('RDATE') as $rdate) {
+                if ($rdate instanceof Property) {
+                    $rdates[] = $rdate->getParts();
+                }
+            }
+            $values[] = [
+                $child->name,
+                (string) $this->firstProperty($child, 'TZOFFSETFROM'),
+                (string) $this->firstProperty($child, 'TZOFFSETTO'),
+                (string) $this->firstProperty($child, 'DTSTART'),
+                $rdates,
+                $this->firstProperty($child, 'RRULE')?->getParts(),
+            ];
+        }
+
+        return serialize($values);
+    }
+
+    /**
+     * Looks the zone name up in the process-wide LRU cache, finding it on a
+     * miss and evicting the least recently used entry when full.
+     */
+    private function cachedZoneName(string $key, VTimeZone $vtimezone, bool $failIfUncertain): ?string
+    {
+        if (array_key_exists($key, self::$cache)) {
+            $name = self::$cache[$key];
+            unset(self::$cache[$key]);
+        } else {
+            $name = $this->findZoneName($vtimezone, $failIfUncertain);
+            if (count(self::$cache) >= self::CACHE_LIMIT) {
+                unset(self::$cache[array_key_first(self::$cache)]);
+            }
+        }
+        self::$cache[$key] = $name;
+
+        return $name;
     }
 
     private function findZoneName(VTimeZone $vtimezone, bool $failIfUncertain): ?string
@@ -133,30 +204,54 @@ class GuessFromObservances implements TimezoneGuesser
     }
 
     /**
+     * The first PHP zone per signature (offset at $begin, then the offset
+     * changes until $end), for the period it was built for: built once,
+     * so that a VTIMEZONE is matched with a lookup instead of a scan of
+     * all the PHP zones.
+     *
+     * @var array{int, int, array<string, string>}|null
+     */
+    private static ?array $phpZones = null;
+
+    /**
      * @param array<int, array{int, int}> $transitions
      */
     private function matchPhpZone(int $initial, array $transitions, int $begin, int $end): ?string
     {
-        foreach (\DateTimeZone::listIdentifiers() as $identifier) {
-            $zone = new \DateTimeZone($identifier);
-            $phpTransitions = $zone->getTransitions($begin, $end);
-            if (false === $phpTransitions || [] === $phpTransitions || $phpTransitions[0]['offset'] !== $initial) {
-                continue;
-            }
-            $offset = $initial;
-            $list = [];
-            foreach (array_slice($phpTransitions, 1) as $transition) {
-                if ($transition['offset'] !== $offset) {
-                    $list[] = [$transition['ts'], $transition['offset']];
-                    $offset = $transition['offset'];
+        if (null === self::$phpZones || self::$phpZones[0] !== $begin || self::$phpZones[1] !== $end) {
+            $signatures = [];
+            foreach (\DateTimeZone::listIdentifiers() as $identifier) {
+                $phpTransitions = (new \DateTimeZone($identifier))->getTransitions($begin, $end);
+                if (false === $phpTransitions || [] === $phpTransitions) {
+                    continue;
                 }
+                $offset = $phpTransitions[0]['offset'];
+                $list = [];
+                foreach (array_slice($phpTransitions, 1) as $transition) {
+                    if ($transition['offset'] !== $offset) {
+                        $list[] = [$transition['ts'], $transition['offset']];
+                        $offset = $transition['offset'];
+                    }
+                }
+                $signatures[self::signature($phpTransitions[0]['offset'], $list)] ??= $identifier;
             }
-            if ($list === $transitions) {
-                return $identifier;
-            }
+            self::$phpZones = [$begin, $end, $signatures];
         }
 
-        return null;
+        return self::$phpZones[2][self::signature($initial, $transitions)] ?? null;
+    }
+
+    /**
+     * @param array<int, array{int, int}> $transitions
+     */
+    private static function signature(int $initial, array $transitions): string
+    {
+        $signature = (string) $initial;
+        foreach ($transitions as [$instant, $offset]) {
+            $signature .= ','.$instant.':'.$offset;
+        }
+
+        return $signature;
     }
 
     /**
