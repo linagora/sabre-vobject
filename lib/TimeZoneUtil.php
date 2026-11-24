@@ -54,14 +54,14 @@ class TimeZoneUtil
 
     /**
      * The VTIMEZONEs of each document by TZID, so that a lookup does not
-     * scan all the VTIMEZONEs of a document that holds many. Each one is
-     * kept with its key in the document's list of VTIMEZONEs, so that it is
-     * checked against the document in constant time. The list's size and
-     * last key tell whether a VTIMEZONE was added or removed since. Weak
+     * scan all the VTIMEZONEs of a document that holds many. The index is
+     * valid while the document's VTIMEZONE revision is unchanged. Each
+     * VTIMEZONE is also kept with its key in the document's list, so that a
+     * hit is checked against the document in constant time. Weak
      * references: on PHP 8.2, a WeakMap value that references its key (a
      * node references its parent) keeps the entry alive.
      *
-     * @var \WeakMap<Component, array{count: int, last: int|string|null, tzids: array<string, list<array{int|string, \WeakReference<Component\VTimeZone>}>>}>
+     * @var \WeakMap<Component, array{revision: int, tzids: array<string, list<array{int|string, \WeakReference<Component\VTimeZone>}>>}>
      */
     private \WeakMap $vtimezoneIndex;
 
@@ -145,9 +145,10 @@ class TimeZoneUtil
      * Returns the first VTIMEZONEs of the document with that TZID, in
      * document order, at most VTIMEZONES_PER_TZID_LIMIT of them. The
      * document's VTIMEZONEs are indexed by TZID once, and the index is
-     * rebuilt when a VTIMEZONE is added or removed, or when one found for
-     * the TZID left the document or changed its TZID. A VTIMEZONE renamed
-     * to the TZID without any of those is only seen once one happens.
+     * rebuilt when a VTIMEZONE or the TZID of one is added or removed
+     * (Component::getVTimeZoneRevision()), or when one found for the TZID
+     * left the document or changed its TZID. A TZID changed in place with
+     * setValue() to that TZID is only seen once the index is rebuilt.
      *
      * Each lookup costs at most VTIMEZONES_PER_TZID_LIMIT checks, whatever
      * the number of VTIMEZONEs.
@@ -160,7 +161,8 @@ class TimeZoneUtil
         // of the document's list.
         $vtimezones = $vcalendar->select('VTIMEZONE');
         $index = $this->vtimezoneIndex[$vcalendar] ?? null;
-        if (null !== $index && $index['count'] === count($vtimezones) && $index['last'] === array_key_last($vtimezones)) {
+        $revision = $vcalendar->getVTimeZoneRevision();
+        if (null !== $index && $index['revision'] === $revision) {
             $known = [];
             foreach ($index['tzids'][$tzid] ?? [] as [$key, $reference]) {
                 $vtimezone = $reference->get();
@@ -190,8 +192,7 @@ class TimeZoneUtil
             }
         }
         $this->vtimezoneIndex[$vcalendar] = [
-            'count' => count($vtimezones),
-            'last' => array_key_last($vtimezones),
+            'revision' => $revision,
             'tzids' => $tzids,
         ];
 

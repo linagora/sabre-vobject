@@ -33,6 +33,13 @@ class Component extends Node
     protected array $children = [];
 
     /**
+     * Bumped when a VTIMEZONE child, or the TZID of a VTIMEZONE child, is
+     * added or removed: TimeZoneUtil indexes the VTIMEZONEs of a document by
+     * TZID, and rebuilds its index when this changes.
+     */
+    private int $vtimezoneRevision = 0;
+
+    /**
      * Creates a new component.
      *
      * You can specify the children either in key=>value syntax, in which case
@@ -120,6 +127,7 @@ class Component extends Node
 
         /** @var Component|Property|Parameter $newNode */
         $name = $newNode->name;
+        $this->vtimezoneChanged($name);
         if (isset($this->children[$name])) {
             $this->children[$name][] = $newNode;
         } else {
@@ -146,6 +154,7 @@ class Component extends Node
             // we can just wipe out all those properties.
             //
             if (!str_contains($item, '.')) {
+                $this->vtimezoneChanged(strtoupper($item));
                 unset($this->children[strtoupper($item)]);
 
                 return;
@@ -160,6 +169,7 @@ class Component extends Node
             // characters select() would interpret (e.g. a dot).
             foreach ($this->children[$item->name] ?? [] as $k => $child) {
                 if ($child === $item) {
+                    $this->vtimezoneChanged($item->name);
                     unset($this->children[$item->name][$k]);
 
                     return;
@@ -670,6 +680,26 @@ class Component extends Node
      * the line they were read from, and it cycles through the parent of a
      * parameter on a clone.
      */
+    /**
+     * @internal for TimeZoneUtil: changes when a VTIMEZONE child, or the TZID
+     * of one, is added or removed. A TZID changed in place (setValue()) does
+     * not change it.
+     */
+    public function getVTimeZoneRevision(): int
+    {
+        return $this->vtimezoneRevision;
+    }
+
+    private function vtimezoneChanged(string $childName): void
+    {
+        $childName = strtoupper($childName);
+        if ('VTIMEZONE' === $childName) {
+            ++$this->vtimezoneRevision;
+        } elseif ('TZID' === $childName && $this instanceof Component\VTimeZone && $this->parent instanceof self) {
+            ++$this->parent->vtimezoneRevision;
+        }
+    }
+
     private static function duplicateKey(Node $node): string
     {
         if (!$node instanceof Property) {
@@ -696,5 +726,6 @@ class Component extends Node
             }
         }
         $this->children = [];
+        ++$this->vtimezoneRevision;
     }
 }

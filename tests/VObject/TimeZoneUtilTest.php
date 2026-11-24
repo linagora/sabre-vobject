@@ -852,4 +852,42 @@ HI;
         self::assertInstanceOf(Component\VCalendar::class, $beyond);
         self::assertSame('UTC', TimeZoneUtil::getTimeZone('Custom', $beyond)->getName());
     }
+
+    public function testVTimezonesReplacedBySameNumberAfterALookupAreUsed(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n");
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+
+        // __set() empties the list and adds again from key 0.
+        $other = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0545\r\nTZOFFSETTO:+0545\r\nEND:STANDARD\r\n")->VTIMEZONE;
+        $other->TZID = 'Other';
+        $vcal->VTIMEZONE = $other;
+
+        self::assertSame('+05:45', TimeZoneUtil::getTimeZone('Other', $vcal)->getName());
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
+
+    public function testTzidSetAfterAMissIsFound(): void
+    {
+        $vcal = self::customVTimeZone("BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\n");
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('Later', $vcal)->getName());
+
+        $vcal->VTIMEZONE->TZID = 'Later';
+
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Later', $vcal)->getName());
+    }
+
+    public function testVTimezoneRenamedToAnIndexedTzidIsTried(): void
+    {
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            ."BEGIN:VTIMEZONE\r\nTZID:Custom\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:bad\r\nTZOFFSETTO:bad\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            ."BEGIN:VTIMEZONE\r\nTZID:Other\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0530\r\nTZOFFSETTO:+0530\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            ."END:VCALENDAR\r\n");
+        self::assertInstanceOf(Component\VCalendar::class, $vcal);
+        self::assertSame('UTC', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+
+        $vcal->select('VTIMEZONE')[1]->TZID = 'Custom';
+
+        self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
+    }
 }
