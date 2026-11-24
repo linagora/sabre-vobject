@@ -53,15 +53,24 @@ class TimeZoneUtil
     private const FINDER_CACHE_LIMIT = 100;
 
     /**
-     * The VTIMEZONE found per TZID, per document, so that a lookup does not
-     * scan all the VTIMEZONEs of a document that holds many. Weak
+     * The VTIMEZONEs of each document by TZID, so that a lookup does not
+     * scan all the VTIMEZONEs of a document that holds many. Each one is
+     * kept with its key in the document's list of VTIMEZONEs, so that it is
+     * checked against the document in constant time. The list's size and
+     * last key tell whether a VTIMEZONE was added or removed since. Weak
      * references: on PHP 8.2, a WeakMap value that references its key (a
-     * node references its parent) keeps the entry alive. A hit is checked
-     * against the document, which may have changed since.
+     * node references its parent) keeps the entry alive.
      *
-     * @var \WeakMap<Component, array<string, array<\WeakReference<Component\VTimeZone>>>>
+     * @var \WeakMap<Component, array{count: int, last: int|string|null, tzids: array<string, list<array{int|string, \WeakReference<Component\VTimeZone>}>>}>
      */
     private \WeakMap $vtimezoneIndex;
+
+    /**
+     * How many VTIMEZONEs of the same TZID are tried, in document order: a
+     * document may repeat a TZID, but a lookup must not cost one guess per
+     * duplicate.
+     */
+    private const VTIMEZONES_PER_TZID_LIMIT = 10;
 
     private function __construct()
     {
@@ -133,24 +142,29 @@ class TimeZoneUtil
     }
 
     /**
-     * Returns the VTIMEZONEs of the document with that TZID, in document
-     * order. Those found for a TZID are remembered for the document, and
-     * used while they are all still in it under that TZID. A VTIMEZONE
-     * added or renamed to that TZID afterwards is only seen once one of
-     * them changes.
+     * Returns the first VTIMEZONEs of the document with that TZID, in
+     * document order, at most VTIMEZONES_PER_TZID_LIMIT of them. The
+     * document's VTIMEZONEs are indexed by TZID once, and the index is
+     * rebuilt when a VTIMEZONE is added or removed, or when one found for
+     * the TZID left the document or changed its TZID. A VTIMEZONE renamed
+     * to the TZID without any of those is only seen once one happens.
+     *
+     * Each lookup costs at most VTIMEZONES_PER_TZID_LIMIT checks, whatever
+     * the number of VTIMEZONEs.
      *
      * @return array<Component\VTimeZone>
      */
     private function findVTimeZones(string $tzid, Component $vcalendar): array
     {
-        // select() also returns a property of that name.
+        // select() also returns a property of that name, and keeps the keys
+        // of the document's list.
         $vtimezones = $vcalendar->select('VTIMEZONE');
-        $index = $this->vtimezoneIndex[$vcalendar] ?? [];
-        if (isset($index[$tzid])) {
+        $index = $this->vtimezoneIndex[$vcalendar] ?? null;
+        if (null !== $index && $index['count'] === count($vtimezones) && $index['last'] === array_key_last($vtimezones)) {
             $known = [];
-            foreach ($index[$tzid] as $reference) {
+            foreach ($index['tzids'][$tzid] ?? [] as [$key, $reference]) {
                 $vtimezone = $reference->get();
-                if (null === $vtimezone || self::tzidOf($vtimezone) !== $tzid || !in_array($vtimezone, $vtimezones, true)) {
+                if (null === $vtimezone || ($vtimezones[$key] ?? null) !== $vtimezone || self::tzidOf($vtimezone) !== $tzid) {
                     $known = null;
                     break;
                 }
@@ -161,16 +175,25 @@ class TimeZoneUtil
             }
         }
 
+        $tzids = [];
         $found = [];
-        foreach ($vtimezones as $vtimezone) {
-            if ($vtimezone instanceof Component\VTimeZone && self::tzidOf($vtimezone) === $tzid) {
-                $found[] = $vtimezone;
+        foreach ($vtimezones as $key => $vtimezone) {
+            if (!$vtimezone instanceof Component\VTimeZone) {
+                continue;
+            }
+            $name = self::tzidOf($vtimezone);
+            if (null !== $name && count($tzids[$name] ?? []) < self::VTIMEZONES_PER_TZID_LIMIT) {
+                $tzids[$name][] = [$key, \WeakReference::create($vtimezone)];
+                if ($name === $tzid) {
+                    $found[] = $vtimezone;
+                }
             }
         }
-        if ([] !== $found) {
-            $index[$tzid] = array_map(\WeakReference::create(...), $found);
-            $this->vtimezoneIndex[$vcalendar] = $index;
-        }
+        $this->vtimezoneIndex[$vcalendar] = [
+            'count' => count($vtimezones),
+            'last' => array_key_last($vtimezones),
+            'tzids' => $tzids,
+        ];
 
         return $found;
     }
