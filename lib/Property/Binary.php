@@ -144,7 +144,7 @@ class Binary extends Property
      */
     public function setJsonValue(array $value): void
     {
-        $value = array_map(base64_decode(...), $value);
+        $value = array_map(base64_decode(...), self::jsonWithoutNulls($value));
         parent::setJsonValue($value);
     }
 

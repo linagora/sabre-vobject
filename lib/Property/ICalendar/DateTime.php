@@ -337,6 +337,7 @@ class DateTime extends Property
      */
     public function setJsonValue(array $value): void
     {
+        $value = self::jsonWithoutNulls($value);
         // dates and times in jCal have one difference to dates and times in
         // iCalendar. In jCal date-parts are separated by dashes, and
         // time-parts are separated by colons. It makes sense to just remove

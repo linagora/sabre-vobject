@@ -545,6 +545,69 @@ VCF;
         self::assertSame('DATE', (string) $cal->VEVENT->DTSTART['VALUE']);
     }
 
+    public function testSetJsonValueWithoutTheParserHasNoNulls(): void
+    {
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            $calendar = new VObject\Component\VCalendar();
+            $rrule = $calendar->add('RRULE', 'FREQ=DAILY');
+            $rrule->setJsonValue([(object) ['freq' => 'DAILY', 'count' => null]]);
+            self::assertSame("RRULE:FREQ=DAILY\r\n", $rrule->serialize());
+
+            $card = new VObject\Component\VCard();
+            $photo = $card->add('PHOTO', '', ['VALUE' => 'BINARY']);
+            self::assertInstanceOf(VObject\Property\Binary::class, $photo);
+            $photo->setJsonValue([null]);
+            self::assertSame('', $photo->getValue());
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    public function testSerializeDoesNotModifyAValueReadFromJson(): void
+    {
+        $doc = VObject\Reader::readJson('["vcalendar",[["n",{},"text",["a;b"]]]]');
+        $first = $doc->serialize();
+        self::assertSame(['a;b'], $doc->N->getParts());
+        self::assertSame($first, $doc->serialize());
+        self::assertSame("N;VALUE=TEXT:a\;b;;;;\r\n", $doc->N->serialize());
+
+        $doc = VObject\Reader::readJson('["vcalendar",[["n",{},"n",[[]]]]]');
+        $doc->serialize();
+        self::assertSame([[]], $doc->N->getParts());
+    }
+
+    public function testNullsInAListGiveADocumentThatRoundTrips(): void
+    {
+        $documents = [
+            '["vcalendar",[["version",{},"text","2.0"],["prodid",{},"text","p"]],[["vevent",[["uid",{},"text","a"],["dtstamp",{},"date-time","2026-01-01T00:00:00Z"],["dtstart",{},"date-time","2026-01-01T00:00:00Z"],["summary",{},"text",[null]]]]]]',
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["x-a",{},"text",[null]]]]',
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["categories",{},"text","a",null]]]',
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["n",{},"text",["a",null,["b",null],"",""]]]]',
+            '["vcalendar",[["version",{},"text","2.0"],["prodid",{},"text","p"]],[["vevent",[["uid",{},"text","a"],["dtstamp",{},"date-time","2026-01-01T00:00:00Z"],["dtstart",{},"date-time","2026-01-01T00:00:00Z"],["rrule",{},"recur",{"freq":"DAILY","count":null,"byday":["MO",null]}]]]]]',
+            '["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["photo",{},"binary",null]]]',
+        ];
+        // Deprecations (a null given to a string function) must not be
+        // swallowed.
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            foreach ($documents as $json) {
+                $once = json_encode(VObject\Reader::readJson($json)->jsonSerialize(), JSON_THROW_ON_ERROR);
+                self::assertStringNotContainsString('null', $once);
+                self::assertStringNotContainsString('"count"', $once);
+                self::assertSame($once, json_encode(VObject\Reader::readJson($once)->jsonSerialize(), JSON_THROW_ON_ERROR));
+            }
+        } finally {
+            restore_error_handler();
+        }
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["x-t",{},"time",null]]]');
+    }
+
     public function testLoneNullValueGivesADocumentThatRoundTrips(): void
     {
         $documents = [

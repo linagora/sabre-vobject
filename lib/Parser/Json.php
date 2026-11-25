@@ -189,7 +189,7 @@ class Json extends Parser
 
         $prop = $this->root->createProperty($propertyName, null, $parameters, $valueType);
         self::assertValues($prop, $value);
-        $prop->setJsonValue($value);
+        $prop->setJsonValue(Property::jsonWithoutNulls($value));
 
         // We have to do something awkward here. FlatText as well as Text
         // represents TEXT values. We have to normalize these here. In the
@@ -262,7 +262,9 @@ class Json extends Parser
                 $prop instanceof Property\IntegerValue => $single && self::isScalar($value),
                 // TIME has one value: several would be written as one
                 // string (RFC 5545 and RFC 6350 define no list of times).
-                $prop instanceof Property\Time => $single && self::isScalar($value),
+                // A TIME has no empty value: jsonSerialize() could not
+                // write it.
+                $prop instanceof Property\Time => $single && self::isScalar($value) && '' !== (string) $value,
                 // A date-and-or-time has one value (RFC 6350 section 4.3.4):
                 // several would be written as one, concatenated.
                 $prop instanceof Property\VCard\DateAndOrTime => $single && self::isScalar($value),
