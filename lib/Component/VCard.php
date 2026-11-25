@@ -289,15 +289,16 @@ class VCard extends VObject\Document
         }
 
         // A vCard has no sub-components (RFC 6350 section 3.3).
-        foreach ($this->getComponents() as $component) {
+        $components = $this->getComponents();
+        foreach ($components as $component) {
             $warnings[] = [
                 'level' => $options & self::REPAIR ? 1 : 3,
                 'message' => 'A VCARD cannot contain a '.$component->name.' component',
                 'node' => $this,
             ];
-            if ($options & self::REPAIR) {
-                $this->remove($component);
-            }
+        }
+        if ($options & self::REPAIR) {
+            $this->removeChildren($components);
         }
 
         // Validating the children repairs their names: FN is counted after it,

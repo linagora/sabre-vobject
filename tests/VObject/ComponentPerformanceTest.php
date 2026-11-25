@@ -34,4 +34,42 @@ class ComponentPerformanceTest extends TestCase
         self::assertStringContainsString("X-A20000:v\r\n", $serialized);
         self::assertCount(10, $expanded->select('VEVENT'));
     }
+
+    public function testDuplicatedRequiredPropertyRepairedInLinearTime(): void
+    {
+        $calendar = Reader::read(self::vevent(str_repeat("UID:x\r\n", 50000).str_repeat("X-B:v\r\n", 3)));
+
+        $start = microtime(true);
+        $messages = $calendar->validate(Component::REPAIR);
+        self::assertLessThan(2.0, microtime(true) - $start);
+
+        self::assertCount(1, $calendar->VEVENT->select('UID'));
+        self::assertSame(1, max(array_column($messages, 'level')));
+        // The kept UID stays where it was.
+        self::assertStringContainsString("BEGIN:VEVENT\r\nUID:x\r\nDTSTAMP:", $calendar->serialize());
+    }
+
+    public function testVCardSubComponentsRemovedInLinearTime(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nX:p\r\n".str_repeat("BEGIN:X\r\nEND:X\r\n", 50000)."END:VCARD\r\n");
+
+        $start = microtime(true);
+        $vcard->validate(Component::REPAIR);
+        self::assertLessThan(2.0, microtime(true) - $start);
+
+        self::assertSame([], $vcard->getComponents());
+        // A property of the same name as the components is kept.
+        self::assertSame('p', (string) $vcard->X);
+    }
+
+    public function testDottedRemoveInLinearTime(): void
+    {
+        $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nUID:a\r\nITEM2.TEL:2\r\n".str_repeat("ITEM1.TEL:1\r\n", 50000)."END:VCARD\r\n");
+
+        $start = microtime(true);
+        $vcard->remove('item1.tel');
+        self::assertLessThan(1.0, microtime(true) - $start);
+
+        self::assertSame(['2'], array_map(strval(...), array_values($vcard->select('TEL'))));
+    }
 }

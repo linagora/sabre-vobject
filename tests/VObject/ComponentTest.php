@@ -459,6 +459,56 @@ class ComponentTest extends TestCase
         $comp->remove($prop);
     }
 
+    public function testRemoveChildren(): void
+    {
+        $comp = new VCalendar([], false);
+        $a1 = $comp->add('A', '1');
+        $comp->add('B', '1');
+        $a2 = $comp->add('A', '2');
+        $a3 = $comp->add('A', '3');
+        $c = $comp->add('C', '1');
+
+        $comp->removeChildren([$a1, $a3, $c]);
+        self::assertSame([$a2], array_values($comp->select('A')));
+        self::assertSame(['A', 'B'], array_map(fn ($child) => $child->name, $comp->children()));
+    }
+
+    public function testRemoveChildrenOfANodeAddedTwice(): void
+    {
+        $comp = new VCalendar([], false);
+        $a = $comp->add('A', '1');
+        $comp->add($a);
+        $b = $comp->add('B', '1');
+
+        $comp->removeChildren([$a]);
+        self::assertSame([$b], $comp->children());
+    }
+
+    public function testRepairOfAComponentAddedTwiceToAVCard(): void
+    {
+        $vcard = new VCard(['VERSION' => '4.0', 'FN' => 'a', 'UID' => 'a']);
+        $x = $vcard->add($vcard->createComponent('X'));
+        $vcard->add($x);
+
+        $messages = $vcard->validate(Node::REPAIR);
+        self::assertSame([], $vcard->getComponents());
+        self::assertCount(2, array_filter($messages, fn ($m) => str_contains($m['message'], 'cannot contain a X')));
+    }
+
+    public function testRemoveChildrenNotFoundRemovesNothing(): void
+    {
+        $comp = new VCalendar([], false);
+        $a = $comp->add('A', '1');
+        $stranger = $comp->createProperty('B', '1');
+
+        try {
+            $comp->removeChildren([$a, $stranger]);
+            self::fail('Expected an exception');
+        } catch (\InvalidArgumentException) {
+        }
+        self::assertSame([$a], $comp->children());
+    }
+
     /**
      * @param string[] $componentList
      */
