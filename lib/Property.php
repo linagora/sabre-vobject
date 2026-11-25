@@ -245,13 +245,42 @@ abstract class Property extends Node implements \Stringable
      */
     public function setJsonValue(array $value): void
     {
+        $value = self::jsonWithoutNulls($value);
         if (1 === count($value)) {
-            // A lone null is an empty value, as in the text form: a null
-            // value would mean that the property has no value at all.
-            $this->setValue(reset($value) ?? '');
+            $this->setValue(reset($value));
         } else {
             $this->setValue($value);
         }
+    }
+
+    /**
+     * A jCal / jCard value without nulls: a null is an empty value, as in the
+     * text form, at any depth of its lists ([null]), or jsonSerialize() would
+     * write it as null; a null part of an object (a recurrence rule) is a
+     * part it does not have. Not with array_walk_recursive(), which leaves
+     * the items as references, shared with any copy of the value.
+     *
+     * @internal for Parser\Json and the setJsonValue() overrides
+     *
+     * @return ($value is array ? array : mixed)
+     */
+    public static function jsonWithoutNulls(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return array_map(self::jsonWithoutNulls(...), $value);
+        }
+        if ($value instanceof \stdClass) {
+            $parts = new \stdClass();
+            foreach ((array) $value as $key => $part) {
+                if (null !== $part) {
+                    $parts->$key = self::jsonWithoutNulls($part);
+                }
+            }
+
+            return $parts;
+        }
+
+        return $value ?? '';
     }
 
     /**

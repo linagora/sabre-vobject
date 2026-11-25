@@ -46,7 +46,7 @@ class UtcOffset extends Text
         // removed, any other value is kept as it is.
         $value = array_map(
             fn ($value) => is_string($value) ? preg_replace('/^([+-]\d\d):(\d\d)(?::(\d\d))?$/', '$1$2$3', $value) : $value,
-            $value
+            self::jsonWithoutNulls($value)
         );
         parent::setJsonValue($value);
     }

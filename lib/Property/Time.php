@@ -40,6 +40,7 @@ class Time extends Text
      */
     public function setJsonValue(array $value): void
     {
+        $value = self::jsonWithoutNulls($value);
         // Removing colons from value.
         $value = str_replace(
             ':',

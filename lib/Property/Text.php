@@ -163,29 +163,27 @@ class Text extends Property
         // are read back.
         $listSeparator = ';' !== $this->delimiter || in_array($this->name, $this->listComponentValues, true) ? ',' : '\,';
 
-        foreach ($val as &$item) {
-            if (!is_array($item)) {
-                $item = [$item];
+        // A new array: writing through references to the parts would change
+        // the value of the property if they are references themselves.
+        $items = [];
+        foreach ($val as $item) {
+            $subItems = [];
+            foreach (is_array($item) ? $item : [$item] as $subItem) {
+                $subItems[] = \is_null($subItem) ? null : strtr(
+                    $subItem,
+                    [
+                        '\\' => '\\\\',
+                        ';' => '\;',
+                        ',' => '\,',
+                        "\n" => '\n',
+                        "\r" => '',
+                    ]
+                );
             }
-
-            foreach ($item as &$subItem) {
-                if (!\is_null($subItem)) {
-                    $subItem = strtr(
-                        $subItem,
-                        [
-                            '\\' => '\\\\',
-                            ';' => '\;',
-                            ',' => '\,',
-                            "\n" => '\n',
-                            "\r" => '',
-                        ]
-                    );
-                }
-            }
-            $item = \implode($listSeparator, $item);
+            $items[] = \implode($listSeparator, $subItems);
         }
 
-        return \implode($this->delimiter, $val);
+        return \implode($this->delimiter, $items);
     }
 
     /**
