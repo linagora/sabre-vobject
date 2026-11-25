@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Property;
 
 use Sabre\VObject\Parameter;
+use Sabre\Xml;
 
 /**
  * URI property.
@@ -30,6 +31,34 @@ class Uri extends Text
     public function getValueType(): string
     {
         return 'URI';
+    }
+
+    /**
+     * A URI is one value (RFC 7095 section 3.5.3), the one the text form
+     * writes: Text writes a property structured by its name (GENDER, ORG,
+     * REQUEST-STATUS...) as a list, which readJson() refuses for a URI.
+     */
+    public function getJsonValue(): array
+    {
+        if (in_array($this->name, $this->structuredValues, true)) {
+            return [(string) ($this->getParts()[0] ?? '')];
+        }
+
+        return parent::getJsonValue();
+    }
+
+    /**
+     * As for jCard: Text writes a property structured by its name as its
+     * components (<sex>, <surname>, <code>...), which a URI does not have.
+     */
+    protected function xmlSerializeValue(Xml\Writer $writer): void
+    {
+        if (in_array($this->name, $this->structuredValues, true)) {
+            $writer->writeElement('uri', $this->getJsonValue()[0]);
+
+            return;
+        }
+        parent::xmlSerializeValue($writer);
     }
 
     /**

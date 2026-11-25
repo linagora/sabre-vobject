@@ -579,6 +579,19 @@ VCF;
         self::assertSame([[]], $doc->N->getParts());
     }
 
+    public function testStructuredNameWithUriValueSurvivesJCardRoundTrip(): void
+    {
+        $vcard = VObject\Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:a\r\nGENDER;VALUE=URI:urn:x\r\nORG;VALUE=URI:\r\nEND:VCARD\r\n");
+        $vcard->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+
+        $json = json_encode($vcard->jsonSerialize(), JSON_THROW_ON_ERROR);
+        self::assertStringContainsString('["gender",{},"uri","urn:x"]', $json);
+        self::assertStringContainsString('["org",{},"uri",""]', $json);
+        $again = VObject\Reader::readJson($json);
+        self::assertSame('urn:x', (string) $again->GENDER);
+        self::assertSame($vcard->serialize(), $again->serialize());
+    }
+
     public function testNullsInAListGiveADocumentThatRoundTrips(): void
     {
         $documents = [

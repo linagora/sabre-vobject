@@ -527,7 +527,9 @@ class VCard extends VObject\Document
         $propertiesByGroup = [];
 
         foreach ($this->children() as $property) {
-            $group = $property->group;
+            // No group is the group '' (a null array key is deprecated
+            // since PHP 8.5).
+            $group = $property->group ?? '';
 
             $propertiesByGroup[$group] ??= [];
 
