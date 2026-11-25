@@ -60,4 +60,28 @@ ICS;
             (string) Reader::read($serialized)->VEVENT->URL
         );
     }
+
+    public function testStructuredNameWithUriValueIsOneXCardValue(): void
+    {
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            $vcard = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nUID:a\r\nGENDER;VALUE=URI:urn:x\r\nEND:VCARD\r\n");
+            $xml = \Sabre\VObject\Writer::writeXml($vcard);
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertStringContainsString('<gender><uri>urn:x</uri></gender>', str_replace(["\n", ' '], '', $xml));
+        self::assertSame('urn:x', (string) Reader::readXML($xml)->GENDER);
+    }
+
+    public function testUriWithSeveralValuesKeepsThemInJCard(): void
+    {
+        $vcard = new \Sabre\VObject\Component\VCard();
+        $vcard->add('URL', ['http://a', 'http://b']);
+
+        self::assertSame(['http://a', 'http://b'], $vcard->URL->getJsonValue());
+    }
 }
