@@ -72,9 +72,30 @@ class TimeZoneUtil
      */
     private const VTIMEZONES_PER_TZID_LIMIT = 10;
 
+    /**
+     * The UTC offsets, in seconds, a PHP zone has ever had, per zone name.
+     *
+     * @var array<string, array<int, true>>
+     */
+    private array $zoneOffsets = [];
+
+    private const ZONE_OFFSETS_LIMIT = 200;
+
+    /**
+     * Per document, whether the zone of a known TZID name contradicts its
+     * VTIMEZONEs, while the document's VTIMEZONE revision is unchanged (it
+     * changes with the observances and their TZOFFSETTO too): a known name
+     * is looked up for every DATE-TIME. A TZOFFSETTO changed in place with
+     * setValue() is not seen until then.
+     *
+     * @var \WeakMap<Component, array{revision: int, tzids: array<string, bool>}>
+     */
+    private \WeakMap $contradictions;
+
     private function __construct()
     {
         $this->vtimezoneIndex = new \WeakMap();
+        $this->contradictions = new \WeakMap();
         $this->addGuesser('lic', new GuessFromLicEntry());
         $this->addGuesser('msTzId', new GuessFromMsTzId());
         $this->addGuesser('observances', new GuessFromObservances());
@@ -117,20 +138,47 @@ class TimeZoneUtil
      */
     private function findTimeZone(string $tzid, ?Component $vcalendar = null, bool $failIfUncertain = false): \DateTimeZone
     {
-        $timezone = $this->findWithFinders($tzid, $failIfUncertain);
-        if ($timezone instanceof \DateTimeZone) {
-            return $timezone;
+        // A known name (Windows, Exchange, Lotus, IANA) is preferred to the
+        // document's VTIMEZONE, which Outlook often writes with its 1601
+        // rules only, unless that VTIMEZONE gives none of the offsets the
+        // zone has ever had: it then defines another zone.
+        $mapped = $this->findWithFinders($tzid, $failIfUncertain);
+        if ($mapped instanceof \DateTimeZone) {
+            if (!$vcalendar) {
+                return $mapped;
+            }
+            $revision = $vcalendar->getVTimeZoneRevision();
+            $memo = $this->contradictions[$vcalendar] ?? null;
+            if (null === $memo || $memo['revision'] !== $revision) {
+                $memo = ['revision' => $revision, 'tzids' => []];
+            }
+            if (!isset($memo['tzids'][$tzid])) {
+                $memo['tzids'][$tzid] = $this->contradicts($mapped, $this->findVTimeZones($tzid, $vcalendar));
+                $this->contradictions[$vcalendar] = $memo;
+            }
+            if (!$memo['tzids'][$tzid]) {
+                return $mapped;
+            }
         }
+
+        $vtimezones = $vcalendar ? $this->findVTimeZones($tzid, $vcalendar) : [];
 
         // Each VTIMEZONE with that TZID in turn, as a guesser may fail on
         // one of them.
-        foreach ($vcalendar ? $this->findVTimeZones($tzid, $vcalendar) : [] as $vtimezone) {
+        foreach ($vtimezones as $vtimezone) {
             foreach ($this->timezoneGuessers as $timezoneGuesser) {
                 $timezone = $timezoneGuesser->guess($vtimezone, $failIfUncertain);
-                if ($timezone instanceof \DateTimeZone) {
+                // A guess from a name (X-LIC-LOCATION, X-MICROSOFT-CDO-TZID)
+                // may contradict the observances as well.
+                if ($timezone instanceof \DateTimeZone && !($mapped && $this->contradicts($timezone, [$vtimezone]))) {
                     return $timezone;
                 }
             }
+        }
+
+        // Nothing follows the VTIMEZONE better than the known name.
+        if ($mapped instanceof \DateTimeZone) {
+            return $mapped;
         }
 
         if ($failIfUncertain) {
@@ -197,6 +245,76 @@ class TimeZoneUtil
         ];
 
         return $found;
+    }
+
+    /**
+     * Whether the VTIMEZONEs give UTC offsets (TZOFFSETTO) and none of them
+     * is an offset the zone has ever had.
+     *
+     * @param array<Component\VTimeZone> $vtimezones
+     */
+    private function contradicts(\DateTimeZone $zone, array $vtimezones): bool
+    {
+        if (!$vtimezones) {
+            return false;
+        }
+        $name = $zone->getName();
+        if (!isset($this->zoneOffsets[$name])) {
+            if (count($this->zoneOffsets) >= self::ZONE_OFFSETS_LIMIT) {
+                $this->zoneOffsets = [];
+            }
+            $this->zoneOffsets[$name] = self::offsetsOf($zone);
+        }
+        $zoneOffsets = $this->zoneOffsets[$name];
+
+        $given = false;
+        foreach ($vtimezones as $vtimezone) {
+            foreach (self::observanceOffsetsOf($vtimezone) as $offset) {
+                if (isset($zoneOffsets[$offset])) {
+                    return false;
+                }
+                $given = true;
+            }
+        }
+
+        return $given;
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    private static function offsetsOf(\DateTimeZone $zone): array
+    {
+        $offsets = [];
+        $transitions = $zone->getTransitions();
+        foreach (false === $transitions ? [] : $transitions as $transition) {
+            $offsets[$transition['offset']] = true;
+        }
+        // A fixed-offset zone (e.g. "+01:00") has no transitions.
+        $offsets[$zone->getOffset(new \DateTimeImmutable('@0'))] = true;
+
+        return $offsets;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function observanceOffsetsOf(Component\VTimeZone $vtimezone): array
+    {
+        $offsets = [];
+        foreach ($vtimezone->getComponents() as $observance) {
+            if (!in_array($observance->name, ['STANDARD', 'DAYLIGHT'], true)) {
+                continue;
+            }
+            foreach ($observance->select('TZOFFSETTO') as $offset) {
+                if (preg_match('/^([+-])([0-9]{2})([0-9]{2})([0-9]{2})?$/D', trim((string) $offset), $matches)) {
+                    $seconds = (int) $matches[2] * 3600 + (int) $matches[3] * 60 + (int) ($matches[4] ?? 0);
+                    $offsets[] = '-' === $matches[1] ? -$seconds : $seconds;
+                }
+            }
+        }
+
+        return $offsets;
     }
 
     private static function tzidOf(Component\VTimeZone $vtimezone): ?string
