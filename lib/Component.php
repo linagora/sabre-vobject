@@ -161,22 +161,64 @@ class Component extends Node
             }
             // If there was a dot, we need to ask select() to help us out and
             // then we just call remove recursively.
-            foreach ($this->select($item) as $child) {
-                $this->remove($child);
-            }
+            $this->removeChildren($this->select($item));
         } else {
             // add() files a node under its exact name, which may hold
             // characters select() would interpret (e.g. a dot).
-            foreach ($this->children[$item->name] ?? [] as $k => $child) {
-                if ($child === $item) {
-                    $this->vtimezoneChanged($item->name);
-                    unset($this->children[$item->name][$k]);
+            // Searched before the unset, so that the list is not copied
+            // while it is iterated.
+            $k = array_search($item, $this->children[$item->name] ?? [], true);
+            if (false !== $k) {
+                $this->vtimezoneChanged($item->name);
+                unset($this->children[$item->name][$k]);
 
-                    return;
-                }
+                return;
             }
 
             throw new \InvalidArgumentException('The item you passed to remove() was not a child of this component');
+        }
+    }
+
+    /**
+     * Removes several children at once, in one pass over each list of
+     * children of the same name: removing n of them one by one with remove()
+     * costs O(n²).
+     *
+     * @internal
+     *
+     * @param Node[] $items
+     */
+    public function removeChildren(array $items): void
+    {
+        $removed = [];
+        foreach ($items as $item) {
+            $removed[$item->name][spl_object_id($item)] = true;
+        }
+        $groups = [];
+        foreach ($removed as $name => $ids) {
+            $found = [];
+            $groups[$name] = array_filter(
+                $this->children[$name] ?? [],
+                static function (Node $child) use ($ids, &$found) {
+                    $id = spl_object_id($child);
+                    if (!isset($ids[$id])) {
+                        return true;
+                    }
+                    // A node added twice is filed twice, and removed with
+                    // all its copies.
+                    $found[$id] = true;
+
+                    return false;
+                }
+            );
+            if (count($found) !== count($ids)) {
+                throw new \InvalidArgumentException('The item you passed to removeChildren() was not a child of this component');
+            }
+        }
+        // Nothing is removed unless all of them are children.
+        foreach ($groups as $name => $kept) {
+            $this->vtimezoneChanged((string) $name);
+            $this->children[$name] = $kept;
         }
     }
 
@@ -612,9 +654,11 @@ class Component extends Node
                                 $properties = $this->select($propName);
                                 $serialized = array_map(fn (Node $property) => $property->serialize(), $properties);
                                 if (1 === count(array_unique($serialized))) {
-                                    foreach (array_slice($properties, 1) as $property) {
-                                        $this->remove($property);
-                                    }
+                                    // The first one is kept in place, the
+                                    // others dropped in one step: removing
+                                    // them one by one is quadratic.
+                                    $this->vtimezoneChanged($propName);
+                                    $this->children[$propName] = [reset($properties)];
                                     $repaired = true;
                                 }
                             }

@@ -323,11 +323,10 @@ class Broker
 
             // We need to update an existing object with all the new information.
             // We start by removing all non-VEVENT components (VTIMEZONE, etc.)
-            foreach ($existingObject->getComponents() as $component) {
-                if ('VEVENT' !== $component->name) {
-                    $existingObject->remove($component);
-                }
-            }
+            $existingObject->removeChildren(array_filter(
+                $existingObject->getComponents(),
+                static fn (Component $component) => 'VEVENT' !== $component->name
+            ));
 
             // Then we search for a master event in the iTip, if we find it we remove all VEVENT from the original
             // calendar object, as we will later add new components from the iTip
@@ -402,6 +401,7 @@ class Broker
                 }
             }
 
+            $cancelledOverrides = [];
             foreach ($existingObject->VEVENT as $vevent) {
                 $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? self::recurrenceId($vevent)->getTimeStamp() : 'master';
 
@@ -414,9 +414,10 @@ class Broker
                     // A CANCEL without SEQUENCE has the default sequence 0.
                     $vevent->SEQUENCE = $itipMessage->sequence ?? 0;
                 } elseif (isset($instancesToCancel[$recurIdTimestamp])) {
-                    $existingObject->remove($vevent);
+                    $cancelledOverrides[] = $vevent;
                 }
             }
+            $existingObject->removeChildren($cancelledOverrides);
 
             // Without a master, the cancelled instances were marked above and
             // there is no EXDATE to update.
