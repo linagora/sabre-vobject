@@ -186,12 +186,9 @@ class Component extends Node
      */
     public function children(): array
     {
-        $result = [];
-        foreach ($this->children as $childGroup) {
-            $result = array_merge($result, $childGroup);
-        }
-
-        return $result;
+        // One merge of all the groups: merging them one at a time copies
+        // the list built so far for each name, quadratic in their number.
+        return $this->children ? array_merge(...array_values($this->children)) : [];
     }
 
     /**
