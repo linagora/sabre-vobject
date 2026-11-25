@@ -177,7 +177,9 @@ class Json extends Parser
 
         $valueType = strtoupper($valueType);
 
-        if (isset($parameters['group'])) {
+        // The key, not its value: a null group would otherwise be kept as a
+        // GROUP parameter, which jsonSerialize() does not write.
+        if (array_key_exists('group', $parameters)) {
             if (!is_string($parameters['group']) || !preg_match('/^[A-Z0-9-]+\z/i', $parameters['group'])) {
                 throw new ParseException('Invalid group name for property '.$propertyName);
             }
