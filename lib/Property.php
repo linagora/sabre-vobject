@@ -507,6 +507,28 @@ abstract class Property extends Node implements \Stringable
      */
     public function repairName(int $options): array
     {
+        [$node, $messages] = $this->nameReplacement($options);
+        if (null !== $node && $node !== $this) {
+            $parent = $this->parent;
+            $parent->remove($this);
+            $parent->add($node);
+        }
+
+        return [$node, $messages];
+    }
+
+    /**
+     * What repairName() does, without changing the tree: the replacement is
+     * returned, for the caller to put in place of this property. A component
+     * replacing many of its children does it in one step, as removing them one
+     * by one costs O(n²).
+     *
+     * @internal
+     *
+     * @return array{0: ?Property, 1: array<int, array{level: int, message: string, node: Node}>}
+     */
+    public function nameReplacement(int $options): array
+    {
         if (!($options & self::REPAIR) || !$this->parent instanceof Component || preg_match('/^([A-Z0-9-]+)$/', (string) $this->name)) {
             return [$this, []];
         }
@@ -539,10 +561,6 @@ abstract class Property extends Node implements \Stringable
                 ],
             ]];
         }
-
-        $parent = $this->parent;
-        $parent->remove($this);
-        $parent->add($replacement);
 
         return [$replacement, [['level' => 1, 'message' => $message, 'node' => $replacement]]];
     }
