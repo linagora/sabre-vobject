@@ -608,18 +608,26 @@ class Component extends Node
         // The lists are merged once: merging them one at a time is
         // quadratic when each child has a message.
         $messageLists = [];
+        // The properties whose name is repaired, removed in one step.
+        $replaced = [];
 
         foreach ($this->children() as $child) {
             if ($child instanceof Property) {
                 // Done here, so that only the node in the tree is validated.
-                [$child, $nameMessages] = $child->repairName($options);
+                [$replacement, $nameMessages] = $child->nameReplacement($options);
                 $messageLists[] = $nameMessages;
-                if (null === $child) {
+                if (null === $replacement) {
                     continue;
+                }
+                if ($replacement !== $child) {
+                    $this->add($replacement);
+                    $replaced[] = $child;
+                    $child = $replacement;
                 }
             }
             $messageLists[] = $child->validate($options);
         }
+        $this->removeChildren($replaced);
         $messages = array_merge([], ...$messageLists);
 
         // Counting once the children are validated, as a child may remove

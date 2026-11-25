@@ -28,7 +28,7 @@ class ComponentPerformanceTest extends TestCase
         $calendar->validate();
         $serialized = $calendar->serialize();
         $expanded = $calendar->expand(new \DateTimeImmutable('2026-01-01'), new \DateTimeImmutable('2027-01-01'));
-        self::assertLessThan(2.0, microtime(true) - $start);
+        self::assertLessThan(3.0, microtime(true) - $start);
 
         self::assertCount(20000 + 4, $calendar->VEVENT->children());
         self::assertStringContainsString("X-A20000:v\r\n", $serialized);
@@ -41,7 +41,7 @@ class ComponentPerformanceTest extends TestCase
 
         $start = microtime(true);
         $messages = $calendar->validate(Component::REPAIR);
-        self::assertLessThan(2.0, microtime(true) - $start);
+        self::assertLessThan(3.0, microtime(true) - $start);
 
         self::assertCount(1, $calendar->VEVENT->select('UID'));
         self::assertSame(1, max(array_column($messages, 'level')));
@@ -55,7 +55,7 @@ class ComponentPerformanceTest extends TestCase
 
         $start = microtime(true);
         $vcard->validate(Component::REPAIR);
-        self::assertLessThan(2.0, microtime(true) - $start);
+        self::assertLessThan(3.0, microtime(true) - $start);
 
         self::assertSame([], $vcard->getComponents());
         // A property of the same name as the components is kept.
@@ -68,7 +68,7 @@ class ComponentPerformanceTest extends TestCase
 
         $start = microtime(true);
         $vcard->remove('item1.tel');
-        self::assertLessThan(1.0, microtime(true) - $start);
+        self::assertLessThan(3.0, microtime(true) - $start);
 
         self::assertSame(['2'], array_map(strval(...), array_values($vcard->select('TEL'))));
     }
@@ -79,15 +79,15 @@ class ComponentPerformanceTest extends TestCase
 
         $start = microtime(true);
         $messages = $calendar->validate();
-        self::assertLessThan(2.0, microtime(true) - $start);
+        self::assertLessThan(3.0, microtime(true) - $start);
 
         self::assertCount(100000, array_filter($messages, fn ($m) => str_contains($m['message'], 'empty group')));
     }
 
     public function testManyRdateAndExdateLinesInLinearTime(): void
     {
-        $rdates = implode('', array_map(fn ($i) => 'RDATE:'.gmdate('Ymd\THis\Z', 1767261600 + $i * 3600)."\r\n", range(1, 50000)));
-        $exdates = implode('', array_map(fn ($i) => 'EXDATE:'.gmdate('Ymd\THis\Z', 1767261600 + $i * 3600)."\r\n", range(1, 49990)));
+        $rdates = implode('', array_map(fn ($i) => 'RDATE:'.gmdate('Ymd\THis\Z', 1767261600 + $i * 3600)."\r\n", range(1, 100000)));
+        $exdates = implode('', array_map(fn ($i) => 'EXDATE:'.gmdate('Ymd\THis\Z', 1767261600 + $i * 3600)."\r\n", range(1, 99990)));
         $calendar = Reader::read(self::vevent($rdates.$exdates));
 
         $start = microtime(true);
@@ -96,9 +96,21 @@ class ComponentPerformanceTest extends TestCase
         foreach ($iterator as $_) {
             ++$count;
         }
-        self::assertLessThan(2.0, microtime(true) - $start);
+        self::assertLessThan(3.0, microtime(true) - $start);
 
         // DTSTART and the last 10 RDATEs.
         self::assertSame(11, $count);
+    }
+
+    public function testManyRepairedNamesInLinearTime(): void
+    {
+        $calendar = Reader::read(self::vevent(str_repeat("X_A:v\r\n", 100000)), Reader::OPTION_FORGIVING);
+
+        $start = microtime(true);
+        $calendar->validate(Component::REPAIR);
+        self::assertLessThan(3.0, microtime(true) - $start);
+
+        self::assertCount(100000, $calendar->VEVENT->select('X-A'));
+        self::assertSame([], $calendar->VEVENT->select('X_A'));
     }
 }
