@@ -430,12 +430,14 @@ class Broker
                 $masterTimeZone = $masterObject->DTSTART->getDateTime()->getTimeZone();
 
                 // EXDATE is a repeatable property: all its lines are merged below.
+                $exDateLists = [$exDates];
                 foreach ($masterObject->select('EXDATE') as $exDateProperty) {
                     if (!$exDateProperty instanceof Property\ICalendar\DateTime) {
                         throw new InvalidDataException('An EXDATE MUST hold DATE or DATE-TIME values.');
                     }
-                    $exDates = array_merge($exDates, $exDateProperty->getDateTimes());
+                    $exDateLists[] = $exDateProperty->getDateTimes();
                 }
+                $exDates = array_merge(...$exDateLists);
 
                 if ($exDates) {
                     // We only need to update the first timezone, because
@@ -1206,9 +1208,11 @@ class Broker
             }
 
             if (isset($vevent->EXDATE)) {
+                $exdateLists = [$exdate];
                 foreach ($vevent->select('EXDATE') as $val) {
-                    $exdate = array_merge($exdate, self::exdateIds($val, $timezone, $vevent->DTSTART));
+                    $exdateLists[] = self::exdateIds($val, $timezone, $vevent->DTSTART);
                 }
+                $exdate = array_merge(...$exdateLists);
                 sort($exdate);
             }
             if (isset($vevent->RRULE)) {

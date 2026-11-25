@@ -680,9 +680,11 @@ abstract class Property extends Node implements \Stringable
         }
 
         // Validating inner parameters
+        $warningLists = [$warnings];
         foreach ($this->parameters as $param) {
-            $warnings = array_merge($warnings, $param->validate($options));
+            $warningLists[] = $param->validate($options);
         }
+        $warnings = array_merge(...$warningLists);
 
         return $warnings;
     }
