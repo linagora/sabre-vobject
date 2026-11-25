@@ -683,4 +683,32 @@ VCF;
 
         self::assertSame('https://a.example/a,b', (string) VObject\Reader::read($calendar->serialize())->VEVENT->URL);
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function severalDateAndOrTimeValues(): array
+    {
+        return [
+            'BDAY' => ['["bday",{},"date-and-or-time","1985","0412"]'],
+            'ANNIVERSARY as date' => ['["anniversary",{},"date","19850412","19860412"]'],
+            'DEATHDATE as date-time' => ['["deathdate",{},"date-time","19850412T100000","19860412T100000"]'],
+            'N with a value type' => ['["n",{},"date-and-or-time","-","-"]'],
+        ];
+    }
+
+    #[DataProvider('severalDateAndOrTimeValues')]
+    public function testSeveralDateAndOrTimeValuesAreRefused(string $property): void
+    {
+        $this->expectException(ParseException::class);
+        VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["uid",{},"text","u"],'.$property.']]');
+    }
+
+    public function testOneDateAndOrTimeValueIsKept(): void
+    {
+        $card = VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","A"],["uid",{},"text","u"],["bday",{},"date-and-or-time","1985-04-12"]]]');
+
+        self::assertSame([], $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR));
+        self::assertSame("BDAY:1985-04-12\r\n", $card->BDAY->serialize());
+    }
 }
