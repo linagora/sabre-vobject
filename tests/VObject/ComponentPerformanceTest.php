@@ -72,4 +72,33 @@ class ComponentPerformanceTest extends TestCase
 
         self::assertSame(['2'], array_map(strval(...), array_values($vcard->select('TEL'))));
     }
+
+    public function testOneWarningPerLineInLinearTime(): void
+    {
+        $calendar = Reader::read(self::vevent(str_repeat(".X:\r\n", 100000)));
+
+        $start = microtime(true);
+        $messages = $calendar->validate();
+        self::assertLessThan(2.0, microtime(true) - $start);
+
+        self::assertCount(100000, array_filter($messages, fn ($m) => str_contains($m['message'], 'empty group')));
+    }
+
+    public function testManyRdateAndExdateLinesInLinearTime(): void
+    {
+        $rdates = implode('', array_map(fn ($i) => 'RDATE:'.gmdate('Ymd\THis\Z', 1767261600 + $i * 3600)."\r\n", range(1, 50000)));
+        $exdates = implode('', array_map(fn ($i) => 'EXDATE:'.gmdate('Ymd\THis\Z', 1767261600 + $i * 3600)."\r\n", range(1, 49990)));
+        $calendar = Reader::read(self::vevent($rdates.$exdates));
+
+        $start = microtime(true);
+        $iterator = new Recur\EventIterator($calendar->VEVENT);
+        $count = 0;
+        foreach ($iterator as $_) {
+            ++$count;
+        }
+        self::assertLessThan(2.0, microtime(true) - $start);
+
+        // DTSTART and the last 10 RDATEs.
+        self::assertSame(11, $count);
+    }
 }

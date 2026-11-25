@@ -208,10 +208,11 @@ class EventIterator implements \Iterator
         }
 
         if (!$masterless && isset($this->masterEvent->RDATE)) {
-            $rdateValues = [];
+            $rdateLists = [];
             foreach ($this->masterEvent->RDATE as $rdate) {
-                $rdateValues = array_merge($rdateValues, $this->rdateStarts($rdate));
+                $rdateLists[] = $this->rdateStarts($rdate);
             }
+            $rdateValues = array_merge([], ...$rdateLists);
             if ($this->allDay) {
                 // An instance of an all-day event is all-day as well, as
                 // getEventObject() writes it, whatever the RDATE holds.

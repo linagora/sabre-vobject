@@ -605,19 +605,22 @@ class Component extends Node
 
         $propertyCounters = [];
 
-        $messages = [];
+        // The lists are merged once: merging them one at a time is
+        // quadratic when each child has a message.
+        $messageLists = [];
 
         foreach ($this->children() as $child) {
             if ($child instanceof Property) {
                 // Done here, so that only the node in the tree is validated.
                 [$child, $nameMessages] = $child->repairName($options);
-                $messages = array_merge($messages, $nameMessages);
+                $messageLists[] = $nameMessages;
                 if (null === $child) {
                     continue;
                 }
             }
-            $messages = array_merge($messages, $child->validate($options));
+            $messageLists[] = $child->validate($options);
         }
+        $messages = array_merge([], ...$messageLists);
 
         // Counting once the children are validated, as a child may remove
         // itself while repairing (e.g. an RRULE without FREQ).
