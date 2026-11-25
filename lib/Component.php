@@ -121,6 +121,9 @@ class Component extends Node
             $newNode = $arguments[0];
         } elseif (is_string($arguments[0])) {
             $newNode = call_user_func_array([$this->root, 'create'], $arguments);
+            // As for a node passed in: a VTIMEZONE added by name must tell
+            // the document when its TZID or observances change.
+            $newNode->parent = $this;
         } else {
             throw new \InvalidArgumentException('The first argument must either be a \\Sabre\\VObject\\Node or a string');
         }
@@ -733,9 +736,10 @@ class Component extends Node
      * parameter on a clone.
      */
     /**
-     * @internal for TimeZoneUtil: changes when a VTIMEZONE child, or the TZID
-     * of one, is added or removed. A TZID changed in place (setValue()) does
-     * not change it.
+     * @internal for TimeZoneUtil: changes when a VTIMEZONE child, the TZID or
+     * an observance (STANDARD, DAYLIGHT) of one, or the TZOFFSETTO of such an
+     * observance, is added or removed. A value changed in place (setValue())
+     * does not change it.
      */
     public function getVTimeZoneRevision(): int
     {
@@ -747,8 +751,14 @@ class Component extends Node
         $childName = strtoupper($childName);
         if ('VTIMEZONE' === $childName) {
             ++$this->vtimezoneRevision;
-        } elseif ('TZID' === $childName && $this instanceof Component\VTimeZone && $this->parent instanceof self) {
-            ++$this->parent->vtimezoneRevision;
+        } elseif ($this instanceof Component\VTimeZone && $this->parent instanceof self) {
+            // The TZID and the observances tell which zone it is.
+            if (in_array($childName, ['TZID', 'STANDARD', 'DAYLIGHT'], true)) {
+                ++$this->parent->vtimezoneRevision;
+            }
+        } elseif ('TZOFFSETTO' === $childName && in_array(strtoupper($this->name), ['STANDARD', 'DAYLIGHT'], true)
+            && $this->parent instanceof Component\VTimeZone && $this->parent->parent instanceof self) {
+            ++$this->parent->parent->vtimezoneRevision;
         }
     }
 

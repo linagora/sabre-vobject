@@ -890,4 +890,69 @@ HI;
 
         self::assertSame('+05:30', TimeZoneUtil::getTimeZone('Custom', $vcal)->getName());
     }
+
+    private static function calendarWithVTimeZone(string $tzid, string $observances): Component\VCalendar
+    {
+        $calendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTIMEZONE\r\nTZID:$tzid\r\n$observances"."END:VTIMEZONE\r\nEND:VCALENDAR\r\n");
+        self::assertInstanceOf(Component\VCalendar::class, $calendar);
+
+        return $calendar;
+    }
+
+    public function testKnownNameWithContradictingVTimeZoneFollowsTheVTimeZone(): void
+    {
+        $calendar = self::calendarWithVTimeZone('W. Europe Standard Time', "BEGIN:DAYLIGHT\r\nDTSTART:16010111T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0020\r\nEND:DAYLIGHT\r\n");
+
+        $tz = TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar);
+        self::assertSame(20 * 60, $tz->getOffset(new \DateTimeImmutable('2026-01-15T12:00:00Z')));
+        self::assertSame(20 * 60, $tz->getOffset(new \DateTimeImmutable('2026-07-15T12:00:00Z')));
+    }
+
+    public function testKnownIanaNameWithContradictingVTimeZoneFollowsTheVTimeZone(): void
+    {
+        $calendar = self::calendarWithVTimeZone('Europe/Berlin', "BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900\r\nEND:STANDARD\r\n");
+
+        self::assertSame(9 * 3600, TimeZoneUtil::getTimeZone('Europe/Berlin', $calendar)->getOffset(new \DateTimeImmutable('2026-01-15T12:00:00Z')));
+    }
+
+    public function testKnownNameWithOutlookVTimeZoneKeepsTheMappedZone(): void
+    {
+        // Outlook's definition: only the 1601 rules.
+        $calendar = self::calendarWithVTimeZone('W. Europe Standard Time', "BEGIN:STANDARD\r\nDTSTART:16010101T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\nRRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10\r\nEND:STANDARD\r\nBEGIN:DAYLIGHT\r\nDTSTART:16010101T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200\r\nRRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3\r\nEND:DAYLIGHT\r\n");
+
+        self::assertSame('Europe/Berlin', TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar)->getName());
+    }
+
+    public function testKnownNameWithAStaleOffsetKeepsTheMappedZone(): void
+    {
+        // Moscow was at +04:00 from 2011 to 2014: an old definition still
+        // names the zone.
+        $calendar = self::calendarWithVTimeZone('Russian Standard Time', "BEGIN:STANDARD\r\nDTSTART:16010101T000000\r\nTZOFFSETFROM:+0400\r\nTZOFFSETTO:+0400\r\nEND:STANDARD\r\n");
+
+        self::assertSame('Europe/Moscow', TimeZoneUtil::getTimeZone('Russian Standard Time', $calendar)->getName());
+    }
+
+    public function testKnownNameWithVTimeZoneWithoutOffsetsKeepsTheMappedZone(): void
+    {
+        $calendar = self::calendarWithVTimeZone('W. Europe Standard Time', '');
+
+        self::assertSame('Europe/Berlin', TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar)->getName());
+    }
+
+    public function testObservancesAddedAfterALookupAreSeen(): void
+    {
+        $calendar = new Component\VCalendar();
+        $vtimezone = $calendar->add('VTIMEZONE', ['TZID' => 'W. Europe Standard Time']);
+        self::assertSame('Europe/Berlin', TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar)->getName());
+
+        $observance = $vtimezone->add($calendar->createComponent('STANDARD', ['DTSTART' => '16010101T000000']));
+        self::assertSame('Europe/Berlin', TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar)->getName());
+
+        $observance->add('TZOFFSETFROM', '+0020');
+        $observance->add('TZOFFSETTO', '+0020');
+        self::assertSame(20 * 60, TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar)->getOffset(new \DateTimeImmutable('2026-01-15T12:00:00Z')));
+
+        $vtimezone->remove($observance);
+        self::assertSame('Europe/Berlin', TimeZoneUtil::getTimeZone('W. Europe Standard Time', $calendar)->getName());
+    }
 }
