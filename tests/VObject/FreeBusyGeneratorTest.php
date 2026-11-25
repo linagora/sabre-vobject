@@ -1282,4 +1282,43 @@ ICS;
             Settings::$maxFreeBusyPeriods = $maxFreeBusyPeriods;
         }
     }
+
+    public function testPropertyNamedLikeAComponentDoesNotHideIt(): void
+    {
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nVFREEBUSY:x\r\n"
+            ."BEGIN:VFREEBUSY\r\nUID:fb\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."FREEBUSY:20260110T100000Z/20260110T120000Z\r\nEND:VFREEBUSY\r\nEND:VCALENDAR\r\n";
+        $vcal = Reader::read($ics);
+        self::assertInstanceOf(Component\VCalendar::class, $vcal);
+
+        self::assertCount(1, $vcal->getBaseComponents());
+
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'),
+            new \DateTimeImmutable('2026-03-01T00:00:00Z'),
+            $vcal
+        );
+        self::assertSame('20260110T100000Z/20260110T120000Z', (string) $gen->getResult()->VFREEBUSY->FREEBUSY);
+    }
+
+    public function testPropertyNamedVEventDoesNotBreakTheGenerator(): void
+    {
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nVEVENT:x\r\n"
+            ."BEGIN:VEVENT\r\nUID:ev\r\nDTSTAMP:20260101T000000Z\r\n"
+            ."DTSTART:20260105T100000Z\r\nDTEND:20260105T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $gen = new FreeBusyGenerator(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'),
+            new \DateTimeImmutable('2026-03-01T00:00:00Z'),
+            Reader::read($ics)
+        );
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            $result = $gen->getResult();
+        } finally {
+            restore_error_handler();
+        }
+        self::assertSame('20260105T100000Z/20260105T110000Z', (string) $result->VFREEBUSY->FREEBUSY);
+    }
 }

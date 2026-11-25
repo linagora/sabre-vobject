@@ -383,6 +383,10 @@ class FreeBusyGenerator
             }
             $overriddenUids = [];
             foreach ($object->select('VEVENT') as $vevent) {
+                // A property named VEVENT is filed with them.
+                if (!$vevent instanceof Component) {
+                    continue;
+                }
                 $uid = (string) $vevent->UID;
                 if (isset($vevent->{'RECURRENCE-ID'}) && '' !== $uid && !isset($overriddenUids[$uid])) {
                     $overriddenUids[$uid] = true;
