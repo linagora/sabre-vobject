@@ -1071,8 +1071,12 @@ class RRuleIterator implements \Iterator
                         if (!is_scalar($part) || !preg_match('#^(?:[+-]?[1-5])?(?:MO|TU|WE|TH|FR|SA|SU)$#Di', (string) $part)) {
                             throw new InvalidDataException('Invalid part in BYDAY clause: '.(is_scalar($part) ? $part : gettype($part)));
                         }
-                        $this->byDay[] = strtoupper((string) $part);
+                        // "+1MO" is "1MO".
+                        $this->byDay[] = ltrim(strtoupper((string) $part), '+');
                     }
+                    // A repeated value changes no instance, but would be
+                    // processed again for each period scanned.
+                    $this->byDay = array_values(array_unique($this->byDay));
                     break;
 
                 case 'BYMONTHDAY':
@@ -1143,6 +1147,8 @@ class RRuleIterator implements \Iterator
         $startDate = clone $this->currentDate;
 
         $byDayResults = [];
+        // The days of the month of each weekday, listed once per call.
+        $dayHitsByName = [];
 
         // Our strategy is to simply go through the byDays, advance the date to
         // that point and add it to the results.
@@ -1152,19 +1158,23 @@ class RRuleIterator implements \Iterator
 
                 // Dayname will be something like 'wednesday'. Now we need to find
                 // all wednesdays in this month.
-                $dayHits = [];
+                if (!isset($dayHitsByName[$dayName])) {
+                    $dayHits = [];
 
-                // workaround for missing 'first day of the month' support in hhvm
-                $checkDate = new \DateTime($startDate->format('Y-m-1'));
-                // workaround modify always advancing the date even if the current day is a $dayName in hhvm
-                if ($checkDate->format('l') !== $dayName) {
-                    $checkDate = $checkDate->modify($dayName);
+                    // workaround for missing 'first day of the month' support in hhvm
+                    $checkDate = new \DateTime($startDate->format('Y-m-1'));
+                    // workaround modify always advancing the date even if the current day is a $dayName in hhvm
+                    if ($checkDate->format('l') !== $dayName) {
+                        $checkDate = $checkDate->modify($dayName);
+                    }
+
+                    do {
+                        $dayHits[] = $checkDate->format('j');
+                        $checkDate = $checkDate->modify('next '.$dayName);
+                    } while ($checkDate->format('n') === $startDate->format('n'));
+                    $dayHitsByName[$dayName] = $dayHits;
                 }
-
-                do {
-                    $dayHits[] = $checkDate->format('j');
-                    $checkDate = $checkDate->modify('next '.$dayName);
-                } while ($checkDate->format('n') === $startDate->format('n'));
+                $dayHits = $dayHitsByName[$dayName];
 
                 // So now we have 'all wednesdays' for month. It is however
                 // possible that the user only really wanted the 1st, 2nd or last
@@ -1188,7 +1198,7 @@ class RRuleIterator implements \Iterator
                 } else {
                     // There was no counter (first, second, last wednesdays), so we
                     // just need to add the all to the list.
-                    $byDayResults = array_merge($byDayResults, $dayHits);
+                    array_push($byDayResults, ...$dayHits);
                 }
             }
         }
@@ -1277,7 +1287,9 @@ class RRuleIterator implements \Iterator
             $result[] = (int) $part;
         }
 
-        return $result;
+        // A repeated value changes no instance, but would be processed
+        // again for each period scanned.
+        return array_values(array_unique($result));
     }
 
     /**
@@ -1302,7 +1314,9 @@ class RRuleIterator implements \Iterator
             $result[] = (int) $part;
         }
 
-        return $result;
+        // A repeated value changes no instance, but would be processed
+        // again for each period scanned.
+        return array_values(array_unique($result));
     }
 
     /**
