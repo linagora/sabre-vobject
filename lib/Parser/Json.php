@@ -138,11 +138,7 @@ class Json extends Parser
             throw new ParseException('A property must be an array of a name, parameters, a value type and values');
         }
 
-        list(
-            $propertyName,
-            $parameters,
-            $valueType,
-        ) = $jProp;
+        [$propertyName, $parameters, $valueType] = $jProp;
 
         if (!is_string($propertyName) || !is_string($valueType)
             || (!is_array($parameters) && !$parameters instanceof \stdClass)) {

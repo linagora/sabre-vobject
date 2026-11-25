@@ -460,10 +460,7 @@ OUT;
         );
 
         // Swapping input and output
-        list(
-            $input,
-            $output,
-        ) = [
+        [$input, $output] = [
             $output,
             $input,
         ];
