@@ -214,11 +214,8 @@ class VCalendar extends VObject\Document
         $components = [];
         foreach ($this->children as $childGroup) {
             foreach ($childGroup as $child) {
-                if (!$child instanceof Component) {
-                    // If one child is not a component, they all are so we skip
-                    // the entire group.
-                    continue 2;
-                }
+                // A group also holds the properties of that name (a
+                // "VEVENT:x" line): only they are skipped.
                 if ($isBaseComponent($child)) {
                     $components[] = $child;
                 }
@@ -334,6 +331,9 @@ class VCalendar extends VObject\Document
         // then expanded with it.
         $recurringUids = [];
         foreach ($this->select('VEVENT') as $vevent) {
+            if (!$vevent instanceof Component) {
+                continue;
+            }
             if (isset($vevent->{'RECURRENCE-ID'}) || isset($vevent->RRULE) || isset($vevent->RDATE)) {
                 $recurringUids[(string) $vevent->UID] = true;
             }

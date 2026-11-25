@@ -194,4 +194,50 @@ class BrokerMalformedIncomingMessageTest extends TestCase
         $recipients = array_map(static fn (Message $message): string => $message->recipient, $messages);
         self::assertSame(['mailto:att@x.com'], $recipients);
     }
+
+    /**
+     * A property named VEVENT is filed with the events; it is not one.
+     *
+     * @return array<string, array{string, string}>
+     */
+    public static function propertiesNamedLikeComponents(): array
+    {
+        return [
+            'VEVENT in the calendar' => ["VEVENT:x\r\n", ''],
+            'VTIMEZONE in the calendar' => ["VTIMEZONE:x\r\n", ''],
+            'VALARM in the event' => ['', "VALARM:x\r\n"],
+        ];
+    }
+
+    #[DataProvider('propertiesNamedLikeComponents')]
+    public function testPropertyNamedLikeAComponentIsNotAnEvent(string $calendarLine, string $eventLine): void
+    {
+        $event = static fn (string $start) => "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n".$calendarLine."BEGIN:VEVENT\r\nUID:meeting-1\r\n"
+            ."DTSTART:$start\r\nDTEND:20260302T100000Z\r\nSUMMARY:s\r\nORGANIZER:mailto:org@x.com\r\n"
+            ."ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:att@x.com\r\n".$eventLine."BEGIN:VALARM\r\nACTION:EMAIL\r\nTRIGGER:-PT5M\r\n"
+            ."DESCRIPTION:d\r\nSUMMARY:s\r\nATTENDEE:mailto:org@x.com\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $broker = new Broker();
+
+        $messages = $broker->parseEvent($event('20260302T090000Z'), 'mailto:org@x.com', $event('20260302T080000Z'));
+        self::assertCount(1, $messages);
+        self::assertSame('REQUEST', $messages[0]->method);
+
+        $cancel = $broker->parseEvent(str_replace('ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:att@x.com', 'ATTENDEE:mailto:other@x.com', $event('20260302T090000Z')), 'mailto:org@x.com', $event('20260302T090000Z'));
+        self::assertSame('CANCEL', $cancel[0]->method);
+        self::assertSame('s', (string) $cancel[0]->message->VEVENT->SUMMARY);
+
+        $reply = $broker->parseEvent(str_replace('ATTENDEE;PARTSTAT=NEEDS-ACTION', 'ATTENDEE;PARTSTAT=ACCEPTED', $event('20260302T090000Z')), 'mailto:att@x.com', $event('20260302T090000Z'));
+        self::assertSame('REPLY', $reply[0]->method);
+
+        $body = str_replace(["BEGIN:VCALENDAR\r\nVERSION:2.0\r\n", "END:VCALENDAR\r\n"], '', $event('20260302T090000Z'));
+        $stored = $broker->processMessage(self::message('REQUEST', $body), Reader::read($event('20260302T080000Z')));
+        self::assertInstanceOf(VCalendar::class, $stored);
+        // The other children of the stored object are kept.
+        self::assertSame(substr_count($calendarLine.$eventLine, ':x'), substr_count($stored->serialize(), ':x'));
+        foreach ([$messages[0], $cancel[0], $reply[0]] as $message) {
+            self::assertStringNotContainsString("\r\nVTIMEZONE:x", $message->message->serialize());
+        }
+        self::assertCount(1, $cancel[0]->message->VEVENT->select('VALARM'));
+        self::assertSame('20260302T090000Z', (string) $stored->getBaseComponent('VEVENT')->DTSTART);
+    }
 }

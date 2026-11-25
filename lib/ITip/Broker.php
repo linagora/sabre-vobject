@@ -192,7 +192,7 @@ class Broker
             if (is_string($oldCalendar)) {
                 $oldCalendar = Reader::read($oldCalendar);
             }
-            if (!isset($oldCalendar->VEVENT)) {
+            if (!self::events($oldCalendar)) {
                 // We only support events at the moment
                 return [];
             }
@@ -212,7 +212,7 @@ class Broker
             if (is_string($calendar)) {
                 $calendar = Reader::read($calendar);
             }
-            if (!isset($calendar->VEVENT)) {
+            if (!self::events($calendar)) {
                 // We only support events at the moment
                 return [];
             }
@@ -330,9 +330,10 @@ class Broker
 
             // Then we search for a master event in the iTip, if we find it we remove all VEVENT from the original
             // calendar object, as we will later add new components from the iTip
-            foreach ($itipMessage->message->select('VEVENT') as $vEvent) {
+            foreach (self::events($itipMessage->message) as $vEvent) {
                 if (!isset($vEvent->{'RECURRENCE-ID'})) {
-                    $existingObject->remove('VEVENT');
+                    // Not the properties named VEVENT.
+                    $existingObject->removeChildren(self::events($existingObject));
                 }
             }
 
@@ -343,7 +344,7 @@ class Broker
                 } else {
                     // It's an exception to a recurring event, we try to find it in the original event to remove it
                     if (isset($component->{'RECURRENCE-ID'})) {
-                        foreach ($existingObject->select('VEVENT') as $vEvent) {
+                        foreach (self::events($existingObject) as $vEvent) {
                             if (isset($vEvent->{'RECURRENCE-ID'}) && self::recurrenceId($vEvent)->getTimestamp() === self::recurrenceId($component)->getTimestamp()) {
                                 $existingObject->remove($vEvent);
 
@@ -382,7 +383,7 @@ class Broker
             $cancelWholeEvent = false;
 
             // Finding all the instances that are cancelled.
-            foreach ($itipMessage->message->VEVENT as $vevent) {
+            foreach (self::events($itipMessage->message) as $vevent) {
                 if (isset($vevent->{'RECURRENCE-ID'})) {
                     $recurdate = self::recurrenceId($vevent);
                     $recurIdTimestamp = $recurdate->getTimeStamp();
@@ -395,14 +396,14 @@ class Broker
             }
 
             $masterObject = null;
-            foreach ($existingObject->VEVENT as $vevent) {
+            foreach (self::events($existingObject) as $vevent) {
                 if (!isset($vevent->{'RECURRENCE-ID'})) {
                     $masterObject = $vevent;
                 }
             }
 
             $cancelledOverrides = [];
-            foreach ($existingObject->VEVENT as $vevent) {
+            foreach (self::events($existingObject) as $vevent) {
                 $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? self::recurrenceId($vevent)->getTimeStamp() : 'master';
 
                 // Without a master there is no EXDATE to record the
@@ -496,7 +497,7 @@ class Broker
         $requestStatus = '2.0';
 
         // Finding all the instances the attendee replied to.
-        foreach ($itipMessage->message->VEVENT as $vevent) {
+        foreach (self::events($itipMessage->message) as $vevent) {
             // Use the Unix timestamp returned by getTimestamp as a unique identifier for the recurrence.
             // The Unix timestamp will be the same for an event, even if the reply from the attendee
             // used a different format/timezone to express the event date-time.
@@ -539,7 +540,7 @@ class Broker
         // Now we need to loop through the original organizer event, to find
         // all the instances where we have a reply for.
         $masterObject = null;
-        foreach ($existingObject->VEVENT as $vevent) {
+        foreach (self::events($existingObject) as $vevent) {
             // Use the Unix timestamp returned by getTimestamp as a unique identifier for the recurrence.
             $recurIdTimestamp = isset($vevent->{'RECURRENCE-ID'}) ? self::recurrenceId($vevent)->getTimestamp() : 'master';
             if ('master' === $recurIdTimestamp) {
@@ -732,7 +733,10 @@ class Broker
             $icalMsg = new VCalendar();
 
             foreach ($calendar->select('VTIMEZONE') as $timezone) {
-                $icalMsg->add(clone $timezone);
+                // Not a "VTIMEZONE:x" property.
+                if ($timezone instanceof Component) {
+                    $icalMsg->add(clone $timezone);
+                }
             }
 
             if (!$attendee['newInstances'] || 'CANCELLED' === $eventInfo['status']) {
@@ -751,6 +755,7 @@ class Broker
 
                 $icalMsg->METHOD = $message->method;
 
+                $firstEvent = self::events($calendar)[0];
                 /** @var VEvent $event */
                 $event = $icalMsg->add('VEVENT', [
                     'UID' => $message->uid,
@@ -758,14 +763,14 @@ class Broker
                     'SEQUENCE' => $message->sequence ?? 0,
                     'DTSTAMP' => gmdate('Ymd\\THis\\Z'),
                 ]);
-                if (isset($calendar->VEVENT->SUMMARY)) {
-                    $event->add('SUMMARY', $calendar->VEVENT->SUMMARY->getValue());
+                if (isset($firstEvent->SUMMARY)) {
+                    $event->add('SUMMARY', $firstEvent->SUMMARY->getValue());
                 }
-                $event->add(clone $calendar->VEVENT->DTSTART);
-                if (isset($calendar->VEVENT->DTEND)) {
-                    $event->add(clone $calendar->VEVENT->DTEND);
-                } elseif (isset($calendar->VEVENT->DURATION)) {
-                    $event->add(clone $calendar->VEVENT->DURATION);
+                $event->add(clone $firstEvent->DTSTART);
+                if (isset($firstEvent->DTEND)) {
+                    $event->add(clone $firstEvent->DTEND);
+                } elseif (isset($firstEvent->DURATION)) {
+                    $event->add(clone $firstEvent->DURATION);
                 }
                 $org = $event->add('ORGANIZER', $eventInfo['organizer']);
                 if ($eventInfo['organizerName']) {
@@ -775,8 +780,9 @@ class Broker
                     'CN' => $attendee['name'],
                 ]);
 
-                if (isset($calendar->VEVENT->VALARM) && 'EMAIL' === $calendar->VEVENT->VALARM->ACTION?->getValue()) {
-                    $event->add(clone $calendar->VEVENT->VALARM);
+                $alarm = self::firstAlarm($firstEvent);
+                if ($alarm && 'EMAIL' === $alarm->ACTION?->getValue()) {
+                    $event->add(clone $alarm);
                     $event->VALARM->ATTENDEE?->setValue($attendee['href']);
                 }
                 $message->significantChange = true;
@@ -809,8 +815,9 @@ class Broker
 
                 foreach ($attendee['newInstances'] as $instanceId => $instanceInfo) {
                     $currentEvent = clone $eventInfo['instances'][$instanceId];
-                    if (isset($currentEvent->VALARM) && 'EMAIL' === $currentEvent->VALARM->ACTION?->getValue()) {
-                        $currentEvent->VALARM->ATTENDEE?->setValue($attendee['href']);
+                    $alarm = self::firstAlarm($currentEvent);
+                    if ($alarm && 'EMAIL' === $alarm->ACTION?->getValue()) {
+                        $alarm->ATTENDEE?->setValue($attendee['href']);
                     }
 
                     if ('master' === $instanceId) {
@@ -968,15 +975,20 @@ class Broker
             $icalMsg->METHOD = 'REPLY';
 
             foreach ($calendar->select('VTIMEZONE') as $timezone) {
-                $icalMsg->add(clone $timezone);
+                // Not a "VTIMEZONE:x" property.
+                if ($timezone instanceof Component) {
+                    $icalMsg->add(clone $timezone);
+                }
             }
+
+            $firstEvent = self::events($calendar)[0];
 
             /** @var VEvent $event */
             $event = $icalMsg->add('VEVENT', [
                 'UID' => $message->uid,
             ]);
 
-            $summary = isset($calendar->VEVENT->SUMMARY) ? $calendar->VEVENT->SUMMARY->getValue() : '';
+            $summary = isset($firstEvent->SUMMARY) ? $firstEvent->SUMMARY->getValue() : '';
             // Adding properties from the correct source instance
             // An instance removed from the new object is described as stored.
             $instanceObj = $eventInfo['instances'][$instance['id']] ?? $oldEventInfo['instances'][$instance['id']] ?? null;
@@ -1157,7 +1169,7 @@ class Broker
 
         $significantChangeEventProperties = [];
 
-        foreach ($calendar->VEVENT as $vevent) {
+        foreach (self::events($calendar) as $vevent) {
             $eventSignificantChangeHash = '';
             $rrule = [];
 
@@ -1401,7 +1413,7 @@ class Broker
         // The stored copy is found by UID alone: a task or journal sharing
         // the UID would be replaced by the event (or lose its other
         // components), with no organizer to check.
-        $storedEvents = $existingObject->select('VEVENT');
+        $storedEvents = self::events($existingObject);
         if (!$storedEvents) {
             throw new ITipException('The stored object of a '.$itipMessage->method.' is not an event.');
         }
@@ -1428,7 +1440,7 @@ class Broker
                 throw new ITipException('The sender of a '.$itipMessage->method.' is not the organizer of the stored event.');
             }
         }
-        foreach ($itipMessage->message->select('VEVENT') as $vevent) {
+        foreach (self::events($itipMessage->message) as $vevent) {
             if (isset($vevent->ORGANIZER) && self::normalizedAddressString((string) $vevent->ORGANIZER->getValue()) !== $sender) {
                 throw new ITipException('The ORGANIZER of the '.$itipMessage->method.' is not its sender.');
             }
@@ -1448,7 +1460,7 @@ class Broker
     private function assertSenderAttendsRepliedInstances(Message $itipMessage, VCalendar $existingObject, array $recurIdTimestamps): void
     {
         $stored = [];
-        foreach ($existingObject->select('VEVENT') as $vevent) {
+        foreach (self::events($existingObject) as $vevent) {
             $recurrenceId = self::recurrenceId($vevent);
             $stored[$recurrenceId ? $recurrenceId->getTimestamp() : 'master'] = $vevent;
         }
@@ -1512,5 +1524,34 @@ class Broker
         }
 
         return (string) $property->getValue();
+    }
+
+    /**
+     * The first VALARM component of an event: select() also returns the
+     * properties named VALARM (a "VALARM:x" line), which are not alarms.
+     */
+    private static function firstAlarm(Component $event): ?Component
+    {
+        foreach ($event->select('VALARM') as $alarm) {
+            if ($alarm instanceof Component) {
+                return $alarm;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The VEVENT components of a calendar: select() also returns the
+     * properties named VEVENT (a "VEVENT:x" line), which are not events.
+     *
+     * @return Component[]
+     */
+    private static function events(Component $calendar): array
+    {
+        return array_values(array_filter(
+            $calendar->select('VEVENT'),
+            static fn ($node) => $node instanceof Component
+        ));
     }
 }
