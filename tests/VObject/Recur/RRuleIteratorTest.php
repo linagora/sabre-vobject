@@ -2357,6 +2357,72 @@ class RRuleIteratorTest extends TestCase
         );
     }
 
+    public function testWeeklyByHourAcrossHalfHourDstStart(): void
+    {
+        $this->parse(
+            'FREQ=WEEKLY;BYHOUR=6',
+            '2012-09-29 06:00:00',
+            [
+                '2012-09-29 06:00:00',
+                '2012-10-06 06:00:00',
+                // Lord Howe summer time starts on 2012-10-07: 02:00 -> 02:30.
+                '2012-10-13 06:00:00',
+                '2012-10-20 06:00:00',
+            ],
+            null,
+            'Australia/Lord_Howe',
+        );
+    }
+
+    public function testDailyByHourAcrossHalfHourDstStart(): void
+    {
+        $this->parse(
+            'FREQ=DAILY;BYHOUR=6',
+            '2012-10-06 06:00:00',
+            [
+                '2012-10-06 06:00:00',
+                '2012-10-07 06:00:00',
+                '2012-10-08 06:00:00',
+            ],
+            null,
+            'Australia/Lord_Howe',
+        );
+    }
+
+    public function testByHourKeepsTheMinutesOfDtstartAcrossHalfHourDstChanges(): void
+    {
+        // On 2012-10-07 02:15:30 does not exist; on 2013-04-07 the clock
+        // goes back from 02:00 to 01:30.
+        $this->parse(
+            'FREQ=WEEKLY;BYDAY=SU;BYHOUR=1,2,3',
+            '2012-09-30 01:15:30',
+            [
+                '2012-09-30 01:15:30',
+                '2012-09-30 02:15:30',
+                '2012-09-30 03:15:30',
+                '2012-10-07 01:15:30',
+                '2012-10-07 02:45:30',
+                '2012-10-07 03:15:30',
+                '2012-10-14 01:15:30',
+            ],
+            null,
+            'Australia/Lord_Howe',
+        );
+        $this->parse(
+            'FREQ=DAILY;BYHOUR=1,2',
+            '2013-04-06 01:00:00',
+            [
+                '2013-04-06 01:00:00',
+                '2013-04-06 02:00:00',
+                '2013-04-07 01:00:00',
+                '2013-04-07 02:00:00',
+                '2013-04-08 01:00:00',
+            ],
+            null,
+            'Australia/Lord_Howe',
+        );
+    }
+
     public function parse($rule, string $start, array $expected, ?string $fastForward = null, string $tz = 'UTC', bool $runTillTheEnd = false): void
     {
         $dt = new \DateTime($start, new \DateTimeZone($tz));

@@ -378,6 +378,35 @@ class RRuleIterator implements \Iterator
     }
 
     /**
+     * The minutes and seconds of DTSTART, in seconds, read once.
+     */
+    private ?int $startMinuteSecond = null;
+
+    /**
+     * Moves currentDate to the next hour of the walk BYHOUR does in DAILY
+     * and WEEKLY rules, at the minutes and seconds of DTSTART (RFC 5545
+     * section 3.3.10). A summer time change of 30 minutes
+     * (Australia/Lord_Howe) moves a one-hour step to the half hour: the
+     * minutes are set back, unless that would not move forward (a local
+     * time that occurs twice).
+     */
+    private function nextHour(): void
+    {
+        $this->startMinuteSecond ??= (int) $this->startDate->format('i') * 60 + (int) $this->startDate->format('s');
+        $this->currentDate = $this->currentDate->modify('+1 hours');
+        // The minutes and seconds of the local time, without formatting it.
+        $timestamp = $this->currentDate->getTimestamp();
+        $local = ($timestamp + $this->currentDate->getOffset()) % 3600;
+        if (($local < 0 ? $local + 3600 : $local) !== $this->startMinuteSecond) {
+            $aligned = (clone $this->currentDate)->setTime((int) $this->currentDate->format('G'), intdiv($this->startMinuteSecond, 60), $this->startMinuteSecond % 60);
+            // The step was one hour of elapsed time.
+            if ($aligned->getTimestamp() > $timestamp - 3600) {
+                $this->currentDate = $aligned;
+            }
+        }
+    }
+
+    /**
      * Advances currentDate by the interval.
      * The time is set from the original startDate.
      * If the recurrence is on a day when summer time started, then the
@@ -521,7 +550,7 @@ class RRuleIterator implements \Iterator
                     ++$emptyDays;
                 }
 
-                $this->currentDate = $this->currentDate->modify('+1 hours');
+                $this->nextHour();
             } else {
                 $this->advanceTheDate('+'.$this->interval.' days');
                 ++$emptyDays;
@@ -580,7 +609,7 @@ class RRuleIterator implements \Iterator
 
         do {
             if ($this->byHour) {
-                $this->currentDate = $this->currentDate->modify('+1 hours');
+                $this->nextHour();
             } else {
                 $this->advanceTheDate('+1 days');
             }
