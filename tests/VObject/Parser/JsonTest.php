@@ -408,6 +408,8 @@ VCF;
             'line break in a component name' => [['vcalendar', [], [["vevent\r\nX-FOO:bar", []]]]],
             'trailing line feed in a property name' => [['vcalendar', [], [['vevent', [$prop("x-a\n")]]]]],
             'trailing line feed in a group' => [['vcard', [$prop('email', ['group' => "item1\n"])]]],
+            'null group' => [['vcard', [$prop('email', ['group' => null])]]],
+            'false group' => [['vcard', [$prop('email', ['group' => false])]]],
             'trailing line feed in a component name' => [['vcalendar', [], [["vevent\n", []]]]],
             'nested vcalendar' => [['vcalendar', [], [['vevent', [], [['vcalendar', []]]]]]],
             'nested vcard' => [['vcard', [], [['vcard', []]]]],
