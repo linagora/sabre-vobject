@@ -366,7 +366,7 @@ class XML extends Parser
      */
     protected static function getTagName(string $clarkedTagName): string
     {
-        list(, $tagName) = SabreXml\Service::parseClarkNotation($clarkedTagName);
+        [, $tagName] = SabreXml\Service::parseClarkNotation($clarkedTagName);
 
         return $tagName;
     }
