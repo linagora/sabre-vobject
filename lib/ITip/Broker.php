@@ -1072,6 +1072,21 @@ class Broker
             // excludes nothing for it, so the attendee declines nothing.
             return [];
         }
+        if ($exDate instanceof Property\ICalendar\DateTime && $exDate->hasTime() && !$start->hasTime()) {
+            // A DATE-TIME on a DATE series: read as written, in its own time
+            // zone (its TZID, UTC, or floating), a value at midnight removes
+            // the all-day instance of that day, whose id is a DATE; another
+            // time is no instance. Converting it to another zone would make
+            // it depend on that zone, and on a midnight its DST skips.
+            $ids = [];
+            foreach ($parts as $part) {
+                if (preg_match('/^(\d{8})T000000Z?$/D', strtoupper(trim((string) $part)), $matches)) {
+                    $ids[] = $matches[1];
+                }
+            }
+
+            return $ids;
+        }
         if (!$exDate instanceof Property\ICalendar\DateTime || !$exDate->hasTime() || $exDate->isFloating()) {
             return $parts;
         }
