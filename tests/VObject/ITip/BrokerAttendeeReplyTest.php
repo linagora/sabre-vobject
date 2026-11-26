@@ -1689,4 +1689,46 @@ ICS;
             self::assertFalse(isset($message->message->VEVENT->{'RECURRENCE-ID'}), $message->message->serialize());
         }
     }
+
+    /**
+     * A DATE-TIME EXDATE on a DATE series: the REPLY describes the all-day
+     * instance it removes with DATE values, and a value that removes no
+     * instance declines nothing.
+     */
+    public function testDateTimeExdateOnDateSeries(): void
+    {
+        $oldMessage = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+SEQUENCE:1
+DTSTART;VALUE=DATE:20260105
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:organizer@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:one@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+        $removing = str_replace("RRULE:FREQ=DAILY;COUNT=5\n", "RRULE:FREQ=DAILY;COUNT=5\nEXDATE:20260106T000000\n", $oldMessage);
+        $messages = (new Broker())->parseEvent($removing, 'mailto:one@example.org', $oldMessage);
+        self::assertCount(1, $messages);
+        $vevent = $messages[0]->message->VEVENT;
+        self::assertFalse($vevent->{'RECURRENCE-ID'}->hasTime(), $messages[0]->message->serialize());
+        self::assertSame('20260106', $vevent->{'RECURRENCE-ID'}->getValue());
+        self::assertFalse($vevent->DTSTART->hasTime());
+        self::assertSame('DECLINED', (string) $vevent->ATTENDEE['PARTSTAT']);
+
+        $notAnInstance = str_replace("RRULE:FREQ=DAILY;COUNT=5\n", "RRULE:FREQ=DAILY;COUNT=5\nEXDATE:20260105T113000\n", $oldMessage);
+        self::assertSame([], (new Broker())->parseEvent($notAnInstance, 'mailto:one@example.org', $oldMessage));
+
+        // Read as written, in its own time zone: midnight there is the day.
+        foreach (['EXDATE:20260106T000000Z,20260107T120000Z', 'EXDATE;TZID=Europe/Paris:20260106T000000', 'EXDATE;TZID=America/Santiago:20260106T000000'] as $exdate) {
+            $messages = (new Broker())->parseEvent(str_replace("RRULE:FREQ=DAILY;COUNT=5\n", "RRULE:FREQ=DAILY;COUNT=5\n$exdate\n", $oldMessage), 'mailto:one@example.org', $oldMessage);
+            self::assertCount(1, $messages, $exdate);
+            self::assertSame('20260106', $messages[0]->message->VEVENT->{'RECURRENCE-ID'}->getValue(), $exdate);
+        }
+        $notMidnight = str_replace("RRULE:FREQ=DAILY;COUNT=5\n", "RRULE:FREQ=DAILY;COUNT=5\nEXDATE:20260105T230000Z\n", $oldMessage);
+        self::assertSame([], (new Broker())->parseEvent($notMidnight, 'mailto:one@example.org', $oldMessage));
+    }
 }
