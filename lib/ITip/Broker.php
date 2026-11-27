@@ -920,8 +920,9 @@ class Broker
         // instances.
         // We only need to do that though, if the master event is not declined.
         if (isset($instances['master']) && 'DECLINED' !== $instances['master']['newstatus']) {
+            $oldExdates = array_fill_keys($oldEventInfo['exdate'] ?? [], true);
             foreach ($eventInfo['exdate'] as $exDate) {
-                if (!in_array($exDate, $oldEventInfo['exdate'] ?? [], true)) {
+                if (!isset($oldExdates[$exDate])) {
                     if (isset($instances[$exDate])) {
                         $instances[$exDate]['newstatus'] = 'DECLINED';
                     } else {
@@ -1180,7 +1181,7 @@ class Broker
         $attendees = [];
 
         $instances = [];
-        $exdate = [];
+        $exdateLists = [];
 
         $significantChangeEventProperties = [];
 
@@ -1234,13 +1235,19 @@ class Broker
                 }
             }
 
+            // The ids of this event's EXDATE lines. Those of every event are
+            // merged and sorted once, after the loop: merging them into the
+            // list gathered so far for each event is quadratic in the number
+            // of events.
+            $eventExdate = [];
             if (isset($vevent->EXDATE)) {
-                $exdateLists = [$exdate];
+                $eventExdateLists = [];
                 foreach ($vevent->select('EXDATE') as $val) {
-                    $exdateLists[] = self::exdateIds($val, $timezone, $vevent->DTSTART);
+                    $eventExdateLists[] = self::exdateIds($val, $timezone, $vevent->DTSTART);
                 }
-                $exdate = array_merge(...$exdateLists);
-                sort($exdate);
+                $eventExdate = array_merge(...$eventExdateLists);
+                sort($eventExdate);
+                $exdateLists[] = $eventExdate;
             }
             if (isset($vevent->RRULE)) {
                 foreach ($vevent->select('RRULE') as $rr) {
@@ -1340,7 +1347,7 @@ class Broker
                     $eventSignificantChangeHash .= $prop.':';
 
                     if ('EXDATE' === $prop) {
-                        $eventSignificantChangeHash .= implode(',', $exdate).';';
+                        $eventSignificantChangeHash .= implode(',', $eventExdate).';';
                     } elseif ('RRULE' === $prop) {
                         $eventSignificantChangeHash .= implode(',', $rrule).';';
                     } else {
@@ -1366,6 +1373,9 @@ class Broker
 
             $significantChangeEventProperties[] = $eventSignificantChangeHash;
         }
+
+        $exdate = array_values(array_unique(array_merge([], ...$exdateLists)));
+        sort($exdate);
 
         asort($significantChangeEventProperties);
 
