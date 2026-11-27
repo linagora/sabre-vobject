@@ -7,23 +7,70 @@ use Sabre\VObject;
 
 class FloatTest extends TestCase
 {
-    public function testMimeDir()
+    public function testMimeDir(): void
     {
         $input = "BEGIN:VCARD\r\nVERSION:4.0\r\nX-FLOAT;VALUE=FLOAT:0.234;1.245\r\nEND:VCARD\r\n";
         $mimeDir = new VObject\Parser\MimeDir($input);
 
         $result = $mimeDir->parse($input);
 
-        $this->assertInstanceOf('Sabre\VObject\Property\FloatValue', $result->{'X-FLOAT'});
+        self::assertInstanceOf(FloatValue::class, $result->{'X-FLOAT'});
 
-        $this->assertEquals([
+        self::assertEquals([
             0.234,
             1.245,
         ], $result->{'X-FLOAT'}->getParts());
 
-        $this->assertEquals(
+        self::assertEquals(
             $input,
             $result->serialize()
         );
+    }
+
+    public function testInfiniteFloatIsReported(): void
+    {
+        $cal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nGEO:1e999;0\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $errors = array_filter($cal->validate(), fn ($m) => 3 === $m['level']);
+        self::assertCount(1, $errors);
+
+        $cal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nGEO:1.5;-2\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        self::assertSame([], $cal->validate());
+    }
+
+    public function testInfiniteFloatIsRejectedByTheJsonParser(): void
+    {
+        $this->expectException(VObject\ParseException::class);
+        VObject\Reader::readJson('["vcard",[["version",{},"text","4.0"],["fn",{},"text","a"],["geo",{},"float",["1e999","0"]]]]');
+    }
+
+    public function testSerializeKeepsTheValueAndWritesNoExponent(): void
+    {
+        $cal = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nGEO:48.85836123456789;-0.00005\r\n"
+            ."X-A;VALUE=FLOAT:1000000000000000\r\nX-B;VALUE=FLOAT:4691686184283978\r\nX-C;VALUE=FLOAT:0\r\nX-D;VALUE=FLOAT:1.5\r\n"
+            ."END:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $out = $cal->serialize();
+
+        self::assertStringContainsString("GEO:48.85836123456789;-0.00005\r\n", $out);
+        self::assertStringContainsString("X-A;VALUE=FLOAT:1000000000000000\r\n", $out);
+        self::assertStringContainsString("X-B;VALUE=FLOAT:4691686184283978\r\n", $out);
+        self::assertStringContainsString("X-C;VALUE=FLOAT:0\r\n", $out);
+        self::assertStringContainsString("X-D;VALUE=FLOAT:1.5\r\n", $out);
+        self::assertSame([48.85836123456789, -0.00005], VObject\Reader::read($out)->VEVENT->GEO->getParts());
+    }
+
+    public function testInfiniteFloatSurvivesARoundTrip(): void
+    {
+        $first = VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            ."DTSTAMP:20261103T100000Z\r\nDTSTART:20261103T100000Z\r\nGEO:1e999;-1e999\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $serialized = $first->serialize();
+        $second = VObject\Reader::read($serialized);
+
+        self::assertSame([INF, -INF], $first->VEVENT->GEO->getParts());
+        self::assertSame($first->VEVENT->GEO->getParts(), $second->VEVENT->GEO->getParts());
+        self::assertSame($serialized, $second->serialize());
     }
 }

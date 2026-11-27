@@ -2,20 +2,28 @@
 
 namespace Sabre\VObject\Component;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\VObject\Reader;
 
 class VJournalTest extends TestCase
 {
-    /**
-     * @dataProvider timeRangeTestData
-     */
-    public function testInTimeRange(VJournal $vtodo, $start, $end, $outcome)
+    public function testInTimeRangeIgnoresNonDateTimeDtstart(): void
     {
-        $this->assertEquals($outcome, $vtodo->isInTimeRange($start, $end));
+        $vcal = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//a//EN\r\nBEGIN:VJOURNAL\r\nUID:j1\r\n"
+            ."DTSTAMP:20260101T000000Z\r\nDTSTART;VALUE=TEXT:today\r\nEND:VJOURNAL\r\nEND:VCALENDAR\r\n");
+        self::assertFalse($vcal->VJOURNAL->isInTimeRange(
+            new \DateTimeImmutable('2026-01-01T00:00:00Z'), new \DateTimeImmutable('2026-01-05T18:00:00Z')
+        ));
     }
 
-    public function testValidate()
+    #[DataProvider('timeRangeTestData')]
+    public function testInTimeRange(VJournal $vtodo, \DateTime $start, \DateTime $end, bool $outcome): void
+    {
+        self::assertEquals($outcome, $vtodo->isInTimeRange($start, $end));
+    }
+
+    public function testValidate(): void
     {
         $input = <<<HI
 BEGIN:VCALENDAR
@@ -36,10 +44,10 @@ HI;
             $messages[] = $warning['message'];
         }
 
-        $this->assertEquals([], $messages);
+        self::assertEquals([], $messages);
     }
 
-    public function testValidateBroken()
+    public function testValidateBroken(): void
     {
         $input = <<<HI
 BEGIN:VCALENDAR
@@ -62,13 +70,13 @@ HI;
             $messages[] = $warning['message'];
         }
 
-        $this->assertEquals(
+        self::assertEquals(
             ['URL MUST NOT appear more than once in a VJOURNAL component'],
             $messages
         );
     }
 
-    public function timeRangeTestData()
+    public static function timeRangeTestData(): array
     {
         $calendar = new VCalendar();
 

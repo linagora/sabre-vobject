@@ -25,7 +25,7 @@ class Settings
      * use-cases. In particular, it covers birthdates for virtually everyone
      * alive on earth, which is less than 5 people at the time of writing.
      */
-    public static $minDate = '1900-01-01';
+    public static string $minDate = '1900-01-01';
 
     /**
      * The maximum date we accept for various calculations with dates, such as
@@ -34,7 +34,7 @@ class Settings
      * The choice of 2100 is pretty arbitrary, but should cover most
      * appointments made for many years to come.
      */
-    public static $maxDate = '2100-01-01';
+    public static string $maxDate = '2100-01-01';
 
     /**
      * The maximum number of recurrences that will be generated.
@@ -46,10 +46,25 @@ class Settings
      * specific events that recur many, many times, potentially DDOSing the
      * server.
      *
-     * The default (3500) allows creation of a dialy event that goes on for 10
+     * The default (3500) allows creation of a daily event that goes on for 10
      * years, which is hopefully long enough for most.
      *
      * Set this value to -1 to disable this control altogether.
      */
-    public static $maxRecurrences = 3500;
+    public static int $maxRecurrences = 3500;
+
+    /**
+     * The maximum number of periods a free-busy calculation will merge.
+     *
+     * FreeBusyGenerator caps each recurring event at $maxRecurrences
+     * instances, but not the number of events, nor the FREEBUSY values of a
+     * VFREEBUSY. Past this many periods in the requested time range, it
+     * throws a Recur\MaxInstancesExceededException.
+     *
+     * This is a security measure, like $maxRecurrences. The default is ten
+     * times its own.
+     *
+     * Set this value to -1 to disable this control altogether.
+     */
+    public static int $maxFreeBusyPeriods = 35000;
 }

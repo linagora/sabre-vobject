@@ -3,6 +3,7 @@
 namespace Sabre\VObject\Property\VCard;
 
 use Sabre\VObject\DateTimeParser;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Property\Text;
 use Sabre\Xml;
 
@@ -20,20 +21,16 @@ class TimeStamp extends Text
     /**
      * In case this is a multi-value property. This string will be used as a
      * delimiter.
-     *
-     * @var string|null
      */
-    public $delimiter = null;
+    public string $delimiter = '';
 
     /**
      * Returns the type of value.
      *
      * This corresponds to the VALUE= parameter. Every property also has a
      * 'default' valueType.
-     *
-     * @return string
      */
-    public function getValueType()
+    public function getValueType(): string
     {
         return 'TIMESTAMP';
     }
@@ -43,39 +40,53 @@ class TimeStamp extends Text
      *
      * This method must always return an array.
      *
-     * @return array
+     * @throws InvalidDataException
      */
-    public function getJsonValue()
+    public function getJsonValue(): array
     {
-        $parts = DateTimeParser::parseVCardDateTime($this->getValue());
-
-        $dateStr =
-            $parts['year'].'-'.
-            $parts['month'].'-'.
-            $parts['date'].'T'.
-            $parts['hour'].':'.
-            $parts['minute'].':'.
-            $parts['second'];
-
-        // Timezone
-        if (!is_null($parts['timezone'])) {
-            $dateStr .= $parts['timezone'];
-        }
-
-        return [$dateStr];
+        return [DateAndOrTime::formatJsonValue(DateTimeParser::parseVCardDateTime($this->getValue()))];
     }
 
     /**
      * This method serializes only the value of a property. This is used to
      * create xCard or xCal documents.
-     *
-     * @param Xml\Writer $writer XML writer
      */
-    protected function xmlSerializeValue(Xml\Writer $writer)
+    protected function xmlSerializeValue(Xml\Writer $writer): void
     {
         // xCard is the only XML and JSON format that has the same date and time
         // format than vCard.
         $valueType = strtolower($this->getValueType());
         $writer->writeElement($valueType, $this->getValue());
+    }
+
+    /**
+     * Validates the node for correctness.
+     *
+     * A value that cannot be parsed is reported, as getJsonValue() would
+     * throw on it.
+     */
+    public function validate(int $options = 0): array
+    {
+        $messages = parent::validate($options);
+        if ('' === (string) $this->getValue()) {
+            $messages[] = [
+                'level' => 3,
+                'message' => 'A '.$this->getValueType().' value must not be empty',
+                'node' => $this,
+            ];
+
+            return $messages;
+        }
+        try {
+            $this->getJsonValue();
+        } catch (InvalidDataException) {
+            $messages[] = [
+                'level' => 3,
+                'message' => 'The supplied value ('.$this->getRawMimeDirValue().') is not a correct '.$this->getValueType(),
+                'node' => $this,
+            ];
+        }
+
+        return $messages;
     }
 }

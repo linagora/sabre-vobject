@@ -1,17 +1,18 @@
 <?php
 
-namespace Sabre\VObject\Recur;
+namespace Sabre\VObject\Recur\EventIterator;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Reader;
+use Sabre\VObject\Recur\EventIterator;
+use Sabre\VObject\Recur\NoInstancesException;
 
 class NoInstancesTest extends TestCase
 {
-    /**
-     * @expectedException \Sabre\VObject\Recur\NoInstancesException
-     */
-    public function testRecurrence()
+    public function testRecurrence(): void
     {
+        $this->expectException(NoInstancesException::class);
         $input = <<<ICS
 BEGIN:VCALENDAR
 PRODID:-//Google Inc//Google Calendar 70.9054//EN
@@ -31,8 +32,8 @@ END:VCALENDAR
 ICS;
 
         $vcal = Reader::read($input);
-        $this->assertInstanceOf('Sabre\\VObject\\Component\\VCalendar', $vcal);
+        self::assertInstanceOf(VCalendar::class, $vcal);
 
-        $it = new EventIterator($vcal, 'foo');
+        new EventIterator($vcal, 'foo');
     }
 }

@@ -4,12 +4,11 @@ namespace Sabre\VObject;
 
 use DateInterval;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * DateTimeParser.
  *
- * This class is responsible for parsing the several different date and time
+ * This class is responsible for parsing the several date and time
  * formats iCalendar and vCards have.
  *
  * @copyright Copyright (C) fruux GmbH (https://fruux.com/)
@@ -19,6 +18,17 @@ use DateTimeZone;
 class DateTimeParser
 {
     /**
+     * An iCalendar DATE-TIME (RFC 5545 section 3.3.5): YYYYMMDD + "T" +
+     * hhmmss, with an optional Z.
+     */
+    private const DATE_TIME_REGEX = '/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([01][0-9]|2[0-3])([0-5][0-9])([0-5][0-9])([Z]?)\z/';
+
+    /**
+     * An iCalendar DATE (RFC 5545 section 3.3.4): YYYYMMDD.
+     */
+    private const DATE_REGEX = '/^([0-9]{4})([0-1][0-9])([0-3][0-9])\z/';
+
+    /**
      * Parses an iCalendar (rfc5545) formatted datetime and returns a
      * DateTimeImmutable object.
      *
@@ -26,57 +36,266 @@ class DateTimeParser
      * if the non-UTC format is used. The argument is used as a reference, the
      * returned DateTimeImmutable object will still be in the UTC timezone.
      *
-     * @param string       $dt
-     * @param DateTimeZone $tz
-     *
-     * @return DateTimeImmutable
+     * @throws InvalidDataException
      */
-    public static function parseDateTime($dt, DateTimeZone $tz = null)
+    public static function parseDateTime(string $dt, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
-        // Format is YYYYMMDD + "T" + hhmmss
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])T([0-2][0-9])([0-5][0-9])([0-5][0-9])([Z]?)$/', $dt, $matches);
+        $result = preg_match(self::DATE_TIME_REGEX, $dt, $matches);
 
-        if (!$result) {
+        if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
         }
 
         if ('Z' === $matches[7] || is_null($tz)) {
-            $tz = new DateTimeZone('UTC');
+            $tz = new \DateTimeZone('UTC');
         }
 
         try {
-            $date = new DateTimeImmutable($matches[1].'-'.$matches[2].'-'.$matches[3].' '.$matches[4].':'.$matches[5].':'.$matches[6], $tz);
-        } catch (\Exception $e) {
+            $date = new \DateTimeImmutable($matches[1].'-'.$matches[2].'-'.$matches[3].' '.$matches[4].':'.$matches[5].':'.$matches[6], $tz);
+        } catch (\Exception) {
             throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
         }
 
-        return $date;
+        return self::firstOccurrenceOfLocalTime($date);
+    }
+
+    /**
+     * Tells if $dt is a correct iCalendar DATE-TIME, the values that
+     * parseDateTime() accepts, without building a date.
+     */
+    public static function isDateTime(string $dt): bool
+    {
+        return 1 === preg_match(self::DATE_TIME_REGEX, $dt, $matches)
+            && self::isExistingDate($matches[1], $matches[2], $matches[3]);
+    }
+
+    /**
+     * Tells if $date is a correct iCalendar DATE, the values that
+     * parseDate() accepts, without building a date.
+     */
+    public static function isDate(string $date): bool
+    {
+        return 1 === preg_match(self::DATE_REGEX, $date, $matches)
+            && self::isExistingDate($matches[1], $matches[2], $matches[3]);
+    }
+
+    /**
+     * Returns the jCal form (RFC 7265 section 3.3.5) of an iCalendar
+     * DATE-TIME: the same as
+     * parseDateTime($dt, $tz)->format('Y-m-d\\TH:i:s'), plus the Z of a UTC
+     * value. Returns null if $dt does not have the form of a DATE-TIME.
+     *
+     * The digits are reformatted as they are. A parse only moves them for a
+     * local time in a spring-forward gap, so the value is parsed when $tz
+     * has a transition near it.
+     *
+     * @throws InvalidDataException
+     */
+    public static function toJsonDateTime(string $dt, ?\DateTimeZone $tz = null): ?string
+    {
+        if (1 !== preg_match(self::DATE_TIME_REGEX, $dt, $matches)) {
+            return null;
+        }
+        if (!self::isExistingDate($matches[1], $matches[2], $matches[3])) {
+            throw new InvalidDataException('The supplied iCalendar datetime value is incorrect: '.$dt);
+        }
+
+        if ('Z' !== $matches[7] && null !== $tz) {
+            // The local digits read as if they were UTC: the instant they
+            // stand for is at most the zone's UTC offset away, and a gap is
+            // at most a day long. Two days on each side cover both.
+            $localAsUtc = self::utcTimestamp((int) $matches[1], (int) $matches[2], (int) $matches[3], (int) $matches[4], (int) $matches[5], (int) $matches[6]);
+            if (self::hasTransitionBetween($tz, $localAsUtc - 2 * 86400, $localAsUtc + 2 * 86400)) {
+                return self::parseDateTime($dt, $tz)->format('Y-m-d\\TH:i:s');
+            }
+        }
+
+        return $matches[1].'-'.$matches[2].'-'.$matches[3].'T'.$matches[4].':'.$matches[5].':'.$matches[6].$matches[7];
+    }
+
+    /**
+     * Returns the jCal form (RFC 7265 section 3.3.4) of an iCalendar DATE:
+     * the same as parseDate($date)->format('Y-m-d'). Returns null if $date
+     * does not have the form of a DATE.
+     *
+     * @throws InvalidDataException
+     */
+    public static function toJsonDate(string $date): ?string
+    {
+        if (1 !== preg_match(self::DATE_REGEX, $date, $matches)) {
+            return null;
+        }
+        if (!self::isExistingDate($matches[1], $matches[2], $matches[3])) {
+            throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
+        }
+
+        return $matches[1].'-'.$matches[2].'-'.$matches[3];
+    }
+
+    /**
+     * gmmktime() for any year: gmmktime() reads the years 0 to 100 as 2000
+     * to 2069 and 1970 to 2000. Such a year is moved by 400 years, the
+     * period of the Gregorian calendar (146097 days).
+     */
+    private static function utcTimestamp(int $year, int $month, int $day, int $hour = 0, int $minute = 0, int $second = 0): int
+    {
+        if ($year >= 0 && $year <= 100) {
+            return (int) gmmktime($hour, $minute, $second, $month, $day, $year + 400) - 146097 * 86400;
+        }
+
+        return (int) gmmktime($hour, $minute, $second, $month, $day, $year);
+    }
+
+    /**
+     * Tells if a day exists in the calendar (RFC 5545 section 3.3.4): no
+     * day 00, no February 30, no June 31... DateTimeImmutable would move
+     * such a day to the next month.
+     */
+    private static function isExistingDate(string $year, string $month, string $day): bool
+    {
+        // checkdate() refuses year 0, a leap year like 2000.
+        return checkdate((int) $month, (int) $day, 0 === (int) $year ? 2000 : (int) $year);
+    }
+
+    /**
+     * When the clock goes back, a local time occurs twice. RFC 5545 section
+     * 3.3.5 says the DATE-TIME value then refers to the first occurrence,
+     * but PHP may pick the second one (it does east of Greenwich).
+     *
+     * Returns the earliest instant showing the same local time as $date.
+     */
+    private static function firstOccurrenceOfLocalTime(\DateTimeImmutable $date): \DateTimeImmutable
+    {
+        $tz = $date->getTimezone();
+        $timestamp = $date->getTimestamp();
+        $offset = $date->getOffset();
+
+        // Only a transition that happened in the day before can make the
+        // local time ambiguous; getTransitions() returns false for
+        // timezones that are a mere UTC offset. Whether it includes a
+        // transition at its end depends on the time zone database, and the
+        // first instant after a transition is ambiguous too.
+        //
+        // A zone changes offset a few times a year at most: the window is
+        // only read from the zone when the cached list of the year has a
+        // transition near it.
+        if (!self::hasTransitionNear($tz, $timestamp)) {
+            return $date;
+        }
+        $transitions = $tz->getTransitions($timestamp - 86400, $timestamp + 1);
+        if (!is_array($transitions) || count($transitions) < 2) {
+            return $date;
+        }
+
+        $wallClock = $timestamp + $offset;
+        $earliest = $timestamp;
+        foreach ($transitions as $transition) {
+            $candidate = $wallClock - $transition['offset'];
+            if ($candidate < $earliest && $tz->getOffset(new \DateTimeImmutable('@'.$candidate)) === $transition['offset']) {
+                $earliest = $candidate;
+            }
+        }
+
+        if ($earliest === $timestamp) {
+            return $date;
+        }
+
+        return (new \DateTimeImmutable('@'.$earliest))->setTimezone($tz);
+    }
+
+    /**
+     * Transition timestamps per zone name and UTC year, read with a margin of
+     * two days on each side of the year.
+     *
+     * @var array<string, list<int>>
+     */
+    private static array $transitionCache = [];
+
+    /**
+     * Bound of $transitionCache: a document can name many zones and years.
+     */
+    private const TRANSITION_CACHE_LIMIT = 100;
+
+    /**
+     * Tells if $tz may have a transition in the window of
+     * firstOccurrenceOfLocalTime(), [$timestamp - 86400, $timestamp + 1],
+     * widened by a second on each side. A false positive only costs the
+     * exact check.
+     */
+    private static function hasTransitionNear(\DateTimeZone $tz, int $timestamp): bool
+    {
+        return self::hasTransitionBetween($tz, $timestamp - 86401, $timestamp + 2);
+    }
+
+    /**
+     * Tells if $tz may have a transition in [$from, $to]. A zone that is a
+     * mere UTC offset or an abbreviation has none.
+     */
+    private static function hasTransitionBetween(\DateTimeZone $tz, int $from, int $to): bool
+    {
+        $lastYear = (int) gmdate('Y', $to);
+        for ($year = (int) gmdate('Y', $from); $year <= $lastYear; ++$year) {
+            $transitions = self::transitionsOfYear($tz, $year);
+            if (null === $transitions) {
+                return false;
+            }
+            foreach ($transitions as $transition) {
+                if ($transition >= $from && $transition <= $to) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns the cached transition timestamps of $tz in a UTC year, with a
+     * margin of two days on each side, or null if $tz has no transitions.
+     *
+     * @return list<int>|null
+     */
+    private static function transitionsOfYear(\DateTimeZone $tz, int $year): ?array
+    {
+        $key = $tz->getName().'|'.$year;
+
+        if (!isset(self::$transitionCache[$key])) {
+            $transitions = $tz->getTransitions(
+                self::utcTimestamp($year, 1, 1) - 2 * 86400,
+                self::utcTimestamp($year + 1, 1, 1) + 2 * 86400
+            );
+            if (!is_array($transitions)) {
+                // An offset or an abbreviation: nothing is cached, as such a
+                // zone can share its name with a zone that has transitions.
+                return null;
+            }
+            if (count(self::$transitionCache) >= self::TRANSITION_CACHE_LIMIT) {
+                self::$transitionCache = [];
+            }
+            self::$transitionCache[$key] = array_column($transitions, 'ts');
+        }
+
+        return self::$transitionCache[$key];
     }
 
     /**
      * Parses an iCalendar (rfc5545) formatted date and returns a DateTimeImmutable object.
      *
-     * @param string       $date
-     * @param DateTimeZone $tz
-     *
-     * @return DateTimeImmutable
+     * @throws InvalidDataException
      */
-    public static function parseDate($date, DateTimeZone $tz = null)
+    public static function parseDate(string $date, ?\DateTimeZone $tz = null): \DateTimeImmutable
     {
-        // Format is YYYYMMDD
-        $result = preg_match('/^([0-9]{4})([0-1][0-9])([0-3][0-9])$/', $date, $matches);
+        $result = preg_match(self::DATE_REGEX, $date, $matches);
 
-        if (!$result) {
+        if (!$result || !self::isExistingDate($matches[1], $matches[2], $matches[3])) {
             throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
         }
 
-        if (is_null($tz)) {
-            $tz = new DateTimeZone('UTC');
-        }
+        $tz ??= new \DateTimeZone('UTC');
 
         try {
-            $date = new DateTimeImmutable($matches[1].'-'.$matches[2].'-'.$matches[3], $tz);
-        } catch (\Exception $e) {
+            $date = new \DateTimeImmutable($matches[1].'-'.$matches[2].'-'.$matches[3], $tz);
+        } catch (\Exception) {
             throw new InvalidDataException('The supplied iCalendar date value is incorrect: '.$date);
         }
 
@@ -86,80 +305,22 @@ class DateTimeParser
     /**
      * Parses an iCalendar (RFC5545) formatted duration value.
      *
-     * This method will either return a DateTimeInterval object, or a string
-     * suitable for strtotime or DateTime::modify.
+     * This method will return a DateTimeInterval object
      *
-     * @param string $duration
-     * @param bool   $asString
-     *
-     * @return DateInterval|string
+     * @throws InvalidDataException
+     * @throws \Exception
      */
-    public static function parseDuration($duration, $asString = false)
+    public static function parseDuration(string $duration): \DateInterval
     {
-        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?$/', $duration, $matches);
+        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?\z/', $duration, $matches);
         if (!$result) {
             throw new InvalidDataException('The supplied iCalendar duration value is incorrect: '.$duration);
         }
 
-        if (!$asString) {
-            $invert = false;
+        $invert = false;
 
-            if ('-' === $matches['plusminus']) {
-                $invert = true;
-            }
-
-            $parts = [
-                'week',
-                'day',
-                'hour',
-                'minute',
-                'second',
-            ];
-
-            foreach ($parts as $part) {
-                $matches[$part] = isset($matches[$part]) && $matches[$part] ? (int) $matches[$part] : 0;
-            }
-
-            // We need to re-construct the $duration string, because weeks and
-            // days are not supported by DateInterval in the same string.
-            $duration = 'P';
-            $days = $matches['day'];
-
-            if ($matches['week']) {
-                $days += $matches['week'] * 7;
-            }
-
-            if ($days) {
-                $duration .= $days.'D';
-            }
-
-            if ($matches['minute'] || $matches['second'] || $matches['hour']) {
-                $duration .= 'T';
-
-                if ($matches['hour']) {
-                    $duration .= $matches['hour'].'H';
-                }
-
-                if ($matches['minute']) {
-                    $duration .= $matches['minute'].'M';
-                }
-
-                if ($matches['second']) {
-                    $duration .= $matches['second'].'S';
-                }
-            }
-
-            if ('P' === $duration) {
-                $duration = 'PT0S';
-            }
-
-            $iv = new DateInterval($duration);
-
-            if ($invert) {
-                $iv->invert = true;
-            }
-
-            return $iv;
+        if (isset($matches['plusminus']) && '-' === $matches['plusminus']) {
+            $invert = true;
         }
 
         $parts = [
@@ -170,40 +331,144 @@ class DateTimeParser
             'second',
         ];
 
-        $newDur = '';
-
         foreach ($parts as $part) {
-            if (isset($matches[$part]) && $matches[$part]) {
-                $newDur .= ' '.$matches[$part].' '.$part.'s';
+            $value = isset($matches[$part]) ? ltrim($matches[$part], '0') : '';
+            if ('' === $value) {
+                $matches[$part] = 0;
+                continue;
+            }
+            // (int) silently saturates a number that does not fit in an
+            // integer.
+            if ((string) (int) $value !== $value) {
+                throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$duration);
+            }
+            $matches[$part] = (int) $value;
+        }
+
+        // We need to re-construct the $duration string, because weeks and
+        // days are not supported by DateInterval in the same string.
+        $originalDuration = $duration;
+        $duration = 'P';
+        $days = $matches['day'];
+
+        if ($matches['week']) {
+            $days += $matches['week'] * 7;
+        }
+
+        if (!is_int($days)) {
+            throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$originalDuration);
+        }
+
+        if ($days) {
+            $duration .= $days.'D';
+        }
+
+        if ($matches['minute'] || $matches['second'] || $matches['hour']) {
+            $duration .= 'T';
+
+            if ($matches['hour']) {
+                $duration .= $matches['hour'].'H';
+            }
+
+            if ($matches['minute']) {
+                $duration .= $matches['minute'].'M';
+            }
+
+            if ($matches['second']) {
+                $duration .= $matches['second'].'S';
             }
         }
 
-        $newDur = ('-' === $matches['plusminus'] ? '-' : '+').trim($newDur);
-
-        if ('+' === $newDur) {
-            $newDur = '+0 seconds';
+        if ('P' === $duration) {
+            $duration = 'PT0S';
         }
 
-        return $newDur;
+        try {
+            $iv = new \DateInterval($duration);
+        } catch (\Exception) {
+            throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$originalDuration);
+        }
+
+        if ($invert) {
+            $iv->invert = true;
+        }
+
+        return $iv;
+    }
+
+    /**
+     * Parses an iCalendar (RFC5545) formatted duration value.
+     *
+     * This method will return a string suitable for strtotime or DateTime::modify.
+     *
+     * @throws InvalidDataException
+     */
+    public static function parseDurationAsString(string $duration): string
+    {
+        $result = preg_match('/^(?<plusminus>\+|-)?P((?<week>\d+)W)?((?<day>\d+)D)?(T((?<hour>\d+)H)?((?<minute>\d+)M)?((?<second>\d+)S)?)?\z/', $duration, $matches);
+        if (!$result) {
+            throw new InvalidDataException('The supplied iCalendar duration value is incorrect: '.$duration);
+        }
+
+        $parts = [
+            'week',
+            'day',
+            'hour',
+            'minute',
+            'second',
+        ];
+
+        // A bare "P" matches no group, so the key may be absent.
+        $negative = '-' === ($matches['plusminus'] ?? '');
+
+        $units = [];
+        foreach ($parts as $part) {
+            // Without its leading zeros, as in parseDuration(): modify() does
+            // not read a long number as a relative amount.
+            $value = isset($matches[$part]) ? ltrim($matches[$part], '0') : '';
+            if ('' === $value) {
+                continue;
+            }
+            if ((string) (int) $value !== $value) {
+                throw new InvalidDataException('The supplied iCalendar duration value is too large: '.$duration);
+            }
+            $units[] = $value.' '.$part.'s';
+        }
+
+        if (!$units) {
+            return '+0 seconds';
+        }
+
+        // strtotime() applies a sign to a single unit, so each unit of a
+        // negative duration carries its own.
+        if ($negative) {
+            return '-'.implode(' -', $units);
+        }
+
+        return '+'.implode(' ', $units);
     }
 
     /**
      * Parses either a Date or DateTime, or Duration value.
      *
-     * @param string              $date
-     * @param DateTimeZone|string $referenceTz
+     * @param \DateTimeZone|string $referenceTz
      *
-     * @return DateTimeImmutable|DateInterval
+     * @return \DateInterval|\DateTimeImmutable
+     *
+     * @throws InvalidDataException
      */
-    public static function parse($date, $referenceTz = null)
+    public static function parse(string $date, $referenceTz = null)
     {
-        if ('P' === $date[0] || ('-' === $date[0] && 'P' === $date[1])) {
+        if ('' === $date) {
+            throw new InvalidDataException('An empty string is not a valid date, date-time or duration');
+        }
+        if ('P' === $date[0] || (('-' === $date[0] || '+' === $date[0]) && 'P' === ($date[1] ?? ''))) {
             return self::parseDuration($date);
         } elseif (8 === strlen($date)) {
             return self::parseDate($date, $referenceTz);
-        } else {
-            return self::parseDateTime($date, $referenceTz);
         }
+
+        return self::parseDateTime($date, $referenceTz);
     }
 
     /**
@@ -258,11 +523,9 @@ class DateTimeParser
      * Times may be postfixed by a timezone offset. This can be either 'Z' for
      * UTC, or a string like -0500 or +1100.
      *
-     * @param string $date
-     *
-     * @return array
+     * @throws InvalidDataException
      */
-    public static function parseVCardDateTime($date)
+    public static function parseVCardDateTime(string $date): array
     {
         $regex = '/^
             (?:  # date part
@@ -285,7 +548,7 @@ class DateTimeParser
                 )?
 
             )?
-            $/x';
+            \z/x';
 
         if (!preg_match($regex, $date, $matches)) {
             // Attempting to parse the extended format.
@@ -297,19 +560,25 @@ class DateTimeParser
                 )?
                 (?:T # time part
 
-                    (?: (?<hour> [0-9]{2}) : | -)
-                    (?: (?<minute> [0-9]{2}) : | -)?
-                    (?<second> [0-9]{2})?
+                    (?|
+                        (?<hour> [0-9]{2}) : (?<minute> [0-9]{2}) : (?<second> [0-9]{2}) # HH:MM:SS
+                        | ([0-9]{2}) : ([0-9]{2}) () # HH:MM
+                        | ([0-9]{2}) () () # HH
+                        | ([0-9]{2}) - () ([0-9]{2}) # HH-SS, as getJsonValue() writes it
+                        | () - ([0-9]{2}) : ([0-9]{2}) # -MM:SS
+                        | () - ([0-9]{2}) () # -MM
+                        | () -- () ([0-9]{2}) # --SS
+                    )
 
                     (?: \.[0-9]{3})? # milliseconds
                     (?P<timezone> # timezone offset
 
-                        Z | (?: \+|-)(?: [0-9]{2}:[0-9]{2})
+                        Z | (?: \+|-)(?: [0-9]{2}:?[0-9]{2})
 
                     )?
 
                 )?
-                $/x';
+                \z/x';
 
             if (!preg_match($regex, $date, $matches)) {
                 throw new InvalidDataException('Invalid vCard date-time string: '.$date);
@@ -327,13 +596,24 @@ class DateTimeParser
 
         $result = [];
         foreach ($parts as $part) {
-            if (empty($matches[$part])) {
+            if (!array_key_exists($part, $matches) || '' === $matches[$part]) {
                 $result[$part] = null;
             } elseif ('-' === $matches[$part] || '--' === $matches[$part]) {
                 $result[$part] = null;
             } else {
                 $result[$part] = $matches[$part];
             }
+        }
+
+        // A time has an hour, a minute or a second (RFC 6350 section 4.3.2):
+        // "T-" or "T--0500" has none of them.
+        if (str_contains($date, 'T') && null === $result['hour'] && null === $result['minute'] && null === $result['second']) {
+            throw new InvalidDataException('Invalid vCard date-time string: '.$date);
+        }
+        // The date of a date-time has a day (RFC 6350 section 4.3.3,
+        // date-noreduc): "2018-08T1026" or "--08T1026" is not a date-time.
+        if (0 < (int) strpos($date, 'T') && null === $result['date']) {
+            throw new InvalidDataException('Invalid vCard date-time string: '.$date);
         }
 
         return $result;
@@ -377,16 +657,23 @@ class DateTimeParser
      * Times may be postfixed by a timezone offset. This can be either 'Z' for
      * UTC, or a string like -0500 or +11:00.
      *
-     * @param string $date
-     *
-     * @return array
+     * @throws InvalidDataException
      */
-    public static function parseVCardTime($date)
+    public static function parseVCardTime(string $date): array
     {
+        // The forms RFC 6350 section 4.3.2 lists, where a part is left out on
+        // the left only, and HH-SS, which reads and writes back as is. A dash
+        // always stands for a part that follows it.
         $regex = '/^
-            (?<hour> [0-9]{2} | -)
-            (?<minute> [0-9]{2} | -)?
-            (?<second> [0-9]{2})?
+            (?|
+                (?<hour> [0-9]{2}) (?<minute> [0-9]{2}) (?<second> [0-9]{2}) # HHMMSS
+                | ([0-9]{2}) ([0-9]{2}) () # HHMM
+                | ([0-9]{2}) - () ([0-9]{2}) # HH-SS
+                | ([0-9]{2}) () () # HH
+                | () - ([0-9]{2}) ([0-9]{2}) # -MMSS
+                | () - ([0-9]{2}) () # -MM
+                | () -- () ([0-9]{2}) # --SS
+            )
 
             (?: \.[0-9]{3})? # milliseconds
             (?P<timezone> # timezone offset
@@ -394,14 +681,19 @@ class DateTimeParser
                 Z | (?: \+|-)(?: [0-9]{4})
 
             )?
-            $/x';
+            \z/x';
 
         if (!preg_match($regex, $date, $matches)) {
             // Attempting to parse the extended format.
             $regex = '/^
-                (?: (?<hour> [0-9]{2}) : | -)
-                (?: (?<minute> [0-9]{2}) : | -)?
-                (?<second> [0-9]{2})?
+                (?|
+                    (?<hour> [0-9]{2}) : (?<minute> [0-9]{2}) : (?<second> [0-9]{2}) # HH:MM:SS
+                    | ([0-9]{2}) : ([0-9]{2}) () # HH:MM
+                    | ([0-9]{2}) () () # HH
+                    | () - ([0-9]{2}) : ([0-9]{2}) # -MM:SS
+                    | () - ([0-9]{2}) () # -MM
+                    | () -- () ([0-9]{2}) # --SS
+                )
 
                 (?: \.[0-9]{3})? # milliseconds
                 (?P<timezone> # timezone offset
@@ -409,7 +701,7 @@ class DateTimeParser
                     Z | (?: \+|-)(?: [0-9]{2}:[0-9]{2})
 
                 )?
-                $/x';
+                \z/x';
 
             if (!preg_match($regex, $date, $matches)) {
                 throw new InvalidDataException('Invalid vCard time string: '.$date);
@@ -424,7 +716,7 @@ class DateTimeParser
 
         $result = [];
         foreach ($parts as $part) {
-            if (empty($matches[$part])) {
+            if (!array_key_exists($part, $matches) || '' === $matches[$part]) {
                 $result[$part] = null;
             } elseif ('-' === $matches[$part]) {
                 $result[$part] = null;
@@ -483,11 +775,9 @@ class DateTimeParser
      * Times may be postfixed by a timezone offset. This can be either 'Z' for
      * UTC, or a string like -0500 or +1100.
      *
-     * @param string $date
-     *
-     * @return array
+     * @throws InvalidDataException
      */
-    public static function parseVCardDateAndOrTime($date)
+    public static function parseVCardDateAndOrTime(string $date): array
     {
         // \d{8}|\d{4}-\d\d|--\d\d(\d\d)?|---\d\d
         $valueDate = '/^(?J)(?:'.
@@ -495,7 +785,7 @@ class DateTimeParser
                          '|(?<year>\d{4})-(?<month>\d\d)'.
                          '|--(?<month>\d\d)(?<date>\d\d)?'.
                          '|---(?<date>\d\d)'.
-                         ')$/';
+                         ')\z/';
 
         // (\d\d(\d\d(\d\d)?)?|-\d\d(\d\d)?|--\d\d)(Z|[+\-]\d\d(\d\d)?)?
         $valueTime = '/^(?J)(?:'.
@@ -503,7 +793,7 @@ class DateTimeParser
                          '|-(?<minute>\d\d)(?<second>\d\d)?'.
                          '|--(?<second>\d\d))'.
                          '(?<timezone>(Z|[+\-]\d\d(\d\d)?))?'.
-                         ')$/';
+                         ')\z/';
 
         // (\d{8}|--\d{4}|---\d\d)T\d\d(\d\d(\d\d)?)?(Z|[+\-]\d\d(\d\d?)?
         $valueDateTime = '/^(?:'.
@@ -513,7 +803,7 @@ class DateTimeParser
                          'T'.
                          '(?<hour>\d\d)((?<minute>\d\d)(?<second>\d\d)?)?'.
                          '(?<timezone>(Z|[+\-]\d\d(\d\d?)))?'.
-                         ')$/';
+                         ')\z/';
 
         // date-and-or-time is date | date-time | time
         // in this strict order.
@@ -543,7 +833,7 @@ class DateTimeParser
         $parts['year0'] = &$parts['year'];
 
         foreach ($parts as $part => &$value) {
-            if (!empty($matches[$part])) {
+            if (array_key_exists($part, $matches) && '' !== $matches[$part]) {
                 $value = $matches[$part];
             }
         }

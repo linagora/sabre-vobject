@@ -2,6 +2,15 @@
 
 namespace Sabre\VObject;
 
+use Sabre\VObject\TimezoneGuesser\FindFromOffset;
+use Sabre\VObject\TimezoneGuesser\FindFromTimezoneIdentifier;
+use Sabre\VObject\TimezoneGuesser\FindFromTimezoneMap;
+use Sabre\VObject\TimezoneGuesser\GuessFromLicEntry;
+use Sabre\VObject\TimezoneGuesser\GuessFromMsTzId;
+use Sabre\VObject\TimezoneGuesser\GuessFromObservances;
+use Sabre\VObject\TimezoneGuesser\TimezoneFinder;
+use Sabre\VObject\TimezoneGuesser\TimezoneGuesser;
+
 /**
  * Time zone name translation.
  *
@@ -14,94 +23,104 @@ namespace Sabre\VObject;
  */
 class TimeZoneUtil
 {
-    public static $map = null;
+    private static ?TimeZoneUtil $instance = null;
+
+    /** @var TimezoneGuesser[] */
+    private array $timezoneGuessers = [];
+
+    /** @var TimezoneFinder[] */
+    private array $timezoneFinders = [];
 
     /**
-     * List of microsoft exchange timezone ids.
+     * What the finders returned per TZID, false for nothing: the same TZID is
+     * looked up for every property, every expanded instance and every jCal
+     * value. Keyed by $failIfUncertain, then by TZID. Only the finders are
+     * cached: the guessers and the default-zone fallback depend on the
+     * document and on date_default_timezone_get().
      *
-     * Source: http://msdn.microsoft.com/en-us/library/aa563018(loband).aspx
+     * Keyed by $failIfUncertain ("0" or "1") followed by the TZID, least
+     * recently used first.
+     *
+     * @var array<string, \DateTimeZone|false>
      */
-    public static $microsoftExchangeMap = [
-        0 => 'UTC',
-        31 => 'Africa/Casablanca',
+    private array $finderCache = [];
 
-        // Insanely, id #2 is used for both Europe/Lisbon, and Europe/Sarajevo.
-        // I'm not even kidding.. We handle this special case in the
-        // getTimeZone method.
-        2 => 'Europe/Lisbon',
-        1 => 'Europe/London',
-        4 => 'Europe/Berlin',
-        6 => 'Europe/Prague',
-        3 => 'Europe/Paris',
-        69 => 'Africa/Luanda', // This was a best guess
-        7 => 'Europe/Athens',
-        5 => 'Europe/Bucharest',
-        49 => 'Africa/Cairo',
-        50 => 'Africa/Harare',
-        59 => 'Europe/Helsinki',
-        27 => 'Asia/Jerusalem',
-        26 => 'Asia/Baghdad',
-        74 => 'Asia/Kuwait',
-        51 => 'Europe/Moscow',
-        56 => 'Africa/Nairobi',
-        25 => 'Asia/Tehran',
-        24 => 'Asia/Muscat', // Best guess
-        54 => 'Asia/Baku',
-        48 => 'Asia/Kabul',
-        58 => 'Asia/Yekaterinburg',
-        47 => 'Asia/Karachi',
-        23 => 'Asia/Calcutta',
-        62 => 'Asia/Kathmandu',
-        46 => 'Asia/Almaty',
-        71 => 'Asia/Dhaka',
-        66 => 'Asia/Colombo',
-        61 => 'Asia/Rangoon',
-        22 => 'Asia/Bangkok',
-        64 => 'Asia/Krasnoyarsk',
-        45 => 'Asia/Shanghai',
-        63 => 'Asia/Irkutsk',
-        21 => 'Asia/Singapore',
-        73 => 'Australia/Perth',
-        75 => 'Asia/Taipei',
-        20 => 'Asia/Tokyo',
-        72 => 'Asia/Seoul',
-        70 => 'Asia/Yakutsk',
-        19 => 'Australia/Adelaide',
-        44 => 'Australia/Darwin',
-        18 => 'Australia/Brisbane',
-        76 => 'Australia/Sydney',
-        43 => 'Pacific/Guam',
-        42 => 'Australia/Hobart',
-        68 => 'Asia/Vladivostok',
-        41 => 'Asia/Magadan',
-        17 => 'Pacific/Auckland',
-        40 => 'Pacific/Fiji',
-        67 => 'Pacific/Tongatapu',
-        29 => 'Atlantic/Azores',
-        53 => 'Atlantic/Cape_Verde',
-        30 => 'America/Noronha',
-         8 => 'America/Sao_Paulo', // Best guess
-        32 => 'America/Argentina/Buenos_Aires',
-        60 => 'America/Godthab',
-        28 => 'America/St_Johns',
-         9 => 'America/Halifax',
-        33 => 'America/Caracas',
-        65 => 'America/Santiago',
-        35 => 'America/Bogota',
-        10 => 'America/New_York',
-        34 => 'America/Indiana/Indianapolis',
-        55 => 'America/Guatemala',
-        11 => 'America/Chicago',
-        37 => 'America/Mexico_City',
-        36 => 'America/Edmonton',
-        38 => 'America/Phoenix',
-        12 => 'America/Denver', // Best guess
-        13 => 'America/Los_Angeles', // Best guess
-        14 => 'America/Anchorage',
-        15 => 'Pacific/Honolulu',
-        16 => 'Pacific/Midway',
-        39 => 'Pacific/Kwajalein',
-    ];
+    /**
+     * Bound of $finderCache, so that a document with many distinct TZIDs
+     * cannot grow it without limit: past it, the least recently used entry
+     * is evicted.
+     */
+    private const FINDER_CACHE_LIMIT = 100;
+
+    /**
+     * The VTIMEZONEs of each document by TZID, so that a lookup does not
+     * scan all the VTIMEZONEs of a document that holds many. The index is
+     * valid while the document's VTIMEZONE revision is unchanged. Each
+     * VTIMEZONE is also kept with its key in the document's list, so that a
+     * hit is checked against the document in constant time. Weak
+     * references: on PHP 8.2, a WeakMap value that references its key (a
+     * node references its parent) keeps the entry alive.
+     *
+     * @var \WeakMap<Component, array{revision: int, tzids: array<string, list<array{int|string, \WeakReference<Component\VTimeZone>}>>}>
+     */
+    private \WeakMap $vtimezoneIndex;
+
+    /**
+     * How many VTIMEZONEs of the same TZID are tried, in document order: a
+     * document may repeat a TZID, but a lookup must not cost one guess per
+     * duplicate.
+     */
+    private const VTIMEZONES_PER_TZID_LIMIT = 10;
+
+    /**
+     * The UTC offsets, in seconds, a PHP zone has ever had, per zone name.
+     *
+     * @var array<string, array<int, true>>
+     */
+    private array $zoneOffsets = [];
+
+    private const ZONE_OFFSETS_LIMIT = 200;
+
+    /**
+     * Per document, whether the zone of a known TZID name contradicts its
+     * VTIMEZONEs, while the document's VTIMEZONE revision is unchanged (it
+     * changes with the observances and their TZOFFSETTO too): a known name
+     * is looked up for every DATE-TIME. A TZOFFSETTO changed in place with
+     * setValue() is not seen until then.
+     *
+     * @var \WeakMap<Component, array{revision: int, tzids: array<string, bool>}>
+     */
+    private \WeakMap $contradictions;
+
+    private function __construct()
+    {
+        $this->vtimezoneIndex = new \WeakMap();
+        $this->contradictions = new \WeakMap();
+        $this->addGuesser('lic', new GuessFromLicEntry());
+        $this->addGuesser('msTzId', new GuessFromMsTzId());
+        $this->addGuesser('observances', new GuessFromObservances());
+        $this->addFinder('tzid', new FindFromTimezoneIdentifier());
+        $this->addFinder('tzmap', new FindFromTimezoneMap());
+        $this->addFinder('offset', new FindFromOffset());
+    }
+
+    private static function getInstance(): self
+    {
+        self::$instance ??= new self();
+
+        return self::$instance;
+    }
+
+    private function addGuesser(string $key, TimezoneGuesser $guesser): void
+    {
+        $this->timezoneGuessers[$key] = $guesser;
+    }
+
+    private function addFinder(string $key, TimezoneFinder $finder): void
+    {
+        $this->timezoneFinders[$key] = $finder;
+        $this->finderCache = [];
+    }
 
     /**
      * This method will try to find out the correct timezone for an iCalendar
@@ -116,150 +135,243 @@ class TimeZoneUtil
      *
      * Alternatively, if $failIfUncertain is set to true, it will throw an
      * exception if we cannot accurately determine the timezone.
-     *
-     * @param string                  $tzid
-     * @param Sabre\VObject\Component $vcalendar
-     *
-     * @return \DateTimeZone
      */
-    public static function getTimeZone($tzid, Component $vcalendar = null, $failIfUncertain = false)
+    private function findTimeZone(string $tzid, ?Component $vcalendar = null, bool $failIfUncertain = false): \DateTimeZone
     {
-        // First we will just see if the tzid is a support timezone identifier.
-        //
-        // The only exception is if the timezone starts with (. This is to
-        // handle cases where certain microsoft products generate timezone
-        // identifiers that for instance look like:
-        //
-        // (GMT+01.00) Sarajevo/Warsaw/Zagreb
-        //
-        // Since PHP 5.5.10, the first bit will be used as the timezone and
-        // this method will return just GMT+01:00. This is wrong, because it
-        // doesn't take DST into account.
-        if ('(' !== $tzid[0]) {
-            // PHP has a bug that logs PHP warnings even it shouldn't:
-            // https://bugs.php.net/bug.php?id=67881
-            //
-            // That's why we're checking if we'll be able to successfull instantiate
-            // \DateTimeZone() before doing so. Otherwise we could simply instantiate
-            // and catch the exception.
-            $tzIdentifiers = \DateTimeZone::listIdentifiers();
-
-            try {
-                if (
-                    (in_array($tzid, $tzIdentifiers)) ||
-                    (preg_match('/^GMT(\+|-)([0-9]{4})$/', $tzid, $matches)) ||
-                    (in_array($tzid, self::getIdentifiersBC()))
-                ) {
-                    return new \DateTimeZone($tzid);
-                }
-            } catch (\Exception $e) {
+        // A known name (Windows, Exchange, Lotus, IANA) is preferred to the
+        // document's VTIMEZONE, which Outlook often writes with its 1601
+        // rules only, unless that VTIMEZONE gives none of the offsets the
+        // zone has ever had: it then defines another zone.
+        $mapped = $this->findWithFinders($tzid, $failIfUncertain);
+        if ($mapped instanceof \DateTimeZone) {
+            if (!$vcalendar) {
+                return $mapped;
+            }
+            $revision = $vcalendar->getVTimeZoneRevision();
+            $memo = $this->contradictions[$vcalendar] ?? null;
+            if (null === $memo || $memo['revision'] !== $revision) {
+                $memo = ['revision' => $revision, 'tzids' => []];
+            }
+            if (!isset($memo['tzids'][$tzid])) {
+                $memo['tzids'][$tzid] = $this->contradicts($mapped, $this->findVTimeZones($tzid, $vcalendar));
+                $this->contradictions[$vcalendar] = $memo;
+            }
+            if (!$memo['tzids'][$tzid]) {
+                return $mapped;
             }
         }
 
-        self::loadTzMaps();
+        $vtimezones = $vcalendar ? $this->findVTimeZones($tzid, $vcalendar) : [];
 
-        // Next, we check if the tzid is somewhere in our tzid map.
-        if (isset(self::$map[$tzid])) {
-            return new \DateTimeZone(self::$map[$tzid]);
-        }
-
-        // Some Microsoft products prefix the offset first, so let's strip that off
-        // and see if it is our tzid map.  We don't want to check for this first just
-        // in case there are overrides in our tzid map.
-        if (preg_match('/^\((UTC|GMT)(\+|\-)[\d]{2}\:[\d]{2}\) (.*)/', $tzid, $matches)) {
-            $tzidAlternate = $matches[3];
-            if (isset(self::$map[$tzidAlternate])) {
-                return new \DateTimeZone(self::$map[$tzidAlternate]);
-            }
-        }
-
-        // Maybe the author was hyper-lazy and just included an offset. We
-        // support it, but we aren't happy about it.
-        if (preg_match('/^GMT(\+|-)([0-9]{4})$/', $tzid, $matches)) {
-            // Note that the path in the source will never be taken from PHP 5.5.10
-            // onwards. PHP 5.5.10 supports the "GMT+0100" style of format, so it
-            // already gets returned early in this function. Once we drop support
-            // for versions under PHP 5.5.10, this bit can be taken out of the
-            // source.
-            // @codeCoverageIgnoreStart
-            return new \DateTimeZone('Etc/GMT'.$matches[1].ltrim(substr($matches[2], 0, 2), '0'));
-            // @codeCoverageIgnoreEnd
-        }
-
-        if ($vcalendar) {
-            // If that didn't work, we will scan VTIMEZONE objects
-            foreach ($vcalendar->select('VTIMEZONE') as $vtimezone) {
-                if ((string) $vtimezone->TZID === $tzid) {
-                    // Some clients add 'X-LIC-LOCATION' with the olson name.
-                    if (isset($vtimezone->{'X-LIC-LOCATION'})) {
-                        $lic = (string) $vtimezone->{'X-LIC-LOCATION'};
-
-                        // Libical generators may specify strings like
-                        // "SystemV/EST5EDT". For those we must remove the
-                        // SystemV part.
-                        if ('SystemV/' === substr($lic, 0, 8)) {
-                            $lic = substr($lic, 8);
-                        }
-
-                        return self::getTimeZone($lic, null, $failIfUncertain);
-                    }
-                    // Microsoft may add a magic number, which we also have an
-                    // answer for.
-                    if (isset($vtimezone->{'X-MICROSOFT-CDO-TZID'})) {
-                        $cdoId = (int) $vtimezone->{'X-MICROSOFT-CDO-TZID'}->getValue();
-
-                        // 2 can mean both Europe/Lisbon and Europe/Sarajevo.
-                        if (2 === $cdoId && false !== strpos((string) $vtimezone->TZID, 'Sarajevo')) {
-                            return new \DateTimeZone('Europe/Sarajevo');
-                        }
-
-                        if (isset(self::$microsoftExchangeMap[$cdoId])) {
-                            return new \DateTimeZone(self::$microsoftExchangeMap[$cdoId]);
-                        }
-                    }
+        // Each VTIMEZONE with that TZID in turn, as a guesser may fail on
+        // one of them.
+        foreach ($vtimezones as $vtimezone) {
+            foreach ($this->timezoneGuessers as $timezoneGuesser) {
+                $timezone = $timezoneGuesser->guess($vtimezone, $failIfUncertain);
+                // A guess from a name (X-LIC-LOCATION, X-MICROSOFT-CDO-TZID)
+                // may contradict the observances as well.
+                if ($timezone instanceof \DateTimeZone && !($mapped && $this->contradicts($timezone, [$vtimezone]))) {
+                    return $timezone;
                 }
             }
+        }
+
+        // Nothing follows the VTIMEZONE better than the known name.
+        if ($mapped instanceof \DateTimeZone) {
+            return $mapped;
         }
 
         if ($failIfUncertain) {
             throw new \InvalidArgumentException('We were unable to determine the correct PHP timezone for tzid: '.$tzid);
         }
 
-        // If we got all the way here, we default to UTC.
+        // If we got all the way here, we default to whatever has been set as the PHP default timezone.
         return new \DateTimeZone(date_default_timezone_get());
     }
 
     /**
-     * This method will load in all the tz mapping information, if it's not yet
-     * done.
+     * Returns the first VTIMEZONEs of the document with that TZID, in
+     * document order, at most VTIMEZONES_PER_TZID_LIMIT of them. The
+     * document's VTIMEZONEs are indexed by TZID once, and the index is
+     * rebuilt when a VTIMEZONE or the TZID of one is added or removed
+     * (Component::getVTimeZoneRevision()), or when one found for the TZID
+     * left the document or changed its TZID. A TZID changed in place with
+     * setValue() to that TZID is only seen once the index is rebuilt.
+     *
+     * Each lookup costs at most VTIMEZONES_PER_TZID_LIMIT checks, whatever
+     * the number of VTIMEZONEs.
+     *
+     * @return array<Component\VTimeZone>
      */
-    public static function loadTzMaps()
+    private function findVTimeZones(string $tzid, Component $vcalendar): array
     {
-        if (!is_null(self::$map)) {
-            return;
+        // select() also returns a property of that name, and keeps the keys
+        // of the document's list.
+        $vtimezones = $vcalendar->select('VTIMEZONE');
+        $index = $this->vtimezoneIndex[$vcalendar] ?? null;
+        $revision = $vcalendar->getVTimeZoneRevision();
+        if (null !== $index && $index['revision'] === $revision) {
+            $known = [];
+            foreach ($index['tzids'][$tzid] ?? [] as [$key, $reference]) {
+                $vtimezone = $reference->get();
+                if (null === $vtimezone || ($vtimezones[$key] ?? null) !== $vtimezone || self::tzidOf($vtimezone) !== $tzid) {
+                    $known = null;
+                    break;
+                }
+                $known[] = $vtimezone;
+            }
+            if (null !== $known) {
+                return $known;
+            }
         }
 
-        self::$map = array_merge(
-            include __DIR__.'/timezonedata/windowszones.php',
-            include __DIR__.'/timezonedata/lotuszones.php',
-            include __DIR__.'/timezonedata/exchangezones.php',
-            include __DIR__.'/timezonedata/php-workaround.php'
-        );
+        $tzids = [];
+        $found = [];
+        foreach ($vtimezones as $key => $vtimezone) {
+            if (!$vtimezone instanceof Component\VTimeZone) {
+                continue;
+            }
+            $name = self::tzidOf($vtimezone);
+            if (null !== $name && count($tzids[$name] ?? []) < self::VTIMEZONES_PER_TZID_LIMIT) {
+                $tzids[$name][] = [$key, \WeakReference::create($vtimezone)];
+                if ($name === $tzid) {
+                    $found[] = $vtimezone;
+                }
+            }
+        }
+        $this->vtimezoneIndex[$vcalendar] = [
+            'revision' => $revision,
+            'tzids' => $tzids,
+        ];
+
+        return $found;
     }
 
     /**
-     * This method returns an array of timezone identifiers, that are supported
-     * by DateTimeZone(), but not returned by DateTimeZone::listIdentifiers().
+     * Whether the VTIMEZONEs give UTC offsets (TZOFFSETTO) and none of them
+     * is an offset the zone has ever had.
      *
-     * We're not using DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC) because:
-     * - It's not supported by some PHP versions as well as HHVM.
-     * - It also returns identifiers, that are invalid values for new DateTimeZone() on some PHP versions.
-     * (See timezonedata/php-bc.php and timezonedata php-workaround.php)
-     *
-     * @return array
+     * @param array<Component\VTimeZone> $vtimezones
      */
-    public static function getIdentifiersBC()
+    private function contradicts(\DateTimeZone $zone, array $vtimezones): bool
     {
-        return include __DIR__.'/timezonedata/php-bc.php';
+        if (!$vtimezones) {
+            return false;
+        }
+        $name = $zone->getName();
+        if (!isset($this->zoneOffsets[$name])) {
+            if (count($this->zoneOffsets) >= self::ZONE_OFFSETS_LIMIT) {
+                $this->zoneOffsets = [];
+            }
+            $this->zoneOffsets[$name] = self::offsetsOf($zone);
+        }
+        $zoneOffsets = $this->zoneOffsets[$name];
+
+        $given = false;
+        foreach ($vtimezones as $vtimezone) {
+            foreach (self::observanceOffsetsOf($vtimezone) as $offset) {
+                if (isset($zoneOffsets[$offset])) {
+                    return false;
+                }
+                $given = true;
+            }
+        }
+
+        return $given;
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    private static function offsetsOf(\DateTimeZone $zone): array
+    {
+        $offsets = [];
+        $transitions = $zone->getTransitions();
+        foreach (false === $transitions ? [] : $transitions as $transition) {
+            $offsets[$transition['offset']] = true;
+        }
+        // A fixed-offset zone (e.g. "+01:00") has no transitions.
+        $offsets[$zone->getOffset(new \DateTimeImmutable('@0'))] = true;
+
+        return $offsets;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function observanceOffsetsOf(Component\VTimeZone $vtimezone): array
+    {
+        $offsets = [];
+        foreach ($vtimezone->getComponents() as $observance) {
+            if (!in_array($observance->name, ['STANDARD', 'DAYLIGHT'], true)) {
+                continue;
+            }
+            foreach ($observance->select('TZOFFSETTO') as $offset) {
+                if (preg_match('/^([+-])([0-9]{2})([0-9]{2})([0-9]{2})?$/D', trim((string) $offset), $matches)) {
+                    $seconds = (int) $matches[2] * 3600 + (int) $matches[3] * 60 + (int) ($matches[4] ?? 0);
+                    $offsets[] = '-' === $matches[1] ? -$seconds : $seconds;
+                }
+            }
+        }
+
+        return $offsets;
+    }
+
+    private static function tzidOf(Component\VTimeZone $vtimezone): ?string
+    {
+        return $vtimezone->TZID instanceof Property ? (string) $vtimezone->TZID : null;
+    }
+
+    /**
+     * Runs the finders, memoized per TZID. Returning the same instance again
+     * is safe: DateTimeZone is immutable.
+     */
+    private function findWithFinders(string $tzid, bool $failIfUncertain): ?\DateTimeZone
+    {
+        $key = ($failIfUncertain ? '1' : '0').$tzid;
+        if (isset($this->finderCache[$key])) {
+            $found = $this->finderCache[$key];
+            // Moved to the end: the most recently used.
+            unset($this->finderCache[$key]);
+            $this->finderCache[$key] = $found;
+
+            return false === $found ? null : $found;
+        }
+
+        $found = false;
+        foreach ($this->timezoneFinders as $timezoneFinder) {
+            $timezone = $timezoneFinder->find($tzid, $failIfUncertain);
+            if ($timezone instanceof \DateTimeZone) {
+                $found = $timezone;
+                break;
+            }
+        }
+
+        if (count($this->finderCache) >= self::FINDER_CACHE_LIMIT) {
+            unset($this->finderCache[array_key_first($this->finderCache)]);
+        }
+        $this->finderCache[$key] = $found;
+
+        return false === $found ? null : $found;
+    }
+
+    public static function addTimezoneGuesser(string $key, TimezoneGuesser $guesser): void
+    {
+        self::getInstance()->addGuesser($key, $guesser);
+    }
+
+    public static function addTimezoneFinder(string $key, TimezoneFinder $finder): void
+    {
+        self::getInstance()->addFinder($key, $finder);
+    }
+
+    public static function getTimeZone(string $tzid, ?Component $vcalendar = null, bool $failIfUncertain = false): \DateTimeZone
+    {
+        return self::getInstance()->findTimeZone($tzid, $vcalendar, $failIfUncertain);
+    }
+
+    public static function clean(): void
+    {
+        self::$instance = null;
     }
 }
