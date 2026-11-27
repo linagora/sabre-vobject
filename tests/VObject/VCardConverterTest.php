@@ -1036,11 +1036,16 @@ VCF;
 
     public function testVCard4DateWithoutYearAndExtendedTimeIsValidInVCard3(): void
     {
-        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nBDAY:--04-12T10:00:00\r\nEND:VCARD\r\n");
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nBDAY:--04-12T10:00:00\r\nDEATHDATE:--04-12T10:00:00+02:00\r\nEND:VCARD\r\n");
         $serialized = $v4->convert(Document::VCARD30)->serialize();
 
         self::assertStringContainsString("BDAY;X-APPLE-OMIT-YEAR=1604:16040412T100000\r\n", $serialized);
+        self::assertStringContainsString("DEATHDATE;X-APPLE-OMIT-YEAR=1604:16040412T100000+0200\r\n", $serialized);
         self::assertSame([], array_filter(Reader::read($serialized)->validate(), fn ($m) => $m['level'] > 1), $serialized);
+        // 3 → 4 gives the dates back, in the basic form.
+        $back = Reader::read($serialized)->convert(Document::VCARD40);
+        self::assertSame('--0412T100000', (string) $back->BDAY);
+        self::assertSame('--0412T100000+0200', (string) $back->DEATHDATE);
     }
 
     public function testEmptyVCard3DateIsConverted(): void
@@ -1054,7 +1059,9 @@ VCF;
     /**
      * --MM-DD and --MMDD are the same anniversary: one ANNIVERSARY is left.
      *
-     * @return array<string, array{string}>
+     * A text that holds the date is the same anniversary as well.
+     *
+     * @return array<string, array{string, 1?: string}>
      */
     public static function sameAnniversaryInBothForms(): array
     {
@@ -1065,17 +1072,21 @@ VCF;
             'X-ABDATE first' => ["item1.X-ABDATE:--04-12\r\n{$label}X-ANNIVERSARY:--0412\r\n"],
             'X-ANNIVERSARY first' => ["X-ANNIVERSARY:--04-12\r\nitem1.X-ABDATE:--0412\r\n$label"],
             'omitted year' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-04-12\r\nitem1.X-ABDATE:--04-12\r\n$label"],
+            'text X-ANNIVERSARY after' => ["ANNIVERSARY:--04-12\r\nX-ANNIVERSARY;VALUE=TEXT:--04-12\r\n"],
+            'text X-ANNIVERSARY before' => ["X-ANNIVERSARY;VALUE=TEXT:--04-12\r\nANNIVERSARY:--04-12\r\n"],
+            'text X-ABDATE' => ["ANNIVERSARY:--04-12\r\nitem1.X-ABDATE;VALUE=TEXT:--04-12\r\n$label"],
+            'text native ANNIVERSARY' => ["ANNIVERSARY;VALUE=TEXT:--04-12\r\nX-ANNIVERSARY:--04-12\r\n", '--04-12'],
         ];
     }
 
     #[DataProvider('sameAnniversaryInBothForms')]
-    public function testSameAnniversaryInBothFormsIsOne(string $lines): void
+    public function testSameAnniversaryInBothFormsIsOne(string $lines, string $expected = '--0412'): void
     {
         $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\n{$lines}END:VCARD\r\n");
         $v4 = $v3->convert(Document::VCARD40);
         $serialized = $v4->serialize();
 
-        self::assertSame(['--0412'], array_map(strval(...), array_values($v4->select('ANNIVERSARY'))), $serialized);
+        self::assertSame([$expected], array_map(strval(...), array_values($v4->select('ANNIVERSARY'))), $serialized);
         self::assertSame([], $v4->select('X-ANNIVERSARY'), $serialized);
         self::assertSame([], $v4->select('X-ABDATE'), $serialized);
     }

@@ -457,8 +457,10 @@ class VCardConverter
     private function anniversaryValue(Property $property, array $parameters): string
     {
         $value = (string) $property->getValue();
+        // A text is compared as written, as a date is: --MM-DD and --MMDD
+        // are the same, whatever the type.
         if (!$property instanceof Property\Unknown) {
-            return $value;
+            return $this->yearlessInBasicForm($value);
         }
         if (isset($parameters['X-APPLE-OMIT-YEAR'])) {
             try {
@@ -495,10 +497,8 @@ class VCardConverter
     private function storedAnniversary(Property $property): string
     {
         $stored = (string) $property->getValue();
-        if (!$property instanceof Property\Unknown && !$property instanceof Property\VCard\DateAndOrTime) {
-            return $stored;
-        }
-        if (isset($property['X-APPLE-OMIT-YEAR'])) {
+        if (isset($property['X-APPLE-OMIT-YEAR'])
+            && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
             try {
                 $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
             } catch (InvalidDataException) {
@@ -506,7 +506,8 @@ class VCardConverter
             }
         }
 
-        // --MM-DD and --MMDD are the same date.
+        // --MM-DD and --MMDD are the same date, and a text that holds one
+        // is compared as it.
         return $this->yearlessInBasicForm($stored);
     }
 
