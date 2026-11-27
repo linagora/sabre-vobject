@@ -990,6 +990,97 @@ VCF;
     }
 
     /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function vCard3DateWithoutYear(): array
+    {
+        $label = "item1.X-ABLABEL:_\$!<Anniversary>!\$_\r\n";
+
+        return [
+            'BDAY' => ["BDAY:--04-12\r\n", 'BDAY', '--0412'],
+            'DEATHDATE' => ["DEATHDATE:--04-12\r\n", 'DEATHDATE', '--0412'],
+            'ANNIVERSARY' => ["ANNIVERSARY:--04-12\r\n", 'ANNIVERSARY', '--0412'],
+            'X-ANNIVERSARY' => ["X-ANNIVERSARY:--04-12\r\n", 'ANNIVERSARY', '--0412'],
+            'labelled X-ABDATE' => ["item1.X-ABDATE:--04-12\r\n$label", 'ANNIVERSARY', '--0412'],
+            'a month only is kept' => ["BDAY:--04\r\n", 'BDAY', '--04'],
+            'a day only is kept' => ["BDAY:---12\r\n", 'BDAY', '---12'],
+            'a full date is kept' => ["BDAY:1985-04-12\r\n", 'BDAY', '1985-04-12'],
+            'a text is kept' => ["BDAY;VALUE=TEXT:--04-12\r\n", 'BDAY', '--04-12'],
+            // A basic date takes a basic time (RFC 6350 section 4.3.4).
+            'extended time' => ["BDAY:--04-12T10:00:00\r\n", 'BDAY', '--0412T100000'],
+            'extended time and offset' => ["BDAY:--04-12T10:00:00+02:00\r\n", 'BDAY', '--0412T100000+0200'],
+            'X-ANNIVERSARY with an extended time' => ["X-ANNIVERSARY:--04-12T10:00:00\r\n", 'ANNIVERSARY', '--0412T100000'],
+            'typed X-ANNIVERSARY with an extended time' => ["X-ANNIVERSARY;VALUE=DATE-AND-OR-TIME:--04-12T10:00:00\r\n", 'ANNIVERSARY', '--0412T100000'],
+            'omitted year with an extended time' => ["BDAY;X-APPLE-OMIT-YEAR=1604:1604-04-12T10:00:00\r\n", 'BDAY', '--0412T100000'],
+        ];
+    }
+
+    /**
+     * RFC 6350 section 4.3.1 has --MMDD only: --MM-DD is the form of vCard
+     * 3.0, which withoutOmittedYear does not write either.
+     */
+    #[DataProvider('vCard3DateWithoutYear')]
+    public function testVCard3DateWithoutYearIsBasicFormInVCard4(string $line, string $name, string $expected): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\n{$line}END:VCARD\r\n");
+        $v4 = $v3->convert(Document::VCARD40);
+        $serialized = $v4->serialize();
+
+        self::assertSame($expected, (string) current($v4->select($name)), $serialized);
+        self::assertSame([], array_filter(Reader::read($serialized)->validate(), fn ($m) => $m['level'] > 1), $serialized);
+        $v4->jsonSerialize();
+        // Stable: 4 → 3 → 4 gives the same card.
+        $back = Reader::read($v4->convert(Document::VCARD30)->serialize())->convert(Document::VCARD40);
+        self::assertSame($serialized, $back->serialize());
+    }
+
+    public function testVCard4DateWithoutYearAndExtendedTimeIsValidInVCard3(): void
+    {
+        $v4 = Reader::read("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:a\r\nBDAY:--04-12T10:00:00\r\nEND:VCARD\r\n");
+        $serialized = $v4->convert(Document::VCARD30)->serialize();
+
+        self::assertStringContainsString("BDAY;X-APPLE-OMIT-YEAR=1604:16040412T100000\r\n", $serialized);
+        self::assertSame([], array_filter(Reader::read($serialized)->validate(), fn ($m) => $m['level'] > 1), $serialized);
+    }
+
+    public function testEmptyVCard3DateIsConverted(): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\nBDAY:--04-12\r\nEND:VCARD\r\n");
+        $v3->BDAY->setParts([]);
+
+        self::assertSame('', (string) $v3->convert(Document::VCARD40)->BDAY);
+    }
+
+    /**
+     * --MM-DD and --MMDD are the same anniversary: one ANNIVERSARY is left.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function sameAnniversaryInBothForms(): array
+    {
+        $label = "item1.X-ABLABEL:_\$!<Anniversary>!\$_\r\n";
+
+        return [
+            'native in the basic form' => ["ANNIVERSARY:--0412\r\nX-ANNIVERSARY:--04-12\r\n"],
+            'X-ABDATE first' => ["item1.X-ABDATE:--04-12\r\n{$label}X-ANNIVERSARY:--0412\r\n"],
+            'X-ANNIVERSARY first' => ["X-ANNIVERSARY:--04-12\r\nitem1.X-ABDATE:--0412\r\n$label"],
+            'omitted year' => ["X-ANNIVERSARY;X-APPLE-OMIT-YEAR=1604:1604-04-12\r\nitem1.X-ABDATE:--04-12\r\n$label"],
+        ];
+    }
+
+    #[DataProvider('sameAnniversaryInBothForms')]
+    public function testSameAnniversaryInBothFormsIsOne(string $lines): void
+    {
+        $v3 = Reader::read("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:a\r\n{$lines}END:VCARD\r\n");
+        $v4 = $v3->convert(Document::VCARD40);
+        $serialized = $v4->serialize();
+
+        self::assertSame(['--0412'], array_map(strval(...), array_values($v4->select('ANNIVERSARY'))), $serialized);
+        self::assertSame([], $v4->select('X-ANNIVERSARY'), $serialized);
+        self::assertSame([], $v4->select('X-ABDATE'), $serialized);
+    }
+
+    /**
      * @return array<string, array{string}>
      */
     public static function textAnniversaryExtensions(): array
