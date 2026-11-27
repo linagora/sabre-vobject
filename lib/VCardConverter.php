@@ -254,11 +254,13 @@ class VCardConverter
             } elseif ($property instanceof Property\VCard\DateAndOrTime && isset($parameters['X-APPLE-OMIT-YEAR'])) {
                 // If a property such as BDAY contained 'X-APPLE-OMIT-YEAR',
                 // then we're stripping the year from the vcard 4 value.
-                $newProperty->setValue($this->withoutOmittedYear($property->getValue(), (string) $parameters['X-APPLE-OMIT-YEAR']->getValue()));
+                $newProperty->setValue($this->yearlessInBasicForm($this->withoutOmittedYear($property->getValue(), (string) $parameters['X-APPLE-OMIT-YEAR']->getValue())));
 
                 // Regardless if the year matched or not, we do need to strip
                 // X-APPLE-OMIT-YEAR.
                 unset($parameters['X-APPLE-OMIT-YEAR']);
+            } elseif ($property instanceof Property\VCard\DateAndOrTime) {
+                $newProperty->setValue($this->yearlessInBasicForm((string) $property->getValue()));
             }
             switch ($property->name) {
                 case 'X-ABSHOWAS':
@@ -430,21 +432,43 @@ class VCardConverter
     }
 
     /**
+     * Writes a date without a year, such as the --MM-DD of vCard 3.0, in the
+     * --MMDD form of RFC 6350 section 4.3.1: the form withoutOmittedYear
+     * writes, so that a date reads the same whichever way it came.
+     */
+    private function yearlessInBasicForm(string $value): string
+    {
+        try {
+            $parts = DateTimeParser::parseVCardDateTime($value);
+        } catch (InvalidDataException) {
+            return $value;
+        }
+        if (!is_null($parts['year']) || is_null($parts['month']) || is_null($parts['date'])) {
+            return $value;
+        }
+
+        return '--'.$parts['month'].$parts['date'].$this->getTimePart($value);
+    }
+
+    /**
      * Returns the value an extension of an unknown type has as an ANNIVERSARY:
      * without the year marked as omitted.
      */
     private function anniversaryValue(Property $property, array $parameters): string
     {
         $value = (string) $property->getValue();
-        if (!$property instanceof Property\Unknown || !isset($parameters['X-APPLE-OMIT-YEAR'])) {
+        if (!$property instanceof Property\Unknown) {
             return $value;
+        }
+        if (isset($parameters['X-APPLE-OMIT-YEAR'])) {
+            try {
+                $value = $this->withoutOmittedYear($value, (string) $parameters['X-APPLE-OMIT-YEAR']->getValue());
+            } catch (InvalidDataException) {
+                return $value;
+            }
         }
 
-        try {
-            return $this->withoutOmittedYear($value, (string) $parameters['X-APPLE-OMIT-YEAR']->getValue());
-        } catch (InvalidDataException) {
-            return $value;
-        }
+        return $this->yearlessInBasicForm($value);
     }
 
     /**
@@ -465,20 +489,25 @@ class VCardConverter
 
     /**
      * Returns the anniversary a stored property means: its value without the
-     * year X-APPLE-OMIT-YEAR marks as omitted.
+     * year X-APPLE-OMIT-YEAR marks as omitted, a date without a year in the
+     * --MMDD form.
      */
     private function storedAnniversary(Property $property): string
     {
         $stored = (string) $property->getValue();
-        if (isset($property['X-APPLE-OMIT-YEAR'])
-            && ($property instanceof Property\Unknown || $property instanceof Property\VCard\DateAndOrTime)) {
+        if (!$property instanceof Property\Unknown && !$property instanceof Property\VCard\DateAndOrTime) {
+            return $stored;
+        }
+        if (isset($property['X-APPLE-OMIT-YEAR'])) {
             try {
                 $stored = $this->withoutOmittedYear($stored, (string) $property['X-APPLE-OMIT-YEAR']->getValue());
             } catch (InvalidDataException) {
+                return $stored;
             }
         }
 
-        return $stored;
+        // --MM-DD and --MMDD are the same date.
+        return $this->yearlessInBasicForm($stored);
     }
 
     /**
@@ -540,7 +569,9 @@ class VCardConverter
     {
         $time = strstr($value, 'T');
 
-        return false === $time ? '' : $time;
+        // It follows a date in the basic form: a time in the extended form
+        // after it is no value (RFC 6350 section 4.3.4).
+        return false === $time ? '' : str_replace(':', '', $time);
     }
 
     /**
